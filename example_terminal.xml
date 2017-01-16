@@ -1,0 +1,176 @@
+<config>
+	<!-- list available binaries and
+		  * (optional) what component they implement (defaults to binary name)
+		  * (optional) what version they implement (defaults to 0)
+	//-->
+	<binary name="fb_drv-new">
+		<component="fb_drv" version="100" />
+	</binary>
+	<binary name="fb_drv">
+		<component="fb_drv" version="090" />
+	</binary>
+	<binary name="ps2_drv" />
+	<binary name="nitpicker" />
+	<binary name="nit_fb" />
+	<binary name="pointer" />
+
+	<!-- (global) component repository; can be generated from the build system in the future  //-->
+	<component name="fb_sdl">
+		<provides>
+			<!-- list provided services //-->
+			<service name="Framebuffer" max_clients="1" /> <!-- max_clients defaults to an unlimited number //-->
+			<service name="Input" max_clients="1" />
+
+			<!-- list implemented functions
+					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder
+					 of a component, a set of components or a part of a component. 
+			//-->
+			<function name="FB_DRV" />
+			<function name="INPUT_DRV" />
+		</provides>
+		<requires>
+			<!-- list specs (i.e. platform compatibility) //-->
+			<spec name="sdl" />
+			<!-- list required run-time environment (e.g. native, noux, virtualbox) //-->
+			<rte name="native" /> <!-- default //-->
+		</requires>
+	</component>
+
+	<component name="fb_drv" version="100">
+		<provides>
+			<function name="FB_DRV" />
+			<service name="Framebuffer" max_clients="1" />
+		</provides>
+		<requires>
+			<spec name="framebuffer" />
+		</requires>
+	</component>
+	
+	<component name="fb_drv" version="090">
+		<provides>
+			<function name="FB_DRV" />
+			<service name="Framebuffer" max_clients="1" />
+		</provides>
+		<requires>
+			<spec name="framebuffer" />
+		</requires>
+	</component>
+
+	<component name="ps2_drv">
+		<provides>
+			<function name="INPUT_DRV" />
+			<service name="Input" max_clients="1" />
+		</provides>
+		<requires>
+			<spec name="ps2" />
+		</requires>
+	</component>
+
+	<component name="nitpicker">
+		<provides>
+			<function name="GUI" />
+			<service name="Nitpicker" />
+		</provides>
+		<requires>
+			<service name="Input" />
+			<service name="Framebuffer">
+				<exclude-component name="fb_drv" version_above="100" />
+			</service>
+		</requires>
+	</component>
+
+	<component name="nit_fb">
+		<provides>
+			<service name="Framebuffer" />
+			<service name="Input" />
+		</provides>
+		<requires>
+			<service name="Nitpicker" />
+		</requires>
+		<defaults>
+			<resource name="RAM" quantum="1M" />
+			<config xpos="0" ypos="0" width="640" height="480" refresh_rate="25"/>
+		</defaults>
+	</component>
+
+	<component name="terminal">
+		<provides>
+			<service name="Terminal" />
+		</provides>
+		<requires>
+			<service name="Input" />
+			<service name="Framebuffer" />
+		</requires>
+	</component>
+
+	<component name="terminal_log">
+		<provides>
+			<service name="LOG" />
+		</provides>
+		<requires>
+			<service name="Terminal" />
+		</requires>
+	</component>
+
+	<component name="init">
+		<provides>
+			<rte name="native" />
+		</provides>
+		<requires>
+			<!-- TODO list required services //-->
+		</requires>
+	</component>
+
+	<function name="LOG2GUI">
+		<requires>
+			<function name="GUI" />
+		</requires>
+
+		<pattern>
+			<!-- GUI requirement corresponds to a nitpicker requirement in this pattern //-->
+			<component name="terminal_log" />
+			<component name="terminal">
+				<!-- explicitly list internal connections //-->
+				<service name="Framebuffer"><child name="terminal_log" /></service>
+				<service name="Input"><child name="terminal_log" /></service>
+			</component>
+		</pattern>
+	</function>
+
+</config>
+
+<!-- example abstract config //-->
+<config>
+	<!-- first level are (unconnected) subsystems //-->
+	<subsystem name="init1">
+		<!-- we can decide on the component based on the rte requirements //-->
+
+		<!-- we can define some default routing rules for trivial services //-->
+		<default-routes>
+			<any-service><parent /></any-service>
+		</default-routes>
+
+		<!-- explicitly place drivers here (and not in init1.2 as it would be done automatically) //-->
+		<child function="FB_DRV" />
+		<child function="INPUT_DRV" />
+
+		<subsystem name="init1.2">
+
+			<!-- do not force a particular component; we just want a GUI //-->
+			<child function="GUI" />
+
+			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
+			<child component="pointer" />
+
+			<!-- explicitly add placeholder for LOG to GUI conversion (could be automated in the future) //-->
+			<child function="LOG2GUI" name="foobar" />
+
+			<child component="launchpad">
+				<!-- explicitly redirect LOG to GUI //-->
+				<service name="LOG" target="foobar" />
+			</child>
+		</subsystem>
+
+	</subsystem>
+
+</config>

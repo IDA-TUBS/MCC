@@ -1,0 +1,291 @@
+<config>
+	<!-- list available binaries and
+		  * (optional) what component they implement (defaults to binary name)
+		  * (optional) what version they implement (defaults to 0)
+	//-->
+	<binary name="stereo_match" />
+	<binary name="camera" />
+	<binary name="debay">
+		<component name="debay_left" />
+		<component name="debay_right" />
+	</binary>
+	<binary name="rect">
+		<component name="rect_left" />
+		<component name="rect_right" />
+	</binary>
+	<binary name="disp_to_pc" />
+	<binary name="object_recog" />
+	<binary name="nic_drv" />
+	<binary name="nic_bridge" />
+	<binary name="remote_rom_client" />
+	<binary name="remote_rom_server" />
+	<binary name="init" />
+
+	<!-- (global) component repository; can be generated from the build system in the future  //-->
+	<component name="stereo_match">
+		<provides>
+			<!-- list provided services //-->
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="left" />
+			<service name="ROM" label="right" />
+			<!-- list required run-time environment (e.g. native, noux, virtualbox) //-->
+			<rte name="native" /> <!-- default //-->
+		</requires>
+	</component>
+
+	<component name="camera">
+		<provides>
+			<service name="ROM" />
+
+			<!-- list implemented functions
+					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder
+					 of a component, a set of components or a part of a component. 
+			//-->
+			<function name="CAMERA" />
+		</provides>
+		<requires>
+			<!-- list specs (i.e. platform compatibility) //-->
+			<spec name="zynq" />
+		</requires>
+	</component>
+
+	<component name="debay_left">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+		</requires>
+	</component>
+
+	<component name="rect_left">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+		</requires>
+	</component>
+
+	<component name="debay_right">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+		</requires>
+	</component>
+
+	<component name="rect_right">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+		</requires>
+	</component>
+	
+	<component name="disp_to_pc">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="disp" />
+			<service name="ROM" label="camera" />
+		</requires>
+	</component>
+
+	<component name="init">
+		<provides>
+			<rte name="native" />
+		</provides>
+		<requires>
+			<!-- TODO list required services //-->
+		</requires>
+	</component>
+
+	<component name="nic_drv">
+		<provides>
+			<service name="Nic" max_clients="1" />
+		</provides>
+	</component>
+
+	<component name="nic_bridge">
+		<provides>
+			<service name="Nic" /> <!-- max_clients defaults to an unlimited number //-->
+		</provides>
+	</component>
+
+	<component name="remote_rom_client">
+		<provides>
+			<service name="ROM" />
+		</provides>
+
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="remote_rom_server">
+		<requires>
+			<service name="Nic" />
+			<service name="ROM" />
+		</requires>
+	</component>
+
+	<!-- proxy is a special type of auto-instantiated function that requires and provides the same type of service
+		  without any changes //-->
+	<proxy name="ROM_PROXY" service="ROM">
+		<requires>
+			<function name="Network" />
+		</requires>
+
+		<pattern>
+			<!-- TODO requires auto-generated policy //-->
+			<component name="remote_rom_client" />
+			<component name="remote_rom_server" />
+		</pattern>
+	</proxy>
+
+	<!-- Definitions:
+		  * function: implementation-independent, platform-independent abstract "service"/dependency
+		  * filter: Arbitrary data processing. Changes data and (optional) service types.
+		  * protocol: converts between service types, does not change the data
+		  * proxy: Almost like a filter, but without changing neither the data nor the service type ROM-to-ROM via Nic
+		  * mux: Multiplexing (max_clients=1 -> max_clients>1)
+ 	//-->
+
+	<function name="STEREO_MATCH">
+		<provides>
+			<function name="STEREO_MATCH" />
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<function name="CAMERA" />
+		</requires>
+
+		<pattern>
+			<component name="debay_left">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+			<component name="debay_right">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+			<component name="rect_left">
+				<service name="ROM"><child name="debay_left" /></service>
+			</component>
+			<component name="rect_right">
+				<service name="ROM"><child name="debay_right" /></service>
+			</component>
+			<component name="stereo_match">
+				<service name="ROM" label="left"><child name="rect_left" /></service>
+				<service name="ROM" label="right"><child name="rect_right" /></service>
+				<provides>
+					<service name="ROM" />
+				</provides>
+			</component>
+		</pattern>
+
+		<pattern>
+			<component name="rect_left">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+			<component name="rect_right">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+			<component name="stereo_match">
+				<service name="ROM" label="left"><child name="rect_left" /></service>
+				<service name="ROM" label="right"><child name="rect_right" /></service>
+			</component>
+		</pattern>
+	</function>
+
+	<function name="DISP_TO_PC">
+		<requires>
+			<function name="CAMERA" />
+			<function name="STEREO_MATCH" />
+		</requires>
+
+		<pattern>
+			<component name="debay_left">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+
+			<component name="rect_left">
+				<service name="ROM"><child name="debay_left" /></service>
+			</component>
+
+			<component name="disp_to_pc">
+				<service name="ROM" label="camera"><child name="rect_left" /></service>
+				<service name="ROM" label="disp"><function name="STEREO_MATCH" /></service>
+				<config>
+					<left />
+				</config>
+			</component>
+		</pattern>
+
+		<pattern>
+			<component name="debay_right">
+				<service name="ROM"><function name="CAMERA" /></service>
+			</component>
+
+			<component name="rect_right">
+				<service name="ROM"><child name="debay_right" /></service>
+			</component>
+
+			<component name="disp_to_pc">
+				<service name="ROM" label="camera"><child name="rect_right" /></service>
+				<service name="ROM" label="disp"><function name="STEREO_MATCH" /></service>
+				<config>
+					<right />
+				</config>
+			</component>
+		</pattern>
+	</function>
+
+</config>
+
+<!-- example abstract config //-->
+<config>
+
+	<component name="nic_drv" />
+	<component name="nic_bridge">
+		<service name="Nic"><child name="nic_drv" /></service>
+	</component>
+
+	<!-- first level are (unconnected) subsystems //-->
+	<subsystem name="zynq">
+		<!-- we can decide on the component based on the rte requirements //-->
+
+		<!-- we can define some default routing rules for trivial services //-->
+		<default-routes>
+			<any-service><parent /></any-service>
+		</default-routes>
+
+		<!-- explicitly select camera, implicitly provides CAMERA (function) //-->
+		<child component="camera" />
+		
+		<!-- requires unambiguous function CAMERA //-->
+		<child function="STEREO_MATCH" />
+
+		<!-- requires unambiguous functions CAMERA and STEREO_MATCH //-->
+		<child function="DISP_TO_PC" />
+
+		<!-- remark: ROM proxies are automatically instantiated //-->
+
+	</subsystem>
+
+	<subsystem name="pc">
+
+		<!-- explicitly connect ROM service to DISP_TO_PC //-->
+		<child component="object_recog">
+			<service name="ROM"><child name="DISP_TO_PC" /></service>
+		</child>
+
+		<!-- remark: ROM proxies are automatically instantiated //-->
+
+	</subsystem>
+
+</config>
