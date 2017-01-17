@@ -14,29 +14,71 @@
 	<binary name="nit_fb" />
 	<binary name="pointer" />
 
-	<!-- (global) component repository; can be generated from the build system in the future  //-->
-	<component name="fb_sdl">
+	<!-- (global) component repository
+		    * Contains the model description of all known components.
+			 * A component is an atomic software/hardware entity that needs to be instantiated during system configuration.
+			 * A component may be implementation-specific and/or platform-specific.
+		    * Most of this could be auto-generated from the build system in the future.
+
+		  A component is either an atomic component (<component>) or a composite component (<composite>).
+		  The latter is composed of multiple atomic components with predefined interconnections.
+
+		  The model of a component is specified by its requirements and provisions of the following types:
+			 * service: Specifies the service interface, i.e. the communication on the IPC/RPC level.
+			 * spec: Describes a platform requirement.
+			 * rte: Specifies the required/provided run-time environment.
+			 * function: (Unambiguously) identifies a requirement/provision to/of an implementation- and
+			             platform-independent abstract service (functionality).
+
+		  A function is thus a means to model dependencies between components (or even functions) in a more generic way.
+		  The end user does typically not (want to) care about, e.g., what component implements the network driver or how
+		  the GUI subsystem looks like. Depending on the platform, certain services (e.g. Framebuffer, Input, Nic) may be
+		  provided by a single component or multiple components. Moreover, the data provided by a ROM service is not part
+		  of the session interface.
+
+		  In order to guide the automated configuration, we further distinguish between functional components and library
+		  components, i.e. a component either provides/requires a function or is a very generic component that can be
+		  auto-inserted, e.g., to convert between service interfaces. Note that a function dependency is transitively
+		  satisfied so that library components can be arbitrarily inserted without breaking a function dependency.
+		  Currently, we envision the following types of library components:
+			 * mux:      A multiplexer which transforms a provided service interface with max_clients=1 to max_clients>1.
+			 * protocol: A protocol stack that converts between different service interfaces without changing the data.
+			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
+							 service interface Y) and vice versa.
+			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
+							 interface (complementary to the protocol stack).
+
+		  By default, a component is unclassified. 
+	//-->
+
+	<!-- A driver must be a singleton (at most one instance) as it needs exclusive access to the hardware. //-->
+	<component name="fb_sdl" singleton="true">
+		<!-- This component is implicitly classified as a function provider. //-->
+
 		<provides>
 			<!-- list provided services //-->
 			<service name="Framebuffer" max_clients="1" /> <!-- max_clients defaults to an unlimited number //-->
 			<service name="Input" max_clients="1" />
 
 			<!-- list implemented functions
-					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder
-					 of a component, a set of components or a part of a component. 
-			//-->
+
+					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder for a service
+					 implemented by an atomic or a composite component.  //-->
 			<function name="FB_DRV" />
 			<function name="INPUT_DRV" />
 		</provides>
 		<requires>
 			<!-- list specs (i.e. platform compatibility) //-->
 			<spec name="sdl" />
+
 			<!-- list required run-time environment (e.g. native, noux, virtualbox) //-->
 			<rte name="native" /> <!-- default //-->
 		</requires>
 	</component>
 
-	<component name="fb_drv" version="100">
+	<component name="fb_drv" version="100" singleton="true">
+		<!-- This component is implicitly classified as a function provider. //-->
+
 		<provides>
 			<function name="FB_DRV" />
 			<service name="Framebuffer" max_clients="1" />
@@ -46,7 +88,9 @@
 		</requires>
 	</component>
 	
-	<component name="fb_drv" version="090">
+	<component name="fb_drv" version="090" singleton="true">
+		<!-- This component is implicitly classified as a function provider. //-->
+
 		<provides>
 			<function name="FB_DRV" />
 			<service name="Framebuffer" max_clients="1" />
@@ -56,7 +100,9 @@
 		</requires>
 	</component>
 
-	<component name="ps2_drv">
+	<component name="ps2_drv" singleton="true">
+		<!-- This component is implicitly classified as a function provider. //-->
+
 		<provides>
 			<function name="INPUT_DRV" />
 			<service name="Input" max_clients="1" />
@@ -67,6 +113,11 @@
 	</component>
 
 	<component name="nitpicker">
+		<!-- In addition to providing the GUI function, the nitpicker also acts as a multiplexer and protocol stack, i.e.
+			  it mediates the access to the Input and Framebuffer driver and, at the same time, provides the multiplexed
+			  service in form of a Nitpicker session interface. However, those complex multi-purpose components are not
+			  expected to be suitable for auto-insertion, we therefore model the nitpicker only as a function
+			  provider. //-->
 		<provides>
 			<function name="GUI" />
 			<service name="Nitpicker" />
@@ -74,12 +125,28 @@
 		<requires>
 			<service name="Input" />
 			<service name="Framebuffer">
+				<!-- exclude known incompatibilities //-->
 				<exclude-component name="fb_drv" version_above="100" />
 			</service>
 		</requires>
+
+		<!-- specify default configuration //-->
+		<defaults>
+			<config>
+				<domain name="pointer" layer="1" content="client" label="no" origin="pointer" />
+				<domain name="default" layer="2" content="client" label="no" focus="click" hover="always" />
+				<policy label="pointer" domain="pointer"/>
+				<default-policy domain="default"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="nit_fb">
+		<!-- This component acts as a protocol stack that converts the Nitpicker service to a Framebuffer and Input
+			  service. //-->
+		<protocol from="Nitpicker" to="Input" />
+		<protocol from="Nitpicker" to="Framebuffer" />
+
 		<provides>
 			<service name="Framebuffer" />
 			<service name="Input" />
@@ -87,6 +154,8 @@
 		<requires>
 			<service name="Nitpicker" />
 		</requires>
+
+		<!-- specify default configuration //-->
 		<defaults>
 			<resource name="RAM" quantum="1M" />
 			<config xpos="0" ypos="0" width="640" height="480" refresh_rate="25"/>
@@ -94,6 +163,10 @@
 	</component>
 
 	<component name="terminal">
+		<!-- Terminal also acts as a protocol stack as it provides a Terminal service based on Input and Framebuffer. //-->
+		<protocol from="Input"       to="Terminal" />
+		<protocol from="Framebuffer" to="Terminal" />
+
 		<provides>
 			<service name="Terminal" />
 		</provides>
@@ -104,6 +177,9 @@
 	</component>
 
 	<component name="terminal_log">
+		<!-- Terminal converts the Terminal service into a LOG service. //-->
+		<protocol from="Terminal" to="LOG" />
+
 		<provides>
 			<service name="LOG" />
 		</provides>
@@ -112,8 +188,26 @@
 		</requires>
 	</component>
 
+	<component name="launchpad">
+		<!-- unclassified component (must be explicitly instantiated or classified in the scope of a composite component) //-->
+		<requires>
+			<service name="LOG" />
+		</requires>
+		<defaults>
+			<resource name="RAM" quantum="32M" />
+		</defaults>
+	</component>
+
+	<component name="pointer">
+		<!-- unclassified component (must be explicitly instantiated or classified in the scope of a composite component) //-->
+		<requires>
+			<service name="Nitpicker" />
+		</requires>
+	</component>
+
 	<component name="init">
 		<provides>
+			<!-- components can also provide a run-time environment //-->
 			<rte name="native" />
 		</provides>
 		<requires>
@@ -121,21 +215,39 @@
 		</requires>
 	</component>
 
-	<function name="LOG2GUI">
+	<composite name="gui2log">
+		<protocol from="GUI" to="LOG" />
+
+		<!-- remark: A composite only specifies the "external" (i.e. functionally relevant) requirements/provisions.
+			          Internal requirements are taken from the component specifications. //-->
+		<provides>
+			<service name="LOG" />
+		</provides>
 		<requires>
 			<function name="GUI" />
 		</requires>
 
 		<pattern>
-			<!-- GUI requirement corresponds to a nitpicker requirement in this pattern //-->
-			<component name="terminal_log" />
 			<component name="terminal">
-				<!-- explicitly list internal connections //-->
-				<service name="Framebuffer"><child name="terminal_log" /></service>
-				<service name="Input"><child name="terminal_log" /></service>
+				<route>
+					<!-- route Framebuffer requirement to the service provided by `GUI` function //-->
+					<service name="Framebuffer"><function name="GUI" /></service>
+					<!-- route Input requirement to the service provided by `GUI` function //-->
+					<service name="Input"><function name="GUI" /></service>
+				</route>
+			</component>
+			<component name="terminal_log">
+				<route>
+					<!-- explicitly list internal connections //-->
+					<service name="Terminal"><child name="terminal" /></service>
+				</route>
+				<expose>
+					<!-- expose provided LOG service (link to composite provision) //-->
+					<service name="LOG" />
+				</expose>
 			</component>
 		</pattern>
-	</function>
+	</composite>
 
 </config>
 
@@ -150,7 +262,7 @@
 			<any-service><parent /></any-service>
 		</default-routes>
 
-		<!-- explicitly place drivers here (and not in init1.2 as it would be done automatically) //-->
+		<!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
 		<child function="FB_DRV" />
 		<child function="INPUT_DRV" />
 
@@ -162,12 +274,23 @@
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
 			<child component="pointer" />
 
-			<!-- explicitly add placeholder for LOG to GUI conversion (could be automated in the future) //-->
-			<child function="LOG2GUI" name="foobar" />
+			<!-- explicitly add placeholder for GUI to LOG conversion (could be automated in the future) //-->
+			<child composite="gui2log" name="foobar" />
 
 			<child component="launchpad">
-				<!-- explicitly redirect LOG to GUI //-->
-				<service name="LOG" target="foobar" />
+				<route>
+					<!-- explicitly redirect LOG to GUI //-->
+					<service name="LOG"><child name="foobar" /></service>
+
+					<!-- or: let gui2log be inserted automatically
+					<service name="LOG"><function name="GUI" /></service>
+					//-->
+				</route>
+
+				<!-- override default config (if present) //-->
+				<config>
+					<launcher name="testnit" ram_quota="768K" />
+				</config>
 			</child>
 		</subsystem>
 
