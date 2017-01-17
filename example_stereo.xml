@@ -416,7 +416,9 @@
 
 		<!-- explicitly connect ROM service to DISP_TO_PC //-->
 		<child component="object_recog">
-			<service name="ROM"><child name="DISP_TO_PC" /></service>
+			<route>
+				<service name="ROM"><function name="DISP_TO_PC" /></service>
+			</route>
 		</child>
 
 		<!-- remark: ROM proxies are automatically instantiated //-->
