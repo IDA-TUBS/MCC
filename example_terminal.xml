@@ -1,13 +1,13 @@
-<config>
+<config_model>
 	<!-- list available binaries and
 		  * (optional) what component they implement (defaults to binary name)
 		  * (optional) what version they implement (defaults to 0)
 	//-->
 	<binary name="fb_drv-new">
-		<component="fb_drv" version="100" />
+		<component name="fb_drv" version="100" />
 	</binary>
 	<binary name="fb_drv">
-		<component="fb_drv" version="090" />
+		<component name="fb_drv" version="090" />
 	</binary>
 	<binary name="ps2_drv" />
 	<binary name="nitpicker" />
@@ -249,10 +249,9 @@
 		</pattern>
 	</composite>
 
-</config>
-
 <!-- example abstract config //-->
-<config>
+<system>
+
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
 		<!-- we can decide on the component based on the rte requirements //-->
@@ -295,5 +294,6 @@
 		</subsystem>
 
 	</subsystem>
+</system>
 
-</config>
+</config_model>

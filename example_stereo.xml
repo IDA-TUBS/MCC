@@ -1,4 +1,4 @@
-<config>
+<config_model>
 	<!-- list available binaries and
 		  * (optional) what component they implement (defaults to binary name)
 		  * (optional) what version they implement (defaults to 0)
@@ -207,6 +207,8 @@
 	</component>
 
 	<component name="nic_bridge">
+        <mux service="Nic" />
+
 		<provides>
 			<service name="Nic" /> <!-- max_clients defaults to an unlimited number //-->
 			<function name="Network" />
@@ -234,6 +236,13 @@
 			<service name="ROM" />
 		</requires>
 	</component>
+
+    <component name="object_recog">
+        <requires>
+            <function name="DISP_TO_PC" />
+            <service name="ROM" />
+        </requires>
+    </component>
 
 	<composite name="ROM_PROXY">
 		<!-- A proxy is a special type of auto-instantiable (composite) component that encapsulates a service/function (e.g.
@@ -380,15 +389,11 @@
 		</pattern>
 	</composite>
 
-</config>
-
 <!-- example abstract config //-->
-<config>
+<system> 
 
-	<component name="nic_drv" />
-	<component name="nic_bridge">
-		<service name="Nic"><child name="nic_drv" /></service>
-	</component>
+    <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
+    <child function="Network" />
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="zynq">
@@ -424,5 +429,6 @@
 		<!-- remark: ROM proxies are automatically instantiated //-->
 
 	</subsystem>
+</system>
 
-</config>
+</config_model>
