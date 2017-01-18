@@ -192,6 +192,7 @@
 		<!-- unclassified component (must be explicitly instantiated or classified in the scope of a composite component) //-->
 		<requires>
 			<service name="LOG" />
+			<service name="Nitpicker" />
 		</requires>
 		<defaults>
 			<resource name="RAM" quantum="32M" />
@@ -216,10 +217,12 @@
 	</component>
 
 	<composite name="gui2log">
-		<protocol from="GUI" to="LOG" />
-
 		<!-- remark: A composite only specifies the "external" (i.e. functionally relevant) requirements/provisions.
 			          Internal requirements are taken from the component specifications. //-->
+
+        <!-- remark: One might think of this as a protocol stack. It actually acts as such but is not specified as such.
+                     This is due to the fact that is does not have a particular service requirement but a function
+                     requirement. //-->
 		<provides>
 			<service name="LOG" />
 		</provides>
@@ -267,23 +270,16 @@
 
 		<subsystem name="init1.2">
 
-			<!-- do not force a particular component; we just want a GUI //-->
-			<child function="GUI" />
-
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
 			<child component="pointer" />
 
-			<!-- explicitly add placeholder for GUI to LOG conversion (could be automated in the future) //-->
-			<child composite="gui2log" name="foobar" />
+            <!-- manually insert graphical LOG //-->
+            <child composite="gui2log" name="foobar" />
 
 			<child component="launchpad">
 				<route>
-					<!-- explicitly redirect LOG to GUI //-->
+                    <!-- route LOG to gui2log //-->
 					<service name="LOG"><child name="foobar" /></service>
-
-					<!-- or: let gui2log be inserted automatically
-					<service name="LOG"><function name="GUI" /></service>
-					//-->
 				</route>
 
 				<!-- override default config (if present) //-->

@@ -48,7 +48,7 @@ class ConfigModelParser:
                                                               "rte"     : { "required-attrs" : ["name"] },
                                                               "spec"    : { "required-attrs" : ["name"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
-                                "filter"   : { "optional-attrs" : ["alias"], "children" : {
+                                "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
                                     "reset"  : { "required-attrs" : ["tag"] },
@@ -67,7 +67,7 @@ class ConfigModelParser:
                                                                             "optional-attrs" : ["label", "filter"] },
                                                               "function": { "required-attrs" : ["name"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
-                                "filter"   : { "optional-attrs" : ["alias"], "children" : {
+                                "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
                                     "reset"  : { "required-attrs" : ["tag"] },
@@ -184,6 +184,21 @@ class ConfigModelParser:
             elif classification is not None and classification in classes:
                 components.append(c)
 
+    def _find_provisions(self, node="service", name=None):
+        provisions = list()
+        for p in self._root.iter("provides"):
+            for s in p.findall(node):
+                if name is None or s.get("name") == name:
+                    provisions.append(s)
+
+        # also get provisions from <parent-provides> in <system>
+        for p in self._root.iter("parent-provides"):
+            for s in p.findall(node):
+                if name is None or s.get("name") == name:
+                    provisions.append(s)
+
+        return provisions
+
     # check whether all function names are only provided once
     def check_functions_unambiguous(self):
         # set of known function names
@@ -193,7 +208,7 @@ class ConfigModelParser:
         for p in self._root.iter("provides"):
             for f in p.findall("function"):
                 if f.get("name") in functionnames:
-                    logging.warn("Function '%s' is not unambiguous." % f.get("name"))
+                    logging.info("Function '%s' is not unambiguous." % f.get("name"))
                 else:
                     functionnames.add(f.get("name"))
 
@@ -201,29 +216,38 @@ class ConfigModelParser:
     def check_components_unambiguous(self):
         # set of known component names
         names = set()
-        versioned_names = set()
+        versioned_names_checked = set()
 
         # iterate atomic components
         for c in self._root.findall("component"):
             if c.get("name") in names:
-                if c.get("name") not in versioned_names:
-                    logging.warn("Component '%s' is not unambiguous." % c.get("name"))
+                if c.get("name") not in versioned_names_checked:
+                    # only check once whether all components with this name have a version
+                    components = self._find_element_by_attribute("component", {"name" : c.get("name")})
+                    versions = set()
+                    for comp in components:
+                        if "version" not in comp.keys():
+                            logging.error("Component '%s' is not unambiguous and has no version." % c.get("name"))
+                        elif comp.get("version") in versions:
+                            logging.error("Component '%s' with version '%s' is ambiguous." % (c.get("name"), comp.get("version")))
+                        else:
+                            versions.add(comp.get("version"))
+
+                    versioned_names_checked.add(c.get("name"))
             else:
                 names.add(c.get("name"))
-                if "version" in c.keys():
-                    versioned_names.add(c.get("name"))
 
     # check whether components are unambiguously classified as function, filter, mux, proxy, protocol or None
     def check_classification_unambiguous(self):
         for c in self._root.findall("component"):
             classes = self._get_component_classes(c)
             if len(classes) > 1:
-                logging.error("Component '%s' is ambiguously classified as: %s" % (c.get("name"), classes))
+                logging.warn("Component '%s' is ambiguously classified as: %s" % (c.get("name"), classes))
 
         for c in self._root.findall("composite"):
             classes = self._get_component_classes(c)
             if len(classes) > 1:
-                logging.error("Composite '%s' is ambiguously classified as: %s" % (c.get("name"), classes))
+                logging.warn("Composite '%s' is ambiguously classified as: %s" % (c.get("name"), classes))
 
     def _check_provisions(self, component):
         if component.find("provides") is None:
@@ -251,7 +275,16 @@ class ConfigModelParser:
         services = set()
         for r in component.find("requires").findall("service"):
             # service required twice must be distinguished by label
-            # TODO
+            if r.get("name") in services:
+                labels = set()
+                if "label" not in r.keys():
+                    logging.error("Requirement <service name=\"%s\" /> is ambiguous and must therefore specify a label." %(r.get("name")))
+                elif r.get("label") in labels:
+                    logging.error("Requirement <service name=\"%s\" label=\"%s\" /> is ambiguous" % (r.get("name"), r.get("label")))
+                else:
+                    labels.add(r.get("label"))
+            else:
+                services.add(r.get("name"))
 
             # referenced filter must be defined
             if "filter" in r.keys():
@@ -259,11 +292,165 @@ class ConfigModelParser:
                     logging.error("Requirement <service name=\"%s\" filter=\"%s\" /> refers to unknown alias." %
                         (r.get("name"), r.get("filter")))
 
-        # TODO required services must be available
+        # functions must not be required twice
+        functions = set()
+        for f in component.find("requires").findall("function"):
+            if f.get("name") in functions:
+                logging.error("Requirement <function name=\"%s\" /> is ambiguous." %(f.get("name")))
+            else:
+                functions.add(f.get("name"))
 
-        # TODO required functions must be available
+        # required services must be available
+        for s in services:
+            provisions = self._find_provisions("service", s)
+            if len(provisions) == 0:
+                logging.error("Requirement <service name=\"%s\" /> cannot be satisfied." % s)
 
-        # TODO required rte must be available
+        # required functions must be available
+        for f in functions:
+            provisions = self._find_provisions("function", f)
+            if len(provisions) == 0:
+                logging.error("Requirement <function name=\"%s\" /> cannot be satisfied." % f)
+
+        # required rte must be available
+        for r in component.find("requires").findall("rte"):
+            provisions = self._find_provisions("rte", r.get("name"))
+            if len(provisions) == 0:
+                logging.error("Requirement <rte name=\"%s\" /> cannot be satisfied." % r.get("name"))
+
+    def _check_proxy(self, component, proxy):
+        carrier = proxy.get("carrier")
+
+        provideproxy = None
+        for p in component.find("provides").findall("service"):
+            if p.get("name") != carrier:
+                if provideproxy is None:
+                    provideproxy = p.get("name")
+                else:
+                    logging.error("Proxy '%s' provides multiple services." % (component.get("name")))
+
+        requireproxy = None
+        for r in component.find("requires").findall("service"):
+            if r.get("name") != carrier:
+                if requireproxy is None:
+                    requireproxy = r.get("name")
+                else:
+                    logging.error("Proxy '%s' requires multiple services." % (component.get("name")))
+
+        # only a single (and the same) service must be provided and required
+        if provideproxy != requireproxy:
+            logging.warning("Proxy '%s' does not provide and require the same service." % component.get("name"))
+
+    def _check_protocol(self, component, protocol):
+        required = protocol.get("from")
+        provided = protocol.get("to")
+
+        if len(self._find_element_by_attribute("service", { "name" : required }, component.find("requires"))) == 0:
+            logging.error("Protocol from service '%s' cannot be implemented by component '%s' due to missing service requirement." % (required, component.get("name")))
+
+        if len(self._find_element_by_attribute("service", { "name" : provided }, component.find("provides"))) == 0:
+            logging.error("Protocol to service '%s' cannot be implemented by component '%s' due to missing service provision." % (provided, component.get("name")))
+
+    def _check_mux(self, component, mux):
+        service = mux.get("service")
+        if len(self._find_element_by_attribute("service", { "name" : service }, component.find("requires"))) == 0:
+            logging.error("Mux of service '%s' cannot be implemented by component '%s' due to missing service requirement." % (service, component.get("name")))
+
+        if len(self._find_element_by_attribute("service", { "name" : service }, component.find("provides"))) == 0:
+            logging.error("Mux of service '%s' cannot be implemented by component '%s' due to missing service provision." % (service, component.get("name")))
+
+    def _check_filter(self, component, filter):
+        # nothing to be done (yet)
+        return
+
+    def _check_pattern(self, composite, pattern):
+
+        required_services = dict()
+        provided_services = dict()
+
+        for c in pattern.findall("component"):
+            cname = c.get("name")
+
+            required_services[cname] = { "specified" : set(), "used" : set() }
+            provided_services[cname] = { "specified" : set(), "used" : set(), "exposed" : set() }
+
+            # referenced components must be specified 
+            cspecs = self._find_element_by_attribute("component", { "name" : cname })
+            if len(cspecs) == 0:
+                logging.error("Pattern of composite '%s' references unspecified component '%s'." %
+                        (composite.get("name"), cname))
+
+            # store specified service requirements/provisions
+            for cspec in cspecs:
+                tmp = set()
+                if cspec.find("requires"):
+                    for s in cspec.find("requires").findall("service"):
+                        tmp.add(s.get("name"))
+                required_services[cname]["specified"].update(tmp)
+
+                tmp = set()
+                if cspec.find("provides"):
+                    for s in cspec.find("provides").findall("service"):
+                        tmp.add(s.get("name"))
+                provided_services[cname]["specified"].update(tmp)
+
+            # references in <route> must be specified
+            if c.find("route"):
+                for s in c.find("route").findall("service"):
+                    sname = s.get("name")
+                    required_services[cname]["used"].add(sname)
+
+                    for cspec in cspecs:
+                        if len(self._find_element_by_attribute("service", { "name" : sname }, cspec.find("requires"))) == 0:
+                            logging.error("Routing of unknown service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
+
+                    if s.find("function") != None:
+                        fname = s.find("function").get("name")
+                        if len(self._find_element_by_attribute("function", { "name" : fname }, composite.find("requires"))) == 0:
+                            logging.error("Routing of service '%s' to function '%s' does not match composite spec '%s'." % (sname, fname, composite.get("name")))
+
+                    if s.find("child") != None:
+                        chname = s.find("child").get("name")
+                        if len(self._find_element_by_attribute("component", { "name" : chname }, pattern)) == 0:
+                            logging.error("Routing of service '%s' to child '%s' of composite '%s' not possible." % (sname, chname, composite.get("name")))
+                        else:
+                            provided_services[chname]["used"].add(sname)
+
+            # references in <expose> must be specified
+            if c.find("expose"):
+                for s in c.find("expose").findall("service"):
+                    sname = s.get("name")
+                    provided_services[cname]["used"].add(sname)
+                    provided_services[cname]["exposed"].add(sname)
+                    if len(self._find_element_by_attribute("service", { "name" : sname }, composite.find("provides"))) == 0:
+                        loggin.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
+
+        # required external service must be pending exactly once
+        for s in composite.find("requires").findall("service"):
+            sname = s.get("name")
+            pending_count = 0
+            for r in required_services.values():
+                if sname in r["specified"] - r["used"]:
+                    pending_count += 1
+
+            if pending_count != 1:
+                logging.error("Service '%s' required by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
+
+        # provided external service must be either exposed or pending exactly once
+        for s in composite.find("provides").findall("service"):
+            sname = s.get("name")
+            exposed_count = 0
+            pending_count = 0
+            for p in provided_services.values():
+                if sname in p["exposed"]:
+                    exposed_count += 1
+                if sname in p["specified"] - p["used"]:
+                    pending_count += 1
+
+            if exposed_count > 1:
+                logging.error("Service '%s' exposed multiple times in composite '%s'." % (sname, composite.get("name")))
+            elif exposed_count == 0 and pending_count != 1:
+                logging.error("Service '%s' provided by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
 
     # perform model check for <component> nodes: 
     def check_atomic_components(self):
@@ -271,7 +458,21 @@ class ConfigModelParser:
             self._check_provisions(c)
             self._check_requirements(c)
 
-            # TODO check proxy/protocol/mux/filter
+            # check <proxy>
+            for p in c.findall("proxy"):
+                self._check_proxy(c, p)
+
+            # check <protocol>
+            for p in c.findall("protocol"):
+                self._check_protocol(c, p)
+
+            # check <mux>
+            for m in c.findall("mux"):
+                self._check_mux(c, m)
+
+            # check <filter>
+            for f in c.findall("filter"):
+                self._check_filter(c, f)
 
     # perform model check for <composite> nodes: 
     def check_composite_components(self):
@@ -279,10 +480,41 @@ class ConfigModelParser:
             self._check_provisions(c)
             self._check_requirements(c)
 
-            # TODO check proxy/protocol/mux/filter
+            # check <proxy>
+            for p in c.findall("proxy"):
+                self._check_proxy(c, p)
+
+            # check <protocol>
+            for p in c.findall("protocol"):
+                self._check_protocol(c, p)
+
+            # check <mux>
+            for m in c.findall("mux"):
+                self._check_mux(c, m)
+
+            # check <filter>
+            for f in c.findall("filter"):
+                self._check_filter(c, f)
+
+            # check <pattern>
+            for p in c.findall("pattern"):
+                self._check_pattern(c, p)
 
     def check_system(self):
         # TODO check function/composite/component references in system and subsystems
+
+        # preprocessing:
+        # - on each level, build set of parent and child service provisions
+        # - build set of function provisions
+        # dependency resolution:
+        # 1) check rte dependencies
+        # 2) check function dependencies
+        # 3) check service dependencies
+        #    - use mux to solve cardinality problems
+        #    - use protocol to solve compatibility problems
+        #    - use proxy to solve reachability
+        # warn if multiple candidates exist and dependencies are not decidable
+
         return
 
     # check whether binaries are pointing to specified components
@@ -369,6 +601,7 @@ class ConfigModelParser:
 if __name__ == '__main__':
 
     logging.basicConfig(format='%(levelname)s: %(message)s')
+    logging.getLogger().setLevel(logging.INFO)
 
     parser = ConfigModelParser(args.file)
 
