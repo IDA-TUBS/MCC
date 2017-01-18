@@ -15,9 +15,61 @@ args = parser.parse_args()
 # main section #
 ################
 
-class SystemConfig:
-    def __init__(self):
-        self.childs
+class SubsystemConfig:
+    def __init__(self, root_node, parent):
+        self._root = root_node
+        self.parent = parent
+        self.subsystems = dict()
+        self.children = list()
+
+    def parse(self):
+        for sub in self._root.findall("subsystem"):
+            name = sub.get("name")
+            self.subsystems[name] = SubsystemConfig(sub, self)
+
+        # TODO parse <child> nodes
+        return
+
+    def parent_services(self):
+        return self.parent.services()
+
+    def child_services(self):
+        # TODO return child services
+        return list()
+
+    def services(self):
+        return self.parent_services() + self.child_services()
+
+    def add_function(self, name):
+        self.parent.add_function(name)
+
+class SystemConfig(SubsystemConfig):
+    def __init__(self, root_node):
+        self._root = root_node
+        self.functions = set()
+        self.subsystems = dict()
+        self.children = list()
+        self.specs = list()
+
+    def parse(self):
+        SubsystemConfig.parse(self)
+
+        # TODO parse <specs>
+
+    def parent_services(self):
+        parent_services = set()
+
+        if self._root.find("parent-provides"):
+            for p in self._root.find("parent-provides").findall("service"):
+                parent_services.add(p.get("name"))
+
+        return parent_services
+
+    def add_function(self, name):
+        if name in self.functions:
+            loggging.error("Function '%s' cannot be present multiple times." % name) 
+        else:
+            self.functions.add(name)
 
 class ConfigModelParser:
 
@@ -514,6 +566,9 @@ class ConfigModelParser:
         #    - use protocol to solve compatibility problems
         #    - use proxy to solve reachability
         # warn if multiple candidates exist and dependencies are not decidable
+
+        system = SystemConfig(self._root.find("system"))
+        system.parse()
 
         return
 
