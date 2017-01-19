@@ -239,7 +239,6 @@
 
     <component name="object_recog">
         <requires>
-            <function name="DISP_TO_PC" />
             <service name="ROM" />
         </requires>
     </component>
@@ -404,8 +403,8 @@
 			<any-service><parent /></any-service>
 		</default-routes>
 
-		<!-- explicitly select camera, implicitly provides CAMERA (function) //-->
-		<child component="camera" />
+		<!-- explicitly ask for CAMERA function //-->
+		<child function="CAMERA" />
 		
 		<!-- requires unambiguous function CAMERA //-->
 		<child function="STEREO_MATCH" />

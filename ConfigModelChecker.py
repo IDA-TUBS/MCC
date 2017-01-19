@@ -16,54 +16,291 @@ args = parser.parse_args()
 ################
 
 class SubsystemConfig:
-    def __init__(self, root_node, parent):
-        self._root = root_node
+    def __init__(self, root_node, parent, model):
+        self.root = root_node
         self.parent = parent
+        self.model = model
         self.subsystems = dict()
         self.children = list()
+        self.patterns = dict()
+        self.rte = None
 
     def parse(self):
-        for sub in self._root.findall("subsystem"):
+        for sub in self.root.findall("subsystem"):
             name = sub.get("name")
-            self.subsystems[name] = SubsystemConfig(sub, self)
+            self.subsystems[name] = SubsystemConfig(sub, self, self.model)
+            self.subsystems[name].parse()
 
-        # TODO parse <child> nodes
-        return
+        # parse <child> nodes
+        for c in self.root.findall("child"):
+            if "component" in c.keys():
+                components = self.model._find_element_by_attribute("component", { "name" : c.get("component") })
+                if len(components) == 0:
+                    logging.error("Cannot find referenced child component '%s'." % c.get("component"))
+                else:
+                    if len(components) > 1:
+                        logging.info("Multiple candidates found for child component '%s'." % c.get("component"))
+
+                    self.children.append({ "chosen" : components[0], "options" : set(components), "dismissed" : set()})
+
+            elif "composite" in c.keys():
+                components = self.model._find_element_by_attribute("composite", { "name" : c.get("composite") })
+                if len(components) == 0:
+                    logging.error("Cannot find referenced child composite '%s'." % c.get("composite"))
+                else:
+                    if len(components) > 1:
+                        logging.info("Multiple candidates found for child composite '%s'." % c.get("composite"))
+
+                    self.children.append({ "chosen" : components[0], "options" : set(components), "dismissed" : set()})
+                    self.parse_patterns(components[0])
+
+            elif "function" in c.keys():
+                functions = self.model._find_function_by_name(c.get("function"))
+                
+                if len(functions) == 0:
+                    logging.error("Cannot find referenced child function '%s'." % c.get("function"))
+                else:
+                    if len(functions) > 1:
+                        logging.info("Multiple candidates found for child function '%s'." % c.get("function"))
+
+                    self.children.append({ "chosen" : functions[0], "options" : set(functions), "dismissed" : set()})
+                    self.add_function(c.get("function"))
+
+    def parse_patterns(self, composite):
+        if composite in self.patterns.keys():
+            return
+
+        patterns = { "dismissed" : set(), "options" : set() }
+        for p in composite.findall("pattern"):
+            if "chosen" not in patterns.keys():
+                patterns["chosen"] = p
+
+            patterns["options"].add(p)
+
+        self.patterns[composite] = patterns
+
+    # check spec-compatibility of a composite pattern
+    def pattern_compatible(self, pattern, callback):
+        # find components, error if not unambiguous
+        for c in pattern.findall("component"):
+            compatible = False
+
+            # check compatibility of each candidate
+            for candidate in self.model._find_element_by_attribute("component", { "name" : c.get("name") }):
+                if self._compatible(candidate, callback):
+                    # we should actually store the selected candidate
+                    compatible = True
+
+            if not compatible:
+                logging.info("Pattern incompatible")
+                return False
+
+        return True
+
+    def _check_specs(self, component):
+        if component.tag == "composite":
+            return True
+
+        system_specs = self.system_specs()
+
+        component_specs = set()
+        if component.find("requires"):
+            for spec in component.findall("spec"):
+                component_specs.add(spec.get("name"))
+
+        for spec in component_specs:
+            if spec not in system_specs:
+                logging.info("Component '%s' incompatible because of spec requirement '%s'." % (component.get("name"), spec))
+                return False
+
+        return True
+
+    def _check_rte(self, component):
+        if component.tag == "composite":
+            return True
+
+        rtename = self.rte.find("provides").find("rte").get("name")
+
+        if self.get_rte(component) != rtename:
+            return False
+
+        return True
+
+    def _check_function_requirement(self, component):
+        if component.find("requires"):
+            for f in component.find("requires").findall("function"):
+                if f.get("name") not in self.provided_functions():
+                    logging.error("Function '%s' required by '%s' is not explicitly instantiated." % (f.get("name"), component.get("name")))
+                    return False
+
+        return True
+
+    # check compatibility of component or composite
+    def _compatible(self, component, callback, check_pattern=True):
+        
+        if not callback(component):
+            return False
+        elif component.tag == "composite" and check_pattern:
+            if component not in self.patterns.keys():
+                self.parse_patterns(component)
+
+            found = False
+            # try non-dismissed alternatives
+            for alt in self.patterns[component]["options"] - self.patterns[component]["dismissed"]:
+                if self.pattern_compatible(alt, callback):
+                    if not found:
+                        self.patterns[component]["chosen"] = alt
+                        found = True
+                else:
+                    self.patterns[component]["dismissed"].add(alt)
+
+            if not found:
+                return False
+
+        return True
+
+    def _choose_compatible(self, callback, check_pattern=True):
+        for c in self.children:
+            found = False
+            # try non-dismissed alternatives
+            for alt in c["options"] - c["dismissed"]:
+                if self._compatible(alt, callback, check_pattern):
+                    if not found:
+                        c["chosen"] = alt
+                        found = True
+                else:
+                    c["dismissed"].add(alt)
+
+            if not found:
+                names = [ x.get("name") for x in c["options"] - c["dismissed"] ]
+                logging.error("No compatible component found among %s.", names)
+                return False
+
+        return True
+
+
+    # check and select compatible components (regarding to specs)
+    def match_specs(self):
+        for sub in self.subsystems.values():
+            if not sub.match_specs():
+                return False
+
+        return self._choose_compatible(self._check_specs)
+
+    def get_rte(self, component):
+        if component.find("requires"):
+            rte = component.find("requires").find("rte")
+            if rte is not None:
+                return rte.get("name")
+
+        return "native"
+
+    def select_rte(self):
+        for sub in self.subsystems.values():
+            if not sub.select_rte():
+                return False
+
+        # build set of required RTEs
+        required_rtes = set()
+        for c in self.children:
+            if c["chosen"].tag == "component":
+                required_rtes.add(self.get_rte(c["chosen"]))
+            else: # composite
+                for comp in self.patterns[c["chosen"]]["chosen"]:
+                    required_rtes.add(self.get_rte(comp))
+
+        if len(required_rtes) == 0:
+            required_rtes.add("native")
+
+        if len(required_rtes) > 1:
+            # FIXME find alternatives and patterns for each candidate rte
+            logging.critical("RTE undecidable: %s. (TO BE IMPLEMENTED)" % required_rtes)
+            return False
+        else:
+            # find component which provides this rte
+            for p in self.model._root.iter("provides"):
+                for r in p.findall("rte"):
+                    if r.get("name") in required_rtes:
+                        if self.rte is None:
+                            self.rte = [x for x in self.model._root.iter("component") if x.find("provides") is p][0]
+                        else:
+                            logging.warn("Multiple provider of RTE '%s' found. (TO BE IMPLEMENTED)" % r.get("name")) 
+
+            if self.rte is None:
+                logging.critical("Cannot find provider for RTE '%s'." % required_rtes.pop())
+                return False
+
+        # dismiss all components in conflict with selected RTE
+        return self._choose_compatible(self._check_rte)
+
+    def filter_by_function_requirements(self):
+        for sub in self.subsystems.values():
+            if not sub.filter_by_function_requirements():
+                return False
+
+        return self._choose_compatible(self._check_function_requirement, check_pattern=False)
 
     def parent_services(self):
         return self.parent.services()
 
     def child_services(self):
-        # TODO return child services
-        return list()
+        # return child services
+        services = set()
+        for c in self.children:
+            if c["chosen"].find("provides"):
+                for p in c["chosen"].find("provides").findall("service"):
+                    services.add(p.get("name"))
+
+        return services
+
+    def system_specs(self):
+        return self.parent.system_specs()
 
     def services(self):
         return self.parent_services() + self.child_services()
+
+    def provided_functions(self):
+        return self.parent.provided_functions()
 
     def add_function(self, name):
         self.parent.add_function(name)
 
 class SystemConfig(SubsystemConfig):
-    def __init__(self, root_node):
-        self._root = root_node
+    def __init__(self, root_node, model):
+        SubsystemConfig.__init__(self, root_node, None, model)
+        self.specs = set()
         self.functions = set()
-        self.subsystems = dict()
-        self.children = list()
-        self.specs = list()
 
     def parse(self):
         SubsystemConfig.parse(self)
 
-        # TODO parse <specs>
+        # parse <specs>
+        for s in self.root.findall("spec"):
+            self.specs.add(s.get("name"))
+
+    def select_rte(self):
+        result = SubsystemConfig.select_rte(self)
+
+        if result:
+            if self.rte.find('provides').find('rte').get('name') != "native":
+                logging.error("Top-level RTE must be 'native' (found: %s)." % (self.rte.find('provides').find('rte').get('name')))
+
+        return result
 
     def parent_services(self):
         parent_services = set()
 
-        if self._root.find("parent-provides"):
-            for p in self._root.find("parent-provides").findall("service"):
+        if self.root.find("parent-provides"):
+            for p in self.root.find("parent-provides").findall("service"):
                 parent_services.add(p.get("name"))
 
         return parent_services
+
+    def system_specs(self):
+        return self.specs
+
+    def provided_functions(self):
+        return self.functions
 
     def add_function(self, name):
         if name in self.functions:
@@ -96,8 +333,7 @@ class ConfigModelParser:
                                                                                     "optional-attrs" : ["version_above", "version_below"]
                                                                                     }
                                                                                 }},
-                                                              "function": { "required-attrs" : ["name"] },
-                                                              "rte"     : { "required-attrs" : ["name"] },
+                                                              "rte"     : { "max" : 1, "required-attrs" : ["name"] },
                                                               "spec"    : { "required-attrs" : ["name"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
                                 "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
@@ -144,6 +380,10 @@ class ConfigModelParser:
                                 }
                             },
                             "system" : { "max" : 1, "children" : {
+                                "spec"      : { "required-attrs" : ["name"] },
+                                "parent-provides" : { "max" : 1, "children" : {
+                                    "service" : { "required-attrs" : ["name"] }
+                                    }},
                                 "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
                                     "route" : { "max" : 1, "children" : {
                                         "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
@@ -166,20 +406,22 @@ class ConfigModelParser:
                 raise "Cannot find <config_model> node."
 
     def _find_function_by_name(self, name):
-        functions = list()
+        function_providers = list()
         # iterate components
         for c in self._root.findall("component"):
             p = c.find("provides")
             if p is not None:
-                functions.update(self._find_element_by_attribute("function", { "name" : name }, root=p))
+                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
+                    function_providers.append(c)
 
         # iterate composites
         for c in self._root.findall("composite"):
             p = c.find("provides")
             if p is not None:
-                functions.update(self._find_element_by_attribute("function", { "name" : name }, root=p))
+                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
+                    function_providers.append(c)
 
-        return functions
+        return function_providers
 
     def _find_element_by_attribute(self, elementname, attrs=dict(), root=None):
         if root is None:
@@ -553,24 +795,31 @@ class ConfigModelParser:
                 self._check_pattern(c, p)
 
     def check_system(self):
-        # TODO check function/composite/component references in system and subsystems
+        # check function/composite/component references, compatibility and routing in system and subsystems
 
-        # preprocessing:
-        # - on each level, build set of parent and child service provisions
-        # - build set of function provisions
-        # dependency resolution:
-        # 1) check rte dependencies
-        # 2) check function dependencies
-        # 3) check service dependencies
+        system = SystemConfig(self._root.find("system"), self)
+        system.parse()
+        if not system.match_specs():
+            logging.critical("abort")
+            return False
+
+        if not system.select_rte():
+            logging.critical("abort")
+            return False
+
+        if not system.filter_by_function_requirements():
+            logging.critical("abort")
+            return False
+
+        # TODO parse and store explicit routing
+
+        # TODO check service dependencies:
         #    - use mux to solve cardinality problems
         #    - use protocol to solve compatibility problems
         #    - use proxy to solve reachability
         # warn if multiple candidates exist and dependencies are not decidable
 
-        system = SystemConfig(self._root.find("system"))
-        system.parse()
-
-        return
+        return True
 
     # check whether binaries are pointing to specified components
     def check_binaries(self):

@@ -270,6 +270,8 @@
 
 		<subsystem name="init1.2">
 
+            <child function="GUI" />
+
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
 			<child component="pointer" />
 
