@@ -390,6 +390,7 @@
 
 <!-- example abstract config //-->
 <system> 
+    <spec name="zynq" />
 
     <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
     <child function="Network" />

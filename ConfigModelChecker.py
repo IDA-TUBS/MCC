@@ -2,6 +2,8 @@
 
 import xml.etree.ElementTree as ET
 
+import networkx as nx
+
 import logging
 import argparse
 
@@ -15,56 +17,12 @@ args = parser.parse_args()
 # main section #
 ################
 
-class SubsystemConfig:
-    def __init__(self, root_node, parent, model):
-        self.root = root_node
-        self.parent = parent
-        self.model = model
-        self.subsystems = dict()
-        self.children = list()
+class PatternManager:
+    def __init__(self, composite, repo):
         self.patterns = dict()
-        self.rte = None
+        self.repo = repo
 
-    def parse(self):
-        for sub in self.root.findall("subsystem"):
-            name = sub.get("name")
-            self.subsystems[name] = SubsystemConfig(sub, self, self.model)
-            self.subsystems[name].parse()
-
-        # parse <child> nodes
-        for c in self.root.findall("child"):
-            if "component" in c.keys():
-                components = self.model._find_element_by_attribute("component", { "name" : c.get("component") })
-                if len(components) == 0:
-                    logging.error("Cannot find referenced child component '%s'." % c.get("component"))
-                else:
-                    if len(components) > 1:
-                        logging.info("Multiple candidates found for child component '%s'." % c.get("component"))
-
-                    self.children.append({ "chosen" : components[0], "options" : set(components), "dismissed" : set()})
-
-            elif "composite" in c.keys():
-                components = self.model._find_element_by_attribute("composite", { "name" : c.get("composite") })
-                if len(components) == 0:
-                    logging.error("Cannot find referenced child composite '%s'." % c.get("composite"))
-                else:
-                    if len(components) > 1:
-                        logging.info("Multiple candidates found for child composite '%s'." % c.get("composite"))
-
-                    self.children.append({ "chosen" : components[0], "options" : set(components), "dismissed" : set()})
-                    self.parse_patterns(components[0])
-
-            elif "function" in c.keys():
-                functions = self.model._find_function_by_name(c.get("function"))
-                
-                if len(functions) == 0:
-                    logging.error("Cannot find referenced child function '%s'." % c.get("function"))
-                else:
-                    if len(functions) > 1:
-                        logging.info("Multiple candidates found for child function '%s'." % c.get("function"))
-
-                    self.children.append({ "chosen" : functions[0], "options" : set(functions), "dismissed" : set()})
-                    self.add_function(c.get("function"))
+        self.parse_patterns(composite)
 
     def parse_patterns(self, composite):
         if composite in self.patterns.keys():
@@ -79,23 +37,215 @@ class SubsystemConfig:
 
         self.patterns[composite] = patterns
 
-    # check spec-compatibility of a composite pattern
-    def pattern_compatible(self, pattern, callback):
+    def get_alternatives(self, composite):
+        self.parse_patterns(composite)
+        return self.patterns[composite]['options'] - self.patterns[composite]['dismissed']
+
+    def find_compatible(self, composite, callback):
+        self.parse_patterns(composite)
+
+        found = False
+        for alt in self.get_alternatives(composite):
+            if self.compatible(alt, callback):
+                if not found:
+                    self.patterns[composite]['chosen'] = alt
+                    found = True
+            else:
+                self.patterns[composite]['dismissed'].add(alt)
+
+        return found
+
+    def compatible(self, pattern, callback):
         # find components, error if not unambiguous
         for c in pattern.findall("component"):
-            compatible = False
-
-            # check compatibility of each candidate
-            for candidate in self.model._find_element_by_attribute("component", { "name" : c.get("name") }):
-                if self._compatible(candidate, callback):
-                    # we should actually store the selected candidate
-                    compatible = True
-
-            if not compatible:
+            if not callback(self._get_component_from_repo(c)):
                 logging.info("Pattern incompatible")
                 return False
 
         return True
+
+    def _get_component_from_repo(self, c):
+        matches = self.repo._find_element_by_attribute("component", { "name" : c.get("name") })
+        if len(matches) > 1:
+            logging.critical("Pattern references ambiguous component '%s'." % c.get("name"))
+
+        return matches[0]
+
+    def components(self, composite):
+        components = set()
+        for c in self.patterns[composite]['chosen'].findall("component"):
+            components.add(self._get_component_from_repo(c))
+
+        return components
+
+class SystemGraph:
+    def __init__(self, repo):
+        # the query graph contains the requested functions/composites/components (as nodes) and their explicit routes (edges)
+        self.query_graph = nx.DiGraph()
+
+        # the component graph models the selected atomic components (as nodes) and their service routes (as edges)
+        self.component_graph = nx.DiGraph()
+        self.mapping_component2query = dict() # map nodes to nodes in query graph
+        self.mapping_session2query = dict()   # map edges to edges in query graph
+
+        # the subsystem graph models the hierarchical structure of the subsystems
+        self.subsystem_graph = nx.DiGraph()
+        self.mapping_query2subsystem = dict() # map nodes in query graph to nodes
+
+        self.repo = repo
+
+        self.functions = set()
+
+    def add_subsystem(self, subsystem, parent=None):
+        self.subsystem_graph.add_node(subsystem)
+
+        if parent is not None:
+            if parent not in self.subsystem_graph:
+                raise("Cannot find parent '%s' in subsystem graph." % parent)
+            self.subsystem_graph.add_edge(parent, subsystem)
+
+    def add_query(self, child, subsystem):
+        self.query_graph.add_node(child)
+        self.mapping_query2subsystem[child] = subsystem
+
+        if "component" in child.keys():
+            components = self.repo._find_element_by_attribute("component", { "name" : child.get("component") })
+            if len(components) == 0:
+                logging.error("Cannot find referenced child component '%s'." % child.get("component"))
+            else:
+                if len(components) > 1:
+                    logging.info("Multiple candidates found for child component '%s'." % child.get("component"))
+
+                self.query_graph[child]['chosen']    = components[0]
+                self.query_graph[child]['options']   = set(components)
+                self.query_graph[child]['dismissed'] = set()
+
+        elif "composite" in child.keys():
+            components = self.repo._find_element_by_attribute("composite", { "name" : child.get("composite") })
+            if len(components) == 0:
+                logging.error("Cannot find referenced child composite '%s'." % child.get("composite"))
+            else:
+                if len(components) > 1:
+                    logging.info("Multiple candidates found for child composite '%s'." % child.get("composite"))
+
+                self.query_graph[child]['chosen']    = components[0]
+                self.query_graph[child]['options']   = set(components)
+                self.query_graph[child]['dismissed'] = set()
+                self.query_graph[child]['patterns']  = PatternManager(components[0], self.repo)
+
+        elif "function" in child.keys():
+            functions = self.repo._find_function_by_name(child.get("function"))
+            
+            if len(functions) == 0:
+                logging.error("Cannot find referenced child function '%s'." % child.get("function"))
+            else:
+                if len(functions) > 1:
+                    logging.info("Multiple candidates found for child function '%s'." % child.get("function"))
+
+                self.query_graph[child]['chosen']    = functions[0]
+                self.query_graph[child]['options']   = set(functions)
+                self.query_graph[child]['dismissed'] = set()
+                if functions[0].tag == "composite":
+                    self.query_graph[child]['patterns']  = PatternManager(functions[0], self.repo)
+                self.add_function(child.get("function"))
+
+    def parse_routes(self):
+        # TODO parse routes between children
+        return
+
+    def add_function(self, name):
+        if name in self.functions:
+            loggging.error("Function '%s' cannot be present multiple times." % name) 
+        else:
+            self.functions.add(name)
+
+    def subsystems(self, subsystem):
+        return self.subsystem_graph.successors(subsystem)
+
+    def children(self, subsystem):
+        children = set()
+        for child in self.mapping_query2subsystem.keys():
+            if self.mapping_query2subsystem[child] == subsystem:
+                children.add(child)
+
+        return children
+
+    def get_alternatives(self, child):
+        return self.query_graph[child]['options'] - self.query_graph[child]['dismissed']
+
+    def get_options(self, child):
+        return self.query_graph[child]['options']
+
+    def components(self, child):
+        chosen = self.query_graph[child]['chosen']
+        if chosen.tag == "component":
+            return set(chosen)
+        else: # composite
+            return self.query_graph[child]['patterns'].components(chosen)
+
+    def choose_component(self, child, component):
+        # FIXME we might wanna check whether 'component' is in 'options' - 'dismissed'
+        self.query_graph[child]['chosen'] = component
+
+    def exclude_component(self, child, component):
+        # FIXME we might wanna check whether 'component' is in 'options'
+        self.query_graph[child]['dismissed'].add(component)
+
+    def _compatible(self, child, component, callback, check_pattern):
+        if not callback(component):
+            return False
+        elif component.tag == "composite" and check_pattern:
+            return self.query_graph[child]['patterns'].find_compatible(component, callback)
+
+        return True
+
+    def find_compatible_component(self, child, callback, check_pattern=True):
+        found = False
+        # try non-dismissed alternatives
+        for alt in self.get_alternatives(child):
+            if self._compatible(child, alt, callback, check_pattern):
+                if not found:
+                    self.choose_component(child, alt)
+                    found = True
+            else:
+                self.exclude_component(child, alt)
+
+        if not found:
+            names = [ x.get("name") for x in self.get_options(child) ]
+            logging.error("No compatible component found for child '%s' among %s." % (child.attrib, names))
+            return False
+
+        return True
+
+class SubsystemConfig:
+    def __init__(self, root_node, parent, model):
+        self.root = root_node
+        self.parent = parent
+        self.model = model
+#        self.subsystems = dict()
+        self.rte = None
+
+    def parse(self):
+        # add subsystem to graph
+        self.graph().add_subsystem(self, self.parent)
+
+        for sub in self.root.findall("subsystem"):
+            name = sub.get("name")
+            subsystem = SubsystemConfig(sub, self, self.model)
+            subsystem.parse()
+
+        # parse <child> nodes
+        for c in self.root.findall("child"):
+            self.graph().add_query(c, self)
+
+    def parse_explicit_routes(self):
+        for sub in self.subsystems.values():
+            sub.parse_explicit_routes()
+
+        # TODO parse routes
+
+    def explicit_routes(self):
+        return self.parent.explicit_routes()
 
     def _check_specs(self, component):
         if component.tag == "composite":
@@ -105,8 +255,9 @@ class SubsystemConfig:
 
         component_specs = set()
         if component.find("requires"):
-            for spec in component.findall("spec"):
+            for spec in component.find("requires").findall("spec"):
                 component_specs.add(spec.get("name"))
+
 
         for spec in component_specs:
             if spec not in system_specs:
@@ -122,6 +273,7 @@ class SubsystemConfig:
         rtename = self.rte.find("provides").find("rte").get("name")
 
         if self.get_rte(component) != rtename:
+            logging.info("Component '%s' is incompatible because of RTE requirement '%s' does not match '%s'." % (self.get_rte(component), rtename))
             return False
 
         return True
@@ -135,53 +287,16 @@ class SubsystemConfig:
 
         return True
 
-    # check compatibility of component or composite
-    def _compatible(self, component, callback, check_pattern=True):
-        
-        if not callback(component):
-            return False
-        elif component.tag == "composite" and check_pattern:
-            if component not in self.patterns.keys():
-                self.parse_patterns(component)
-
-            found = False
-            # try non-dismissed alternatives
-            for alt in self.patterns[component]["options"] - self.patterns[component]["dismissed"]:
-                if self.pattern_compatible(alt, callback):
-                    if not found:
-                        self.patterns[component]["chosen"] = alt
-                        found = True
-                else:
-                    self.patterns[component]["dismissed"].add(alt)
-
-            if not found:
-                return False
-
-        return True
-
     def _choose_compatible(self, callback, check_pattern=True):
-        for c in self.children:
-            found = False
-            # try non-dismissed alternatives
-            for alt in c["options"] - c["dismissed"]:
-                if self._compatible(alt, callback, check_pattern):
-                    if not found:
-                        c["chosen"] = alt
-                        found = True
-                else:
-                    c["dismissed"].add(alt)
-
-            if not found:
-                names = [ x.get("name") for x in c["options"] - c["dismissed"] ]
-                logging.error("No compatible component found among %s.", names)
+        for c in self.graph().children(self):
+            if not self.graph().find_compatible_component(c, callback, check_pattern):
                 return False
 
         return True
-
 
     # check and select compatible components (regarding to specs)
     def match_specs(self):
-        for sub in self.subsystems.values():
+        for sub in self.graph().subsystems(self):
             if not sub.match_specs():
                 return False
 
@@ -196,18 +311,15 @@ class SubsystemConfig:
         return "native"
 
     def select_rte(self):
-        for sub in self.subsystems.values():
+        for sub in self.graph().subsystems(self):
             if not sub.select_rte():
                 return False
 
         # build set of required RTEs
         required_rtes = set()
-        for c in self.children:
-            if c["chosen"].tag == "component":
-                required_rtes.add(self.get_rte(c["chosen"]))
-            else: # composite
-                for comp in self.patterns[c["chosen"]]["chosen"]:
-                    required_rtes.add(self.get_rte(comp))
+        for c in self.graph().children(self):
+            for comp in self.graph().components(c):
+                required_rtes.add(self.get_rte(comp))
 
         if len(required_rtes) == 0:
             required_rtes.add("native")
@@ -234,7 +346,7 @@ class SubsystemConfig:
         return self._choose_compatible(self._check_rte)
 
     def filter_by_function_requirements(self):
-        for sub in self.subsystems.values():
+        for sub in self.graph().subsystems(self):
             if not sub.filter_by_function_requirements():
                 return False
 
@@ -262,14 +374,20 @@ class SubsystemConfig:
     def provided_functions(self):
         return self.parent.provided_functions()
 
-    def add_function(self, name):
-        self.parent.add_function(name)
+    def explicit_routes(self):
+        return self.explicit_routes
+
+    def graph(self):
+        return self.parent.graph()
 
 class SystemConfig(SubsystemConfig):
     def __init__(self, root_node, model):
         SubsystemConfig.__init__(self, root_node, None, model)
         self.specs = set()
-        self.functions = set()
+        self.system_graph = SystemGraph(model)
+
+    def graph(self):
+        return self.system_graph
 
     def parse(self):
         SubsystemConfig.parse(self)
@@ -287,6 +405,18 @@ class SystemConfig(SubsystemConfig):
 
         return result
 
+    def solve_dependencies(self):
+
+        # TODO
+        # 1) build graphs (query graph + component graph)
+        # 2) parse explicit routes
+        # 3) check service dependencies:
+        #    - use mux to solve cardinality problems
+        #    - use protocol to solve compatibility problems
+        #    - use proxy to solve reachability
+        # warn if multiple candidates exist and dependencies are not decidable
+        return False
+
     def parent_services(self):
         parent_services = set()
 
@@ -300,13 +430,7 @@ class SystemConfig(SubsystemConfig):
         return self.specs
 
     def provided_functions(self):
-        return self.functions
-
-    def add_function(self, name):
-        if name in self.functions:
-            loggging.error("Function '%s' cannot be present multiple times." % name) 
-        else:
-            self.functions.add(name)
+        return self.graph().functions
 
 class ConfigModelParser:
 
@@ -795,7 +919,7 @@ class ConfigModelParser:
                 self._check_pattern(c, p)
 
     def check_system(self):
-        # check function/composite/component references, compatibility and routing in system and subsystems
+        # check function/composite/component references, compatibility and routes in system and subsystems
 
         system = SystemConfig(self._root.find("system"), self)
         system.parse()
@@ -811,13 +935,9 @@ class ConfigModelParser:
             logging.critical("abort")
             return False
 
-        # TODO parse and store explicit routing
-
-        # TODO check service dependencies:
-        #    - use mux to solve cardinality problems
-        #    - use protocol to solve compatibility problems
-        #    - use proxy to solve reachability
-        # warn if multiple candidates exist and dependencies are not decidable
+        if not system.solve_dependencies():
+            logging.critical("abort")
+            return False
 
         return True
 
