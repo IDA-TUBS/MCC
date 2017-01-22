@@ -17,6 +17,56 @@ args = parser.parse_args()
 # main section #
 ################
 
+# wrapper class to allow multiple nodes of the same component
+class Component:
+    def __init__(self, xml_node):
+        self.xml = xml_node
+
+    def route_to(self, graph, service, component, label=None):
+        # check component specifications
+        if not self.requires(service):
+            logging.error("Cannot route service '%s' of component '%s' which does not require this service." % (self.xml.get('name'), service))
+            return False
+
+        if not component.provides(service):
+            logging.error("Cannot route service '%s' to component '%s' which does not provide this service." % (component.xml.get('name'), service))
+            return False
+
+        # FIXME check for max_clients (idea: do this a post-processing step/admission test)
+
+        # add edge
+        attribs = {'service' : service}
+        if label is not None and label != 'None':
+            attribs['label'] = label
+
+        graph.add_edge(self, component, attribs)
+        return True
+
+    def max_clients(self, name):
+        if self.xml.find('provides') is not None:
+            for s in self.xml.find('provides').findall(provisiontype):
+                if s.get('name') == name:
+                    if 'max_clients' in s.keys():
+                        return s.get('max_clients')
+
+        return float('inf')
+
+    def provides(self, name, provisiontype='service'):
+        if self.xml.find('provides') is not None:
+            for s in self.xml.find('provides').findall(provisiontype):
+                if s.get('name') == name:
+                    return True
+
+        return False
+
+    def requires(self, name, requirementtype='service'):
+        if self.xml.find('requires') is not None:
+            for s in self.xml.find('requires').findall(requirementtype):
+                if s.get('name') == name:
+                    return True
+
+        return False
+
 class PatternManager:
     def __init__(self, composite, repo):
         self.patterns = dict()
@@ -78,6 +128,30 @@ class PatternManager:
 
         return components
 
+    def add_to_graph(self, composite, graph):
+        child_lookup = dict()
+        name_lookup = dict()
+        # first, add all components and create lookup table by child name
+        for c in self.patterns[composite]['chosen'].findall("component"):
+            component = Component(self._get_component_from_repo(c))
+            graph.add_node(component)
+            name_lookup[c.get('name')] = component
+            child_lookup[c] = component
+
+        # second, add connections
+        for c in self.patterns[composite]['chosen'].findall("component"):
+            if c.find('route') is not None:
+                for s in c.find('route').findall('service'):
+                    if s.find('child') is not None:
+                        name = s.find('child').get('name')
+                        if name not in name_lookup:
+                            logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
+                        else:
+                            child_lookup[c].route_to(graph, s.get('name'), name_lookup[name], s.get('label'))
+
+        # return set of added nodes
+        return child_lookup.values()
+
 class SystemGraph:
     def __init__(self, repo):
         # the query graph contains the requested functions/composites/components (as nodes) and their explicit routes (edges)
@@ -101,11 +175,14 @@ class SystemGraph:
 
         if parent is not None:
             if parent not in self.subsystem_graph:
-                raise("Cannot find parent '%s' in subsystem graph." % parent)
+                raise Exception("Cannot find parent '%s' in subsystem graph." % parent)
             self.subsystem_graph.add_edge(parent, subsystem)
 
     def add_query(self, child, subsystem):
-        self.query_graph.add_node(child)
+        # FIXME reset/invalidate component graph
+        assert(len(self.component_graph) == 0)
+
+        self.query_graph.add_node(child, dismissed=set())
         self.mapping_query2subsystem[child] = subsystem
 
         if "component" in child.keys():
@@ -116,9 +193,8 @@ class SystemGraph:
                 if len(components) > 1:
                     logging.info("Multiple candidates found for child component '%s'." % child.get("component"))
 
-                self.query_graph[child]['chosen']    = components[0]
-                self.query_graph[child]['options']   = set(components)
-                self.query_graph[child]['dismissed'] = set()
+                self.query_graph.node[child]['chosen']    = components[0]
+                self.query_graph.node[child]['options']   = set(components)
 
         elif "composite" in child.keys():
             components = self.repo._find_element_by_attribute("composite", { "name" : child.get("composite") })
@@ -128,10 +204,9 @@ class SystemGraph:
                 if len(components) > 1:
                     logging.info("Multiple candidates found for child composite '%s'." % child.get("composite"))
 
-                self.query_graph[child]['chosen']    = components[0]
-                self.query_graph[child]['options']   = set(components)
-                self.query_graph[child]['dismissed'] = set()
-                self.query_graph[child]['patterns']  = PatternManager(components[0], self.repo)
+                self.query_graph.node[child]['chosen']    = components[0]
+                self.query_graph.node[child]['options']   = set(components)
+                self.query_graph.node[child]['patterns']  = PatternManager(components[0], self.repo)
 
         elif "function" in child.keys():
             functions = self.repo._find_function_by_name(child.get("function"))
@@ -142,15 +217,30 @@ class SystemGraph:
                 if len(functions) > 1:
                     logging.info("Multiple candidates found for child function '%s'." % child.get("function"))
 
-                self.query_graph[child]['chosen']    = functions[0]
-                self.query_graph[child]['options']   = set(functions)
-                self.query_graph[child]['dismissed'] = set()
+                self.query_graph.node[child]['chosen']    = functions[0]
+                self.query_graph.node[child]['options']   = set(functions)
                 if functions[0].tag == "composite":
-                    self.query_graph[child]['patterns']  = PatternManager(functions[0], self.repo)
+                    self.query_graph.node[child]['patterns']  = PatternManager(functions[0], self.repo)
                 self.add_function(child.get("function"))
 
     def parse_routes(self):
-        # TODO parse routes between children
+        # parse routes between children
+        for child in self.query_graph.nodes():
+            if child.find("route") is not None:
+                for s in child.find("route").findall("service"):
+                    if s.find("child") is not None:
+                        for target in self.query_graph.nodes():
+                            if target.get("name") == s.find("child").get("name"):
+                                # we check later whether the target component actually provides this service
+                                self.query_graph.add_edge(child, target, {'service' : s.get("name")})
+                                break
+                    elif s.find("function") is not None:
+                        fname = s.find('function').get('name')
+                        for target in self.query_graph.nodes():
+                            if fname in self.provisions(target, 'function'):
+                                self.query_graph.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+                    else:
+                        raise Exception("ERROR")
         return
 
     def add_function(self, name):
@@ -163,6 +253,9 @@ class SystemGraph:
         return self.subsystem_graph.successors(subsystem)
 
     def children(self, subsystem):
+        if subsystem is None:
+            return self.query_graph.nodes()
+
         children = set()
         for child in self.mapping_query2subsystem.keys():
             if self.mapping_query2subsystem[child] == subsystem:
@@ -170,36 +263,61 @@ class SystemGraph:
 
         return children
 
+    def explicit_routes(self, child):
+        res_in = set()
+        for i in self.query_graph.in_edges(child, data=True):
+            res_in.add(i[2])
+
+        res_out = set()
+        for o in self.query_graph.out_edges(child, data=True):
+            res_out.add(o[2])
+
+        return res_in, res_out
+
     def get_alternatives(self, child):
-        return self.query_graph[child]['options'] - self.query_graph[child]['dismissed']
+        return self.query_graph.node[child]['options'] - self.query_graph.node[child]['dismissed']
 
     def get_options(self, child):
-        return self.query_graph[child]['options']
+        return self.query_graph.node[child]['options']
+
+    def provisions(self, child, provisiontype='service'):
+        result = set()
+        chosen = self.query_graph.node[child]['chosen']
+        if chosen.find("provides") is not None:
+            for p in chosen.find("provides").findall(provisiontype):
+                result.add(p.get('name'))
+
+        return result
 
     def components(self, child):
-        chosen = self.query_graph[child]['chosen']
+        chosen = self.query_graph.node[child]['chosen']
         if chosen.tag == "component":
             return set(chosen)
         else: # composite
-            return self.query_graph[child]['patterns'].components(chosen)
+            return self.query_graph.node[child]['patterns'].components(chosen)
 
     def choose_component(self, child, component):
+        # FIXME reset/invalidate component graph
+        assert(len(self.component_graph) == 0)
         # FIXME we might wanna check whether 'component' is in 'options' - 'dismissed'
-        self.query_graph[child]['chosen'] = component
+        self.query_graph.node[child]['chosen'] = component
 
     def exclude_component(self, child, component):
         # FIXME we might wanna check whether 'component' is in 'options'
-        self.query_graph[child]['dismissed'].add(component)
+        self.query_graph.node[child]['dismissed'].add(component)
 
     def _compatible(self, child, component, callback, check_pattern):
-        if not callback(component):
+        if not callback(component, child):
             return False
         elif component.tag == "composite" and check_pattern:
-            return self.query_graph[child]['patterns'].find_compatible(component, callback)
+            return self.query_graph.node[child]['patterns'].find_compatible(component, callback)
 
         return True
 
     def find_compatible_component(self, child, callback, check_pattern=True):
+        # FIXME reset/invalidate component graph
+        assert(len(self.component_graph) == 0)
+
         found = False
         # try non-dismissed alternatives
         for alt in self.get_alternatives(child):
@@ -217,12 +335,63 @@ class SystemGraph:
 
         return True
 
+    def build_component_graph(self):
+        # iterate children and add chosen components to graph
+        for child in self.query_graph.nodes():
+            chosen = self.query_graph.node[child]['chosen']
+            if 'patterns' in self.query_graph.node[child]:
+                nodes = self.query_graph.node[child]['patterns'].add_to_graph(chosen, self.component_graph)
+                for n in nodes:
+                    self.mapping_component2query[n] = child
+            else:
+                assert(chosen.tag == "component")
+                self.query_graph.add_node(chosen)
+                self.mapping_component2query[chosen] = child
+
+    def _get_provider(self, child, service):
+        chosen = self.query_graph.node[child]['chosen']
+        if chosen.tag == 'component':
+            return chosen
+        else:
+            # TODO find provider in pattern
+            raise Exception("NOT IMPLEMENTED")
+
+    def _connect_children(self, source, target, service):
+        logging.critical("NOT IMPLEMENTED")
+        # find components
+        # check reachability
+        # check max_clients
+        return
+
+    def check_explicit_routes(self):
+        for e in self.query_graph.edges(data=True):
+            if 'function' in e[2]:
+                # check compatibility
+                from_service = e[2]['service']
+
+                provisions = self.provisions(e[1])
+                if from_service in provisions:
+                    # TODO connect children
+                    if self._get_provider(e[1], from_service):
+                        logging.critical("NOT IMPLEMENTED")
+                else:
+                    # TODO search and insert protocol stack (via repo)
+                    logging.critical("NOT IMPLEMENTED")
+
+            else: # service
+                self._connect_children(e[0], e[1], e[2]['service'])
+
+        return False
+
+    def solve_pending(self):
+        # TODO implement
+        return False
+
 class SubsystemConfig:
     def __init__(self, root_node, parent, model):
         self.root = root_node
         self.parent = parent
         self.model = model
-#        self.subsystems = dict()
         self.rte = None
 
     def parse(self):
@@ -238,23 +407,14 @@ class SubsystemConfig:
         for c in self.root.findall("child"):
             self.graph().add_query(c, self)
 
-    def parse_explicit_routes(self):
-        for sub in self.subsystems.values():
-            sub.parse_explicit_routes()
-
-        # TODO parse routes
-
-    def explicit_routes(self):
-        return self.parent.explicit_routes()
-
-    def _check_specs(self, component):
+    def _check_specs(self, component, child=None):
         if component.tag == "composite":
             return True
 
         system_specs = self.system_specs()
 
         component_specs = set()
-        if component.find("requires"):
+        if component.find("requires") is not None:
             for spec in component.find("requires").findall("spec"):
                 component_specs.add(spec.get("name"))
 
@@ -266,7 +426,7 @@ class SubsystemConfig:
 
         return True
 
-    def _check_rte(self, component):
+    def _check_rte(self, component, child=None):
         if component.tag == "composite":
             return True
 
@@ -278,8 +438,8 @@ class SubsystemConfig:
 
         return True
 
-    def _check_function_requirement(self, component):
-        if component.find("requires"):
+    def _check_function_requirement(self, component, child=None):
+        if component.find("requires") is not None:
             for f in component.find("requires").findall("function"):
                 if f.get("name") not in self.provided_functions():
                     logging.error("Function '%s' required by '%s' is not explicitly instantiated." % (f.get("name"), component.get("name")))
@@ -303,7 +463,7 @@ class SubsystemConfig:
         return self._choose_compatible(self._check_specs)
 
     def get_rte(self, component):
-        if component.find("requires"):
+        if component.find("requires") is not None:
             rte = component.find("requires").find("rte")
             if rte is not None:
                 return rte.get("name")
@@ -358,10 +518,8 @@ class SubsystemConfig:
     def child_services(self):
         # return child services
         services = set()
-        for c in self.children:
-            if c["chosen"].find("provides"):
-                for p in c["chosen"].find("provides").findall("service"):
-                    services.add(p.get("name"))
+        for c in self.graph().children(self):
+            services.update(self.graph().provisions(c))
 
         return services
 
@@ -373,9 +531,6 @@ class SubsystemConfig:
 
     def provided_functions(self):
         return self.parent.provided_functions()
-
-    def explicit_routes(self):
-        return self.explicit_routes
 
     def graph(self):
         return self.parent.graph()
@@ -396,6 +551,11 @@ class SystemConfig(SubsystemConfig):
         for s in self.root.findall("spec"):
             self.specs.add(s.get("name"))
 
+        # parse routes
+        self.graph().parse_routes()
+
+        # TODO connect functions
+
     def select_rte(self):
         result = SubsystemConfig.select_rte(self)
 
@@ -405,22 +565,74 @@ class SystemConfig(SubsystemConfig):
 
         return result
 
+    def _check_explicit_routes(self, child, component):
+        # check provisions for each incoming edge
+        provides, requires = self.graph().explicit_routes(child)
+        for p in provides:
+            if 'function' in p:
+                found = False
+                if component.find('provides') is not None:
+                    if len(self.repo._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
+                        found = True
+
+                if not found:
+                    logging.info("Child component '%s' does not provide function '%s'." % (component.get('name'), p['function']))
+                    return False
+
+            else: # service
+                found = False
+                if component.find('provides') is not None:
+                    if len(self.repo._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
+                        found = True
+                if not found:
+                    logging.info("Child component '%s' does not provide service '%s'." % (component.get('name'), p['service']))
+                    return False
+
+        # check requirements for each outgoing edge
+        for r in requires:
+            found = False
+            if component.find('requires') is not None:
+                if len(self.repo._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
+                    found = True
+            if not found:
+                logging.info("Child component '%s' does not require routed service '%s'." % (component.get('name'), r['service']))
+                return False
+
+        return True
+
     def solve_dependencies(self):
 
-        # TODO
-        # 1) build graphs (query graph + component graph)
-        # 2) parse explicit routes
-        # 3) check service dependencies:
+        # choose compatible components based on explicit routes
+        for c in self.graph().children(None):
+            if not self.graph().find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
+                logging.critical("Failed to satisfy explicit routes for child '%s'." % c.attrib)
+                return False
+
+        self.graph().build_component_graph()
+
+        # TODO check/expand explicit routes
         #    - use mux to solve cardinality problems
         #    - use protocol to solve compatibility problems
         #    - use proxy to solve reachability
+        if not self.graph().check_explicit_routes():
+            return False
+
+        # solve pending requirements
         # warn if multiple candidates exist and dependencies are not decidable
-        return False
+        if not self.graph().solve_pending():
+            return False
+
+        if not self.graph().insert_muxers():
+            return False
+
+        # TODO merge component instances?
+
+        return True
 
     def parent_services(self):
         parent_services = set()
 
-        if self.root.find("parent-provides"):
+        if self.root.find("parent-provides") is not None:
             for p in self.root.find("parent-provides").findall("service"):
                 parent_services.add(p.get("name"))
 
@@ -527,7 +739,7 @@ class ConfigModelParser:
         if self._root.tag != "config_model":
             self._root = self._root.find("config_model")
             if self._root == None:
-                raise "Cannot find <config_model> node."
+                raise Exception("Cannot find <config_model> node.")
 
     def _find_function_by_name(self, name):
         function_providers = list()
@@ -579,7 +791,7 @@ class ConfigModelParser:
         if component_node.find("mux") is not None:
             classes.add("mux")
 
-        if component_node.find("provides"):
+        if component_node.find("provides") is not None:
             if component_node.find("function") is not None:
                 classes.add("function")
 
@@ -801,19 +1013,19 @@ class ConfigModelParser:
             # store specified service requirements/provisions
             for cspec in cspecs:
                 tmp = set()
-                if cspec.find("requires"):
+                if cspec.find("requires") is not None:
                     for s in cspec.find("requires").findall("service"):
                         tmp.add(s.get("name"))
                 required_services[cname]["specified"].update(tmp)
 
                 tmp = set()
-                if cspec.find("provides"):
+                if cspec.find("provides") is not None:
                     for s in cspec.find("provides").findall("service"):
                         tmp.add(s.get("name"))
                 provided_services[cname]["specified"].update(tmp)
 
             # references in <route> must be specified
-            if c.find("route"):
+            if c.find("route") is not None:
                 for s in c.find("route").findall("service"):
                     sname = s.get("name")
                     required_services[cname]["used"].add(sname)
@@ -835,7 +1047,7 @@ class ConfigModelParser:
                             provided_services[chname]["used"].add(sname)
 
             # references in <expose> must be specified
-            if c.find("expose"):
+            if c.find("expose") is not None:
                 for s in c.find("expose").findall("service"):
                     sname = s.get("name")
                     provided_services[cname]["used"].add(sname)

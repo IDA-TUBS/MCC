@@ -255,6 +255,8 @@
 <!-- example abstract config //-->
 <system>
 
+    <spec name="sdl" />
+
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
 		<!-- we can decide on the component based on the rte requirements //-->
