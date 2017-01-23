@@ -130,6 +130,18 @@ class PatternManager:
 
         return components
 
+    def services_routed_to_function(self, composite, functionname):
+        result = set()
+        for c in self.patterns[composite]['chosen'].findall('component'):
+            if c.find('route') is not None:
+                for s in c.find('route').findall('service'):
+                    f = s.find('function')
+                    if f is not None:
+                        if f.get('name') == functionname:
+                            result.add(s.get('name'))
+
+        return result
+
     def add_to_graph(self, composite, graph):
         child_lookup = dict()
         name_lookup = dict()
@@ -170,7 +182,7 @@ class SystemGraph:
 
         self.repo = repo
 
-        self.functions = set()
+        self.functions = dict()
 
         self.node_type_styles = { "subsystem" : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                                   "function"  : "shape=rectangle, colorscheme=set39, fillcolor=5, style=filled",
@@ -233,7 +245,7 @@ class SystemGraph:
                 self.query_graph.node[child]['options']   = set(functions)
                 if functions[0].tag == "composite":
                     self.query_graph.node[child]['patterns']  = PatternManager(functions[0], self.repo)
-                self.add_function(child.get("function"))
+                self.add_function(child.get("function"), child)
 
     def parse_routes(self):
         # parse routes between children
@@ -255,11 +267,11 @@ class SystemGraph:
                         raise Exception("ERROR")
         return
 
-    def add_function(self, name):
-        if name in self.functions:
+    def add_function(self, name, child):
+        if name in self.functions.keys():
             loggging.error("Function '%s' cannot be present multiple times." % name) 
         else:
-            self.functions.add(name)
+            self.functions[name] = child
 
     def subsystems(self, subsystem):
         return self.subsystem_graph.successors(subsystem)
@@ -344,6 +356,21 @@ class SystemGraph:
             names = [ x.get("name") for x in self.get_options(child) ]
             logging.error("No compatible component found for child '%s' among %s." % (child.attrib, names))
             return False
+
+        return True
+
+    def connect_functions(self):
+        for child in self.query_graph.nodes():
+            chosen = self.query_graph.node[child]['chosen']
+            if chosen.find('requires') is not None:
+                for f in chosen.find('requires').findall('function'):
+                    # function requirements are only allowed for composites
+                    assert(chosen.tag == "composite")
+                    fname = f.get('name')
+                    provider = self.functions[fname]
+                    # get services from chosen composite pattern
+                    for sname in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
+                        self.query_graph.add_edge(child, provider, { 'service' : sname, 'function' : fname})
 
         return True
 
@@ -708,6 +735,9 @@ class SystemConfig(SubsystemConfig):
                 return False
 
         return True
+
+    def connect_functions(self):
+        return self.graph().connect_functions()
 
     def solve_dependencies(self):
 
@@ -1245,12 +1275,6 @@ class ConfigModelParser:
         system = SystemConfig(self._root.find("system"), self)
         system.parse()
 
-        # TODO connect functions
-
-        # draw query_graph (for devel/debugging/validation)
-        if args.dotpath is not None:
-            system.graph().write_query_dot(args.dotpath+"query_graph.dot")
-
         if not system.match_specs():
             logging.critical("abort")
             return False
@@ -1262,6 +1286,15 @@ class ConfigModelParser:
         if not system.filter_by_function_requirements():
             logging.critical("abort")
             return False
+
+        # connect functions
+        if not system.connect_functions():
+            logging.critical("abort")
+            return False
+
+        # draw query_graph (for devel/debugging/validation)
+        if args.dotpath is not None:
+            system.graph().write_query_dot(args.dotpath+"query_graph.dot")
 
         if not system.solve_dependencies():
             logging.critical("abort")
