@@ -46,12 +46,20 @@ class Component:
 
     def max_clients(self, name):
         if self.xml.find('provides') is not None:
-            for s in self.xml.find('provides').findall(provisiontype):
+            for s in self.xml.find('provides').findall('service'):
                 if s.get('name') == name:
                     if 'max_clients' in s.keys():
-                        return s.get('max_clients')
+                        return int(s.get('max_clients'))
 
         return float('inf')
+
+    def connections(self, graph, name):
+        i = 0
+        for e in graph.in_edges(self, data=True):
+            if e[2]['service'] == name:
+                i += 1
+
+        return i
 
     def provides(self, name, provisiontype='service'):
         if self.xml.find('provides') is not None:
@@ -68,6 +76,9 @@ class Component:
                     return True
 
         return False
+
+    def is_comp(self, component):
+        return component is self.xml
 
 class PatternManager:
     def __init__(self, composite, repo):
@@ -135,10 +146,46 @@ class PatternManager:
         for c in self.patterns[composite]['chosen'].findall('component'):
             if c.find('route') is not None:
                 for s in c.find('route').findall('service'):
+                    slabel = None
+                    if 'label' in s.keys():
+                        slabel = s.get('label')
+
                     f = s.find('function')
                     if f is not None:
-                        if f.get('name') == functionname:
-                            result.add(s.get('name'))
+                        if functionname is None or f.get('name') == functionname:
+                            result.add((s.get('name'), slabel))
+
+        return result
+
+    def component_exposing_service(self, composite, servicename):
+        result = set()
+        for c in self.patterns[composite]['chosen'].findall('component'):
+            if c.find('expose') is not None:
+                for s in c.find('expose').findall('service'):
+                    if s.get('name') == servicename:
+                        result.add(self._get_component_from_repo(c))
+
+        if len(result) == 0:
+            logging.error("Service '%s' is not exposed by pattern." % servicename)
+
+        elif len(result) > 1:
+            logging.error("Service '%s' is exposed multiple times by pattern." % servicename)
+
+        return result.pop()
+
+    def components_requiring_external_service(self, composite, servicename, label=None):
+        result = set()
+        for c in self.patterns[composite]['chosen'].findall('component'):
+            if c.find('route') is not None:
+                for s in c.find('route').findall('service'):
+                    if s.get('name') == servicename:
+                        slabel = None
+                        if 'label' in s.keys():
+                            slabel = s.get('label')
+
+                        if slabel == label:
+                            if s.find('function') is not None:
+                                result.add(self._get_component_from_repo(c))
 
         return result
 
@@ -257,12 +304,16 @@ class SystemGraph:
                             if target.get("name") == s.find("child").get("name"):
                                 # we check later whether the target component actually provides this service
                                 self.query_graph.add_edge(child, target, {'service' : s.get("name")})
+                                if 'label' in s.keys():
+                                    self.query_graph.edge[child][target]['label'] = s.get('label')
                                 break
                     elif s.find("function") is not None:
                         fname = s.find('function').get('name')
                         for target in self.query_graph.nodes():
                             if fname in self.provisions(target, 'function'):
                                 self.query_graph.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+                                if 'label' in s.keys():
+                                    self.query_graph.edge[child][target]['label'] = s.get('label')
                     else:
                         raise Exception("ERROR")
         return
@@ -369,8 +420,8 @@ class SystemGraph:
                     fname = f.get('name')
                     provider = self.functions[fname]
                     # get services from chosen composite pattern
-                    for sname in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
-                        self.query_graph.add_edge(child, provider, { 'service' : sname, 'function' : fname})
+                    for (sname, slabel) in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
+                        self.query_graph.add_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
 
         return True
 
@@ -384,41 +435,104 @@ class SystemGraph:
                     self.mapping_component2query[n] = child
             else:
                 assert(chosen.tag == "component")
-                self.query_graph.add_node(chosen)
-                self.mapping_component2query[chosen] = child
+                n = Component(chosen)
+                self.component_graph.add_node(n)
+                self.mapping_component2query[n] = child
 
     def _get_provider(self, child, service):
         chosen = self.query_graph.node[child]['chosen']
         if chosen.tag == 'component':
             return chosen
         else:
-            # TODO find provider in pattern
-            raise Exception("NOT IMPLEMENTED")
+            # find provider in pattern
+            return self.query_graph.node[child]['patterns'].component_exposing_service(chosen, service)
 
-    def _connect_children(self, source, target, service):
-        logging.critical("NOT IMPLEMENTED")
-        # find components
+    def _get_clients(self, child, service, label):
+        chosen = self.query_graph.node[child]['chosen']
+        if chosen.tag == 'component':
+            return set(chosen)
+        else:
+            return self.query_graph.node[child]['patterns'].components_requiring_external_service(chosen, service, label)
+
+    def _connect_children(self, source, target, service, label):
         # check reachability
-        # check max_clients
-        return
+        # FIXME fix reachability before creating the component graph
+        source_sys = self.mapping_query2subsystem[source]
+        target_sys = self.mapping_query2subsystem[target]
 
-    def check_explicit_routes(self):
+        # provider must be a parent
+        if not nx.has_path(self.subsystem_graph, target_sys, source_sys):
+            logging.info("Connecting '%s' to '%s' via service '%s' requires a proxy." % (source.attrib, target.attrib, service))
+            logging.critical("PROXY INSERTION NOT IMPLEMENTED")
+
+        # find components
+        source_candidates = set()
+        target_candidates = set()
+        for comp in self.mapping_component2query.keys():
+            if self.mapping_component2query[comp] == source:
+                source_candidates.add(comp)
+            elif self.mapping_component2query[comp] == target:
+                target_candidates.add(comp)
+
+        assert(len(source_candidates) > 0)
+        assert(len(target_candidates) > 0)
+
+        source_nodes = set()
+        if len(source_candidates) > 1:
+            for comp in self._get_clients(source, service, label):
+                for c in source_candidates:
+                    if c.is_comp(comp):
+                        source_nodes.add(c)
+
+            assert(len(source_nodes) > 0)
+        else:
+            source_nodes = source_candidates
+
+        if len(target_candidates) > 1:
+            comp = self._get_provider(target, service)
+            if comp is None:
+                return
+
+            target_node = None
+            for c in target_candidates:
+                if c.is_comp(comp):
+                    target_node = c
+
+            assert(target_node)
+        else:
+            target_node = target_candidates.pop()
+
+        # check max_clients
+        # FIXME add muxer after all connections have been added
+        if target_node.max_clients(service) < target_node.connections(self.component_graph, service) + len(source_nodes):
+            logging.info("Connecting '%s' to '%s' via service '%s' requires a multiplexer." % (source.attrib, target.attrib, service))
+            logging.critical("MUX INSERTION NOT IMPLEMENTED")
+
+        for source_node in source_nodes:
+            source_node.route_to(self.component_graph, service, target_node, label)
+            # add mapping
+            self.mapping_session2query[(source_node, target_node)] = (source, target)
+
+    def solve_routes(self):
         for e in self.query_graph.edges(data=True):
+            from_service = e[2]['service']
+            label = None
+            if label in e[2]:
+                label = e[2]['label']
+
             if 'function' in e[2]:
                 # check compatibility
-                from_service = e[2]['service']
-
                 provisions = self.provisions(e[1])
                 if from_service in provisions:
-                    # TODO connect children
-                    if self._get_provider(e[1], from_service):
-                        logging.critical("NOT IMPLEMENTED")
+                    # connect children
+                    self._connect_children(e[0], e[1], from_service, label)
                 else:
                     # TODO search and insert protocol stack (via repo)
-                    logging.critical("NOT IMPLEMENTED")
+                    logging.info("Connecting '%s' to '%s' via service '%s' requires a protocol stack." % (e[0].attrib, e[1].attrib, from_service))
+                    logging.critical("PROTOCOL STACK INSERTION NOT IMPLEMENTED")
 
             else: # service
-                self._connect_children(e[0], e[1], e[2]['service'])
+                self._connect_children(e[0], e[1], from_service, label)
 
         return False
 
@@ -753,7 +867,7 @@ class SystemConfig(SubsystemConfig):
         #    - use mux to solve cardinality problems
         #    - use protocol to solve compatibility problems
         #    - use proxy to solve reachability
-        if not self.graph().check_explicit_routes():
+        if not self.graph().solve_routes():
             return False
 
         # solve pending requirements
