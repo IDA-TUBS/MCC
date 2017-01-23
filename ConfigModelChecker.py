@@ -184,7 +184,7 @@ class PatternManager:
                             slabel = s.get('label')
 
                         if slabel == label:
-                            if s.find('function') is not None:
+                            if s.find('function') is not None or s.find('service') is not None:
                                 result.add(self._get_component_from_repo(c))
 
         return result
@@ -339,13 +339,13 @@ class SystemGraph:
         return children
 
     def explicit_routes(self, child):
-        res_in = set()
+        res_in = list()
         for i in self.query_graph.in_edges(child, data=True):
-            res_in.add(i[2])
+            res_in.append(i[2])
 
-        res_out = set()
+        res_out = list()
         for o in self.query_graph.out_edges(child, data=True):
-            res_out.add(o[2])
+            res_out.append(o[2])
 
         return res_in, res_out
 
@@ -415,6 +415,15 @@ class SystemGraph:
             chosen = self.query_graph.node[child]['chosen']
             if chosen.find('requires') is not None:
                 for f in chosen.find('requires').findall('function'):
+                    # skip if edge already exists
+                    exists = False
+                    for e in self.query_graph.edges(child, data=True):
+                        if e[2]['function'] == f.get('name'):
+                            exists = True
+
+                    if exists:
+                        break
+
                     # function requirements are only allowed for composites
                     assert(chosen.tag == "composite")
                     fname = f.get('name')
@@ -455,16 +464,6 @@ class SystemGraph:
             return self.query_graph.node[child]['patterns'].components_requiring_external_service(chosen, service, label)
 
     def _connect_children(self, source, target, service, label):
-        # check reachability
-        # FIXME fix reachability before creating the component graph
-        source_sys = self.mapping_query2subsystem[source]
-        target_sys = self.mapping_query2subsystem[target]
-
-        # provider must be a parent
-        if not nx.has_path(self.subsystem_graph, target_sys, source_sys):
-            logging.info("Connecting '%s' to '%s' via service '%s' requires a proxy." % (source.attrib, target.attrib, service))
-            logging.critical("PROXY INSERTION NOT IMPLEMENTED")
-
         # find components
         source_candidates = set()
         target_candidates = set()
@@ -502,12 +501,6 @@ class SystemGraph:
         else:
             target_node = target_candidates.pop()
 
-        # check max_clients
-        # FIXME add muxer after all connections have been added
-        if target_node.max_clients(service) < target_node.connections(self.component_graph, service) + len(source_nodes):
-            logging.info("Connecting '%s' to '%s' via service '%s' requires a multiplexer." % (source.attrib, target.attrib, service))
-            logging.critical("MUX INSERTION NOT IMPLEMENTED")
-
         for source_node in source_nodes:
             source_node.route_to(self.component_graph, service, target_node, label)
             # add mapping
@@ -538,7 +531,8 @@ class SystemGraph:
 
     def solve_pending(self):
         # TODO implement
-        return False
+        logging.critical("ROUTING OF PENDING SERVICE REQUIREMENTS NOT IMPLEMENTED.")
+        return True
 
     def write_query_node(self, dotfile, child, prefix="  "):
         label = ""
@@ -628,6 +622,12 @@ class SystemGraph:
                                                       self.subsystem_graph.node[e[1]]['id'],
                                                       style))
 
+            # add children with no subsystem
+            for ch in self.query_graph.nodes():
+                if self.mapping_query2subsystem[ch] is None:
+                    self.query_graph.node[ch]['id'] = "ch%d" % n
+                    n += 1
+                    self.write_query_node(dotfile, ch)
 
             # add child dependencies between subsystems
             for e in self.query_graph.edges(data=True):
@@ -637,6 +637,90 @@ class SystemGraph:
             dotfile.write("}\n")
 
         return
+
+    def write_component_dot(self, filename):
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+
+            # TODO write query nodes
+
+            # TODO connect query nodes
+
+            # TODO write component nodes
+
+            # TODO connect components
+
+            # TODO add mappings (nodes)
+
+            # remark: we cannot draw the mappings between edges
+
+            dotfile.write("}\n")
+
+    def add_proxy(self, proxy, source, target, callback):
+        # remark: This is a good example why it is better to have another modelling layer (i.e. functional communication
+        #         layer) as inserting a proxy obfuscated functional dependencies and the actual query.
+
+        # remove edge between source and target
+        edge_attrib = self.query_graph.get_edge_data(source, target)
+        self.query_graph.remove_edge(source, target)
+
+        # add proxy node (create XML node)
+        xml = ET.Element('child')
+        xml.set('composite', proxy.get('name'))
+
+        if not callback(proxy, xml):
+            return False
+
+        self.query_graph.add_node(xml, {'chosen' : proxy, 'options' : set(proxy), 'dismissed' : set()})
+        self.query_graph.node[xml]['patterns'] = PatternManager(proxy, self.repo)
+
+        # remark: the proxy cannot be mapped to a single subsystem
+        self.mapping_query2subsystem[xml] = None
+
+        # add edge from proxy to target
+        self.query_graph.add_edge(xml, target, edge_attrib)
+
+        # add edge from source to proxy
+        if 'function' in edge_attrib.keys():
+            del edge_attrib['function']
+        self.query_graph.add_edge(source, xml, edge_attrib)
+
+        return True
+
+    def insert_muxers(self):
+        for e in self.component_graph.edges(data=True):
+            source_node = e[0]
+            target_node = e[1]
+            service = e[2]['service']
+            # check max_clients
+            if target_node.max_clients(service) < target_node.connections(self.component_graph, service):
+                logging.info("Multiplexer required for service '%s' of component '%s'." % (service, target_node.xml.get('name')))
+                logging.critical("MUX INSERTION NOT IMPLEMENTED")
+                return False
+
+        return True
+
+    def insert_proxies(self, callback):
+        for (source, target, attrib) in self.query_graph.edges(data=True):
+            # check reachability
+            source_sys = self.mapping_query2subsystem[source]
+            target_sys = self.mapping_query2subsystem[target]
+
+            # provider must be a parent
+            if not nx.has_path(self.subsystem_graph, target_sys, source_sys):
+                logging.info("Connecting '%s' to '%s' via service '%s' requires a proxy." % (source.attrib, target.attrib, attrib['service']))
+                for proxy in self.repo._find_proxies(attrib['service']):
+                    carrier = proxy.find('proxy').get('carrier')
+                    # check that carrier is provided by both subsystems
+                    if carrier in source_sys.services() and carrier in target_sys.services():
+                        return self.add_proxy(proxy, source, target, callback)
+                    else:
+                        logging.info("Cannot find carrier for proxy '%s' in all subsystems." % proxy.get('name'))
+
+                logging.critical("No compatible proxy found.")
+                return False
+
+        return True
 
 
 class SubsystemConfig:
@@ -779,7 +863,7 @@ class SubsystemConfig:
         return self.parent.system_specs()
 
     def services(self):
-        return self.parent_services() + self.child_services()
+        return self.parent_services() | self.child_services()
 
     def provided_functions(self):
         return self.parent.provided_functions()
@@ -815,14 +899,22 @@ class SystemConfig(SubsystemConfig):
 
         return result
 
-    def _check_explicit_routes(self, child, component):
+    def _check_proxy(self, component, child):
+        if not self._check_specs(component, child):
+            return False
+
+        # FIXME check RTE (or rather map proxy components to any parent subsystem that satisfies the RTE requirements)
+        
+        return True
+
+    def _check_explicit_routes(self, component, child):
         # check provisions for each incoming edge
         provides, requires = self.graph().explicit_routes(child)
         for p in provides:
             if 'function' in p:
                 found = False
                 if component.find('provides') is not None:
-                    if len(self.repo._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
+                    if len(self.model._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
                         found = True
 
                 if not found:
@@ -832,7 +924,7 @@ class SystemConfig(SubsystemConfig):
             else: # service
                 found = False
                 if component.find('provides') is not None:
-                    if len(self.repo._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
+                    if len(self.model._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
                         found = True
                 if not found:
                     logging.info("Child component '%s' does not provide service '%s'." % (component.get('name'), p['service']))
@@ -842,7 +934,7 @@ class SystemConfig(SubsystemConfig):
         for r in requires:
             found = False
             if component.find('requires') is not None:
-                if len(self.repo._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
+                if len(self.model._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
                     found = True
             if not found:
                 logging.info("Child component '%s' does not require routed service '%s'." % (component.get('name'), r['service']))
@@ -851,22 +943,31 @@ class SystemConfig(SubsystemConfig):
         return True
 
     def connect_functions(self):
-        return self.graph().connect_functions()
-
-    def solve_dependencies(self):
-
         # choose compatible components based on explicit routes
         for c in self.graph().children(None):
             if not self.graph().find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
                 logging.critical("Failed to satisfy explicit routes for child '%s'." % c.attrib)
                 return False
 
+        if not self.graph().connect_functions():
+            return False
+
+        # solve reachability
+        if not self.graph().insert_proxies(self._check_proxy):
+            logging.critical("Cannot insert proxies.")
+            return False
+
+        # connect function requirements of proxies
+        if not self.graph().connect_functions():
+            return False
+
+        return True
+
+    def solve_dependencies(self):
+
         self.graph().build_component_graph()
 
-        # TODO check/expand explicit routes
-        #    - use mux to solve cardinality problems
-        #    - use protocol to solve compatibility problems
-        #    - use proxy to solve reachability
+        # check/expand explicit routes (uses protocol to solve compatibility problems)
         if not self.graph().solve_routes():
             return False
 
@@ -957,6 +1058,7 @@ class ConfigModelParser:
                                         "route" : { "max" : 1, "children" : {
                                             "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
                                                 "function" : { "required-attrs" : ["name"] },
+                                                "service"  : { },
                                                 "child"    : { "required-attrs" : ["name"] }
                                                 }}
                                             }},
@@ -1067,6 +1169,8 @@ class ConfigModelParser:
             elif classification is not None and classification in classes:
                 components.append(c)
 
+        return components
+
     def _find_provisions(self, node="service", name=None):
         provisions = list()
         for p in self._root.iter("provides"):
@@ -1081,6 +1185,14 @@ class ConfigModelParser:
                     provisions.append(s)
 
         return provisions
+
+    def _find_proxies(self, service):
+        result = set()
+        for p in self._find_component_by_class('proxy'):
+            if p.find('provides').find('service').get('name') == service:
+                result.add(p)
+
+        return result
 
     # check whether all function names are only provided once
     def check_functions_unambiguous(self):
@@ -1254,7 +1366,7 @@ class ConfigModelParser:
         for c in pattern.findall("component"):
             cname = c.get("name")
 
-            required_services[cname] = { "specified" : set(), "used" : set() }
+            required_services[cname] = { "specified" : set(), "used" : set(), "external" : set() }
             provided_services[cname] = { "specified" : set(), "used" : set(), "exposed" : set() }
 
             # referenced components must be specified 
@@ -1299,6 +1411,9 @@ class ConfigModelParser:
                         else:
                             provided_services[chname]["used"].add(sname)
 
+                    if s.find("service") != None:
+                        required_services[cname]["external"].add(sname)
+
             # references in <expose> must be specified
             if c.find("expose") is not None:
                 for s in c.find("expose").findall("service"):
@@ -1309,10 +1424,15 @@ class ConfigModelParser:
                         loggin.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
 
         # required external service must be pending exactly once
+        # FIXME or explicitly routed to external service
         for s in composite.find("requires").findall("service"):
             sname = s.get("name")
             pending_count = 0
             for r in required_services.values():
+                if sname in r['external']:
+                    pending_count = 1
+                    break
+
                 if sname in r["specified"] - r["used"]:
                     pending_count += 1
 
@@ -1413,6 +1533,8 @@ class ConfigModelParser:
         if not system.solve_dependencies():
             logging.critical("abort")
             return False
+
+        self.graph().write_component_dot(args.dotpath+"component_graph.dot")
 
         return True
 

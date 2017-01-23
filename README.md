@@ -60,3 +60,9 @@ Model:
 		  <service name="foo"> <function name="FOOBAR" /> </service>
 		  <service name="bar"> <function name="FOOBAR" /> </service>
       </requires>
+
+* We currently assume, that function and the corresponding service dependencies have
+  the same direction. From the modelling perspective there is no particular reason for
+  this. However, specifying such cases can reduce readability significantly. We should
+  evaluate this on an example which included the `report_rom` component. We could, for
+  instance, relax the specification of protocol stacks.

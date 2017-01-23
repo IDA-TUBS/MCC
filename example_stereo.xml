@@ -259,12 +259,25 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
+            <function name="Network" />
 		</requires>
 
 		<pattern>
 			<!-- TODO requires auto-generated policy //-->
-			<component name="remote_rom_client" />
-			<component name="remote_rom_server" />
+            <component name="remote_rom_client">
+                <expose>
+                    <service name="ROM" />
+                </expose>
+                <route>
+                    <service name="Nic"><function name="Network" /></service>
+                </route>
+            </component>
+            <component name="remote_rom_server">
+                <route>
+                    <service name="ROM"><service /></service>
+                    <service name="Nic"><function name="Network" /></service>
+                </route>
+            </component>
 		</pattern>
 	</composite>
 
