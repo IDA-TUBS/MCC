@@ -463,22 +463,17 @@ class SystemGraph:
         else:
             return self.query_graph.node[child]['patterns'].components_requiring_external_service(chosen, service, label)
 
-    def _connect_children(self, source, target, service, label):
-        # find components
+    def _source_components(self, child, service, label):
         source_candidates = set()
-        target_candidates = set()
         for comp in self.mapping_component2query.keys():
-            if self.mapping_component2query[comp] == source:
+            if self.mapping_component2query[comp] == child:
                 source_candidates.add(comp)
-            elif self.mapping_component2query[comp] == target:
-                target_candidates.add(comp)
 
         assert(len(source_candidates) > 0)
-        assert(len(target_candidates) > 0)
 
         source_nodes = set()
         if len(source_candidates) > 1:
-            for comp in self._get_clients(source, service, label):
+            for comp in self._get_clients(child, service, label):
                 for c in source_candidates:
                     if c.is_comp(comp):
                         source_nodes.add(c)
@@ -487,8 +482,18 @@ class SystemGraph:
         else:
             source_nodes = source_candidates
 
+        return source_nodes
+
+    def _target_component(self, child, service):
+        target_candidates = set()
+        for comp in self.mapping_component2query.keys():
+            if self.mapping_component2query[comp] == child:
+                target_candidates.add(comp)
+
+        assert(len(target_candidates) > 0)
+
         if len(target_candidates) > 1:
-            comp = self._get_provider(target, service)
+            comp = self._get_provider(child, service)
             if comp is None:
                 return
 
@@ -501,14 +506,35 @@ class SystemGraph:
         else:
             target_node = target_candidates.pop()
 
+        return target_node
+
+    def _add_connections(self, source, target, source_nodes, target_node, service, label=None):
         for source_node in source_nodes:
             source_node.route_to(self.component_graph, service, target_node, label)
             # add mapping
             self.mapping_session2query[(source_node, target_node)] = (source, target)
 
+    def _connect_children(self, source, target, service, label):
+        # find components
+        source_nodes = self._source_components(source, service, label)
+        target_node = self._target_component(target, service)
+
+        self._add_connections(source, target, source_nodes, target_node, service, label)
+
+    def insert_protocol(self, prot, source, target, from_service, to_service, label):
+        node = Component(prot)
+        self.component_graph.add_node(node)
+        self.mapping_component2query[node] = None
+
+        source_nodes = self._source_components(source, to_service, label)
+        target_node  = self._target_component(target, from_service)
+
+        self._add_connections(source, target, source_nodes, node, to_service, label)
+        self._add_connections(source, target, [node], target_node, from_service)
+
     def solve_routes(self):
         for e in self.query_graph.edges(data=True):
-            from_service = e[2]['service']
+            req_service = e[2]['service']
             label = None
             if label in e[2]:
                 label = e[2]['label']
@@ -516,16 +542,31 @@ class SystemGraph:
             if 'function' in e[2]:
                 # check compatibility
                 provisions = self.provisions(e[1])
-                if from_service in provisions:
+                if req_service in provisions:
                     # connect children
-                    self._connect_children(e[0], e[1], from_service, label)
+                    self._connect_children(e[0], e[1], req_service, label)
                 else:
-                    # TODO search and insert protocol stack (via repo)
-                    logging.info("Connecting '%s' to '%s' via service '%s' requires a protocol stack." % (e[0].attrib, e[1].attrib, from_service))
-                    logging.critical("PROTOCOL STACK INSERTION NOT IMPLEMENTED")
+                    # search and insert protocol stack (via repo)
+                    logging.info("Connecting '%s' to '%s' via service '%s' requires a protocol stack." % (e[0].attrib,
+                        e[1].attrib, req_service))
+                    found = False
+                    for c in self.repo._find_component_by_class('protocol'):
+                        if found:
+                            break
+                        for prot in c.findall('protocol'):
+                            if prot.get('to') == req_service:
+                                if prot.get('from') in provisions:
+                                    # FIXME check specs and RTE
+                                    found = True
+                                    self.insert_protocol(c, e[0], e[1], prot.get('from'), prot.get('to'), label)
+                                    break
+
+                    if not found:
+                        logging.critical("Cannot find suitable protocol stack from='%s' to='%s'." % (req_service, provisions))
+                        return False
 
             else: # service
-                self._connect_children(e[0], e[1], from_service, label)
+                self._connect_children(e[0], e[1], req_service, label)
 
         return False
 
@@ -687,7 +728,7 @@ class SystemGraph:
 
         return True
 
-    def insert_muxers(self):
+    def insert_muxers(self, callback):
         for e in self.component_graph.edges(data=True):
             source_node = e[0]
             target_node = e[1]
@@ -907,6 +948,14 @@ class SystemConfig(SubsystemConfig):
         
         return True
 
+    def _check_mux(self, component, child):
+        if not self._check_specs(component, child):
+            return False
+
+        # FIXME check RTE 
+        
+        return True
+
     def _check_explicit_routes(self, component, child):
         # check provisions for each incoming edge
         provides, requires = self.graph().explicit_routes(child)
@@ -976,7 +1025,7 @@ class SystemConfig(SubsystemConfig):
         if not self.graph().solve_pending():
             return False
 
-        if not self.graph().insert_muxers():
+        if not self.graph().insert_muxers(self._check_mux):
             return False
 
         # TODO merge component instances?
