@@ -568,7 +568,7 @@ class SystemGraph:
             else: # service
                 self._connect_children(e[0], e[1], req_service, label)
 
-        return False
+        return True
 
     def solve_pending(self):
         # TODO implement
@@ -603,6 +603,22 @@ class SystemGraph:
         dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
                                                 self.query_graph.node[v]['id'],
                                                 self.query_graph.node[u]['id'],
+                                                label,
+                                                style))
+
+    def write_component_node(self, dotfile, comp, prefix="  "):
+        label = "label=\"%s\"," % comp.xml.get('name')
+        style = self.node_type_styles['component']
+
+        dotfile.write("%s%s [%s%s];\n" % (prefix, self.component_graph.node[comp]['id'], label, style))
+
+    def write_component_edge(self, dotfile, v, u, attrib, prefix="  "):
+        style = self.edge_type_styles['service']
+        label = "label=\"%s\"," % attrib['service']
+
+        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
+                                                self.component_graph.node[v]['id'],
+                                                self.component_graph.node[u]['id'],
                                                 label,
                                                 style))
 
@@ -683,15 +699,45 @@ class SystemGraph:
         with open(filename, 'w+') as dotfile:
             dotfile.write("digraph {\n")
 
-            # TODO write query nodes
+            dotfile.write("  { rank = same;\n")
+            # write query nodes
+            n = 1
+            for ch in self.query_graph.nodes():
+                if not 'id' in self.query_graph.node[ch]:
+                    self.query_graph.node[ch]['id'] = "chn%d" % n
+                    n += 1
 
-            # TODO connect query nodes
+                self.write_query_node(dotfile, ch, prefix="    ")
 
-            # TODO write component nodes
+            # connect query nodes
+            for s, t, attr in self.query_graph.edges(data=True):
+                self.write_query_edge(dotfile, s, t, attr, prefix="    ")
 
-            # TODO connect components
+            dotfile.write("  }\n")
 
-            # TODO add mappings (nodes)
+            dotfile.write("  { \n")
+
+            # write component nodes
+            n = 1
+            for comp in self.component_graph.nodes():
+                self.component_graph.node[comp]['id'] = "c%d" % n
+                n += 1
+
+                self.write_component_node(dotfile, comp, prefix="    ")
+
+            # connect components
+            for s, t, attr in self.component_graph.edges(data=True):
+                self.write_component_edge(dotfile, s, t, attr, prefix="    ")
+
+            dotfile.write("  }\n")
+
+            # add mappings (nodes)
+            for (comp, child) in self.mapping_component2query.items():
+                style = self.edge_type_styles['mapping']
+                if child is not None:
+                    dotfile.write("  %s -> %s [%s];" % (self.query_graph.node[child]['id'],
+                                                        self.component_graph.node[comp]['id'],
+                                                        style))
 
             # remark: we cannot draw the mappings between edges
 
@@ -1583,7 +1629,7 @@ class ConfigModelParser:
             logging.critical("abort")
             return False
 
-        self.graph().write_component_dot(args.dotpath+"component_graph.dot")
+        system.graph().write_component_dot(args.dotpath+"component_graph.dot")
 
         return True
 
