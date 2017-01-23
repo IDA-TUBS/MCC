@@ -399,7 +399,7 @@ class SystemGraph:
         # TODO implement
         return False
 
-    def write_node(self, dotfile, child, prefix="  "):
+    def write_query_node(self, dotfile, child, prefix="  "):
         label = ""
         if 'composite' in child.keys():
             label = "label=\"%s\"," % child.get('composite')
@@ -416,7 +416,7 @@ class SystemGraph:
 
         dotfile.write("%s%s [%s%s];\n" % (prefix, self.query_graph.node[child]['id'], label, style))
 
-    def write_edge(self, dotfile, v, u, attrib, prefix="  "):
+    def write_query_edge(self, dotfile, v, u, attrib, prefix="  "):
         if 'function' in attrib:
             style = self.edge_type_styles['function']
             label = "label=\"%s\"," % attrib['function']
@@ -466,12 +466,12 @@ class SystemGraph:
                     if sub not in clusternodes:
                         clusternodes[sub] = self.query_graph.node[ch]['id']
 
-                    self.write_node(dotfile, ch, prefix="    ")
+                    self.write_query_node(dotfile, ch, prefix="    ")
 
                 # add internal dependencies
                 for e in self.query_graph.edges(data=True):
                     if self.mapping_query2subsystem[e[0]] == sub and self.mapping_query2subsystem[e[1]] == sub:
-                        self.write_edge(dotfile, e[0], e[1], e[2], prefix="    ")
+                        self.write_query_edge(dotfile, e[0], e[1], e[2], prefix="    ")
 
                 dotfile.write("  }\n")
 
@@ -491,7 +491,7 @@ class SystemGraph:
             # add child dependencies between subsystems
             for e in self.query_graph.edges(data=True):
                 if self.mapping_query2subsystem[e[0]] != self.mapping_query2subsystem[e[1]]:
-                    self.write_edge(dotfile, e[0], e[1], e[2])
+                    self.write_query_edge(dotfile, e[0], e[1], e[2])
 
             dotfile.write("}\n")
 
