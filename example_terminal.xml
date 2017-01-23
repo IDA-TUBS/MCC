@@ -227,6 +227,7 @@
 			<service name="LOG" />
 		</provides>
 		<requires>
+			<!-- We do not specify by which services this function is accessed as this may vary between the patterns. //-->
 			<function name="GUI" />
 		</requires>
 
