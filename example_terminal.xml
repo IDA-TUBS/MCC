@@ -113,13 +113,8 @@
 	</component>
 
 	<component name="nitpicker">
-		<!-- In addition to providing the GUI function, the nitpicker also acts as a multiplexer and protocol stack, i.e.
-			  it mediates the access to the Input and Framebuffer driver and, at the same time, provides the multiplexed
-			  service in form of a Nitpicker session interface. However, those complex multi-purpose components are not
-			  expected to be suitable for auto-insertion, we therefore model the nitpicker only as a function
-			  provider. //-->
+		<!-- This component will be classified in the scope of a composite. //-->
 		<provides>
-			<function name="GUI" />
 			<service name="Nitpicker" />
 		</provides>
 		<requires>
@@ -140,6 +135,34 @@
 			</config>
 		</defaults>
 	</component>
+
+    <composite name="Nitpicker_GUI">
+		<!-- In addition to providing the GUI function, the nitpicker also acts as a multiplexer and protocol stack, i.e.
+			  it mediates the access to the Input and Framebuffer driver and, at the same time, provides the multiplexed
+			  service in form of a Nitpicker session interface. However, those complex multi-purpose components are not
+			  expected to be suitable for auto-insertion, we therefore model the nitpicker only as a function
+			  provider. //-->
+		<provides>
+			<function name="GUI" />
+			<service name="Nitpicker" />
+		</provides>
+		<requires>
+            <function name="FB_DRV" />
+            <function name="INPUT_DRV" />
+		</requires>
+
+        <pattern>
+            <component name="nitpicker">
+                <route>
+                    <service name="Framebuffer"> <function name="FB_DRV" /> </service>
+                    <service name="Input"> <function name="INPUT_DRV" /> </service>
+                </route>
+                <expose>
+                    <service name="Nitpicker" />
+                </expose>
+            </component>
+        </pattern>
+    </composite>
 
 	<component name="nit_fb">
 		<!-- This component acts as a protocol stack that converts the Nitpicker service to a Framebuffer and Input
