@@ -10,6 +10,8 @@ import argparse
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('file', metavar='xml_file', type=str, 
         help='XML file to be processed')
+parser.add_argument('--dotpath', type=str,
+        help='Write graphs to DOT files in this path.')
 
 args = parser.parse_args()
 
@@ -169,6 +171,16 @@ class SystemGraph:
         self.repo = repo
 
         self.functions = set()
+
+        self.node_type_styles = { "subsystem" : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
+                                  "function"  : "shape=rectangle, colorscheme=set39, fillcolor=5, style=filled",
+                                  "composite" : "shape=component, colorscheme=set39, fillcolor=9, style=filled",
+                                  "component" : "shape=component, colorscheme=set39, fillcolor=6, style=filled" }
+        
+        self.edge_type_styles = { "subsystem"   : "",
+                                  "service"     : "arrowhead=normal",
+                                  "function"    : "arrowhead=normal, style=dotted, colorscheme=set39, color=3",
+                                  "mapping"     : "arrowhead=none, style=dashed, color=dimgray" }
 
     def add_subsystem(self, subsystem, parent=None):
         self.subsystem_graph.add_node(subsystem)
@@ -387,6 +399,105 @@ class SystemGraph:
         # TODO implement
         return False
 
+    def write_node(self, dotfile, child, prefix="  "):
+        label = ""
+        if 'composite' in child.keys():
+            label = "label=\"%s\"," % child.get('composite')
+            style = self.node_type_styles['composite']
+        elif 'component' in child.keys():
+            label = "label=\"%s\"," % child.get('component')
+            style = self.node_type_styles['component']
+        elif 'function' in child.keys():
+            label = "label=\"%s\"," % child.get('function')
+            style = self.node_type_styles['function']
+
+        if 'name' in child.keys():
+            label = "label=\"%s\"," % child.get('name')
+
+        dotfile.write("%s%s [%s%s];\n" % (prefix, self.query_graph.node[child]['id'], label, style))
+
+    def write_edge(self, dotfile, v, u, attrib, prefix="  "):
+        if 'function' in attrib:
+            style = self.edge_type_styles['function']
+            label = "label=\"%s\"," % attrib['function']
+        else:
+            style = self.edge_type_styles['service']
+            label = "label=\"%s\"," % attrib['service']
+
+        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
+                                                self.query_graph.node[v]['id'],
+                                                self.query_graph.node[u]['id'],
+                                                label,
+                                                style))
+
+    def write_query_dot(self, filename):
+    
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+            dotfile.write("  compound=true;\n")
+
+            # write subsystem nodes
+            i = 1
+            n = 1
+            clusternodes = dict()
+            for sub in self.subsystem_graph.nodes():
+                # generate and store node id
+                self.subsystem_graph.node[sub]['id'] = "cluster%d" % i
+                i += 1
+
+                label = ""
+                if 'name' in sub.root.keys():
+                    label = "label=\"%s\";" % sub.root.get('name')
+
+                style = self.node_type_styles['subsystem']
+                dotfile.write("  subgraph %s {\n    %s\n" % (self.subsystem_graph.node[sub]['id'], label))
+                for s in style:
+                    dotfile.write("    %s;\n" % s)
+
+                # add children of this subsystem
+                for ch in self.query_graph.nodes():
+                    # only process children in this subsystem
+                    if self.mapping_query2subsystem[ch] is not sub:
+                        continue
+
+                    self.query_graph.node[ch]['id'] = "ch%d" % n
+                    n += 1
+                    # remember first child node as cluster node
+                    if sub not in clusternodes:
+                        clusternodes[sub] = self.query_graph.node[ch]['id']
+
+                    self.write_node(dotfile, ch, prefix="    ")
+
+                # add internal dependencies
+                for e in self.query_graph.edges(data=True):
+                    if self.mapping_query2subsystem[e[0]] == sub and self.mapping_query2subsystem[e[1]] == sub:
+                        self.write_edge(dotfile, e[0], e[1], e[2], prefix="    ")
+
+                dotfile.write("  }\n")
+
+            # write subsystem edges
+            for e in self.subsystem_graph.edges():
+                # skip if one of the subsystems is empty
+                if e[0] not in clusternodes or e[1] not in clusternodes:
+                    continue
+                style = self.edge_type_styles['subsystem']
+                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e[0]],
+                                                      clusternodes[e[1]],
+                                                      self.subsystem_graph.node[e[0]]['id'],
+                                                      self.subsystem_graph.node[e[1]]['id'],
+                                                      style))
+
+
+            # add child dependencies between subsystems
+            for e in self.query_graph.edges(data=True):
+                if self.mapping_query2subsystem[e[0]] != self.mapping_query2subsystem[e[1]]:
+                    self.write_edge(dotfile, e[0], e[1], e[2])
+
+            dotfile.write("}\n")
+
+        return
+
+
 class SubsystemConfig:
     def __init__(self, root_node, parent, model):
         self.root = root_node
@@ -553,8 +664,6 @@ class SystemConfig(SubsystemConfig):
 
         # parse routes
         self.graph().parse_routes()
-
-        # TODO connect functions
 
     def select_rte(self):
         result = SubsystemConfig.select_rte(self)
@@ -1135,6 +1244,13 @@ class ConfigModelParser:
 
         system = SystemConfig(self._root.find("system"), self)
         system.parse()
+
+        # TODO connect functions
+
+        # draw query_graph (for devel/debugging/validation)
+        if args.dotpath is not None:
+            system.graph().write_query_dot(args.dotpath+"query_graph.dot")
+
         if not system.match_specs():
             logging.critical("abort")
             return False
