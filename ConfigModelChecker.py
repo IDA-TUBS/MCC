@@ -1629,7 +1629,8 @@ class ConfigModelParser:
             logging.critical("abort")
             return False
 
-        system.graph().write_component_dot(args.dotpath+"component_graph.dot")
+        if args.dotpath is not None:
+            system.graph().write_component_dot(args.dotpath+"component_graph.dot")
 
         return True
 
