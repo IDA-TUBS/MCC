@@ -19,30 +19,33 @@ args = parser.parse_args()
 # main section #
 ################
 
+class Edge:
+    def __init__(self, source, target, attr):
+        self.source = source
+        self.target = target
+        self.attr   = attr
+
 # wrapper class to allow multiple nodes of the same component
 class Component:
     def __init__(self, xml_node):
         self.xml = xml_node
 
-    def route_to(self, graph, service, component, label=None):
+    def route_to(self, system_graph, service, component, label=None):
         # check component specifications
         if not self.requires(service):
-            logging.error("Cannot route service '%s' of component '%s' which does not require this service." % (self.xml.get('name'), service))
+            logging.error("Cannot route service '%s' of component '%s' which does not require this service." % (service, self.xml.get('name')))
             return False
 
         if not component.provides(service):
-            logging.error("Cannot route service '%s' to component '%s' which does not provide this service." % (component.xml.get('name'), service))
+            logging.error("Cannot route service '%s' to component '%s' which does not provide this service." % (service, component.xml.get('name')))
             return False
-
-        # FIXME check for max_clients (idea: do this a post-processing step/admission test)
 
         # add edge
         attribs = {'service' : service}
         if label is not None and label != 'None':
             attribs['label'] = label
 
-        graph.add_edge(self, component, attribs)
-        return True
+        return system_graph.add_component_edge(self, component, attribs)
 
     def max_clients(self, name):
         if self.xml.find('provides') is not None:
@@ -53,10 +56,10 @@ class Component:
 
         return float('inf')
 
-    def connections(self, graph, name):
+    def connections(self, system_graph, name):
         i = 0
-        for e in graph.in_edges(self, data=True):
-            if e[2]['service'] == name:
+        for e in system_graph.component_in_edges(self):
+            if e.attr['service'] == name:
                 i += 1
 
         return i
@@ -79,6 +82,9 @@ class Component:
 
     def is_comp(self, component):
         return component is self.xml
+
+    def component(self):
+        return self.xml
 
 class PatternManager:
     def __init__(self, composite, repo):
@@ -189,13 +195,12 @@ class PatternManager:
 
         return result
 
-    def add_to_graph(self, composite, graph):
+    def add_to_graph(self, composite, system_graph):
         child_lookup = dict()
         name_lookup = dict()
         # first, add all components and create lookup table by child name
         for c in self.patterns[composite]['chosen'].findall("component"):
-            component = Component(self._get_component_from_repo(c))
-            graph.add_node(component)
+            component = system_graph.add_component(self._get_component_from_repo(c))
             name_lookup[c.get('name')] = component
             child_lookup[c] = component
 
@@ -208,7 +213,7 @@ class PatternManager:
                         if name not in name_lookup:
                             logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
                         else:
-                            child_lookup[c].route_to(graph, s.get('name'), name_lookup[name], s.get('label'))
+                            child_lookup[c].route_to(system_graph, s.get('name'), name_lookup[name], s.get('label'))
 
         # return set of added nodes
         return child_lookup.values()
@@ -226,6 +231,7 @@ class SystemGraph:
         # the subsystem graph models the hierarchical structure of the subsystems
         self.subsystem_graph = nx.DiGraph()
         self.mapping_query2subsystem = dict() # map nodes in query graph to nodes
+        self.subsystem_root = None
 
         self.repo = repo
 
@@ -248,6 +254,8 @@ class SystemGraph:
             if parent not in self.subsystem_graph:
                 raise Exception("Cannot find parent '%s' in subsystem graph." % parent)
             self.subsystem_graph.add_edge(parent, subsystem)
+        else:
+            self.subsystem_root = subsystem
 
     def add_query(self, child, subsystem):
         # FIXME reset/invalidate component graph
@@ -303,17 +311,17 @@ class SystemGraph:
                         for target in self.query_graph.nodes():
                             if target.get("name") == s.find("child").get("name"):
                                 # we check later whether the target component actually provides this service
-                                self.query_graph.add_edge(child, target, {'service' : s.get("name")})
+                                edge = self.add_query_edge(child, target, {'service' : s.get("name")})
                                 if 'label' in s.keys():
-                                    self.query_graph.edge[child][target]['label'] = s.get('label')
+                                    edge.attr['label'] = s.get('label')
                                 break
                     elif s.find("function") is not None:
                         fname = s.find('function').get('name')
                         for target in self.query_graph.nodes():
                             if fname in self.provisions(target, 'function'):
-                                self.query_graph.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+                                edge = self.add_query_edge(child, target, {'service' : s.get('name'), 'function' : fname })
                                 if 'label' in s.keys():
-                                    self.query_graph.edge[child][target]['label'] = s.get('label')
+                                    edge.attr['label'] = s.get('label')
                     else:
                         raise Exception("ERROR")
         return
@@ -340,12 +348,12 @@ class SystemGraph:
 
     def explicit_routes(self, child):
         res_in = list()
-        for i in self.query_graph.in_edges(child, data=True):
-            res_in.append(i[2])
+        for e in self.query_in_edges(child):
+            res_in.append(e.attr)
 
         res_out = list()
-        for o in self.query_graph.out_edges(child, data=True):
-            res_out.append(o[2])
+        for e in self.query_out_edges(child):
+            res_out.append(e.attr)
 
         return res_in, res_out
 
@@ -417,8 +425,8 @@ class SystemGraph:
                 for f in chosen.find('requires').findall('function'):
                     # skip if edge already exists
                     exists = False
-                    for e in self.query_graph.edges(child, data=True):
-                        if e[2]['function'] == f.get('name'):
+                    for e in self.query_edges(child):
+                        if 'function' in e.attr and e.attr['function'] == f.get('name'):
                             exists = True
 
                     if exists:
@@ -430,16 +438,97 @@ class SystemGraph:
                     provider = self.functions[fname]
                     # get services from chosen composite pattern
                     for (sname, slabel) in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
-                        self.query_graph.add_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
+                        self.add_query_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
 
         return True
+
+    def query_in_edges(self, node):
+        edges = list()
+        for (s, t, d) in self.query_graph.in_edges(node, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def query_out_edges(self, node):
+        edges = list()
+        for (s, t, d) in self.query_graph.out_edges(node, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def query_edges(self, nbunch=None):
+        edges = list()
+        for (s, t, d) in self.query_graph.edges(nbunch=nbunch, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def add_query_edge(self, s, t, attr):
+        edge = Edge(s, t, attr)
+        if self.component_graph.has_edge(s, t):
+            self.query_graph.edge[s][t]['container'].append(edge)
+        else:
+            self.query_graph.add_edge(s, t, { 'container' : [edge] })
+
+        return edge
+
+    def query_remove_edge(self, edge):
+        if self.query_graph.has_edge(edge.source, edge.target):
+            self.query_graph.edge[edge.source][edge.target]['container'].remove(edge)
+            if len(self.query_graph.edge[edge.source][edge.target]['container']) == 0:
+                self.query_graph.remove_edge(edge.source, edge.target)
+        else:
+            raise Exception("trying to remove non-existing edge")
+
+    def add_component(self, component_xml):
+        node = Component(component_xml)
+        self.component_graph.add_node(node)
+        return node
+
+    def component_in_edges(self, node):
+        edges = list()
+        for (s, t, d) in self.component_graph.in_edges(node, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def component_out_edges(self, node):
+        edges = list()
+        for (s, t, d) in self.component_graph.out_edges(node, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def component_edges(self, nbunch=None):
+        edges = list()
+        for (s, t, d) in self.component_graph.edges(nbunch=nbunch, data=True):
+            edges = edges + d['container']
+
+        return edges
+
+    def add_component_edge(self, s, t, attr):
+        edge = Edge(s, t, attr)
+        if self.component_graph.has_edge(s, t):
+            self.component_graph.edge[s][t]['container'].append(edge)
+        else:
+            self.component_graph.add_edge(s, t, { 'container' : [edge] })
+
+        return edge
+
+    def component_remove_edge(self, edge):
+        if self.component_graph.has_edge(edge.source, edge.target):
+            self.component_graph.edge[edge.source][edge.target]['container'].remove(edge)
+            if len(self.component_graph.edge[edge.source][edge.target]['container']) == 0:
+                self.component_graph.remove_edge(edge.source, edge.target)
+        else:
+            raise Exception("trying to remove non-existing edge")
 
     def build_component_graph(self):
         # iterate children and add chosen components to graph
         for child in self.query_graph.nodes():
             chosen = self.query_graph.node[child]['chosen']
             if 'patterns' in self.query_graph.node[child]:
-                nodes = self.query_graph.node[child]['patterns'].add_to_graph(chosen, self.component_graph)
+                nodes = self.query_graph.node[child]['patterns'].add_to_graph(chosen, self)
                 for n in nodes:
                     self.mapping_component2query[n] = child
             else:
@@ -508,47 +597,50 @@ class SystemGraph:
 
         return target_node
 
-    def _add_connections(self, source, target, source_nodes, target_node, service, label=None):
+    def _add_connections(self, edge, source_nodes, target_node, service, label=None):
         for source_node in source_nodes:
-            source_node.route_to(self.component_graph, service, target_node, label)
+            cedge = source_node.route_to(self, service, target_node, label)
             # add mapping
-            self.mapping_session2query[(source_node, target_node)] = (source, target)
+            self.mapping_session2query[cedge] = edge
 
-    def _connect_children(self, source, target, service, label):
+    def _connect_children(self, edge, service, label):
         # find components
-        source_nodes = self._source_components(source, service, label)
-        target_node = self._target_component(target, service)
+        source_nodes = self._source_components(edge.source, service, label)
+        target_node = self._target_component(edge.target, service)
 
-        self._add_connections(source, target, source_nodes, target_node, service, label)
+        self._add_connections(edge, source_nodes, target_node, service, label)
 
-    def insert_protocol(self, prot, source, target, from_service, to_service, label):
+    def insert_protocol(self, prot, edge, from_service, to_service, label):
         node = Component(prot)
         self.component_graph.add_node(node)
-        self.mapping_component2query[node] = None
 
-        source_nodes = self._source_components(source, to_service, label)
-        target_node  = self._target_component(target, from_service)
+        # remark: in order to map protocol components to subsystems, we insert a mapping to a dummy 'query' node
+        self.mapping_component2query[node] = node
+        self.mapping_query2subsystem[node] = None
 
-        self._add_connections(source, target, source_nodes, node, to_service, label)
-        self._add_connections(source, target, [node], target_node, from_service)
+        source_nodes = self._source_components(edge.source, to_service, label)
+        target_node  = self._target_component(edge.target, from_service)
+
+        self._add_connections(edge, source_nodes, node, to_service, label)
+        self._add_connections(edge, [node], target_node, from_service)
 
     def solve_routes(self):
-        for e in self.query_graph.edges(data=True):
-            req_service = e[2]['service']
+        for e in self.query_edges():
+            req_service = e.attr['service']
             label = None
-            if label in e[2]:
-                label = e[2]['label']
+            if label in e.attr:
+                label = e.attr['label']
 
-            if 'function' in e[2]:
+            if 'function' in e.attr:
                 # check compatibility
-                provisions = self.provisions(e[1])
+                provisions = self.provisions(e.target)
                 if req_service in provisions:
                     # connect children
-                    self._connect_children(e[0], e[1], req_service, label)
+                    self._connect_children(e, req_service, label)
                 else:
                     # search and insert protocol stack (via repo)
-                    logging.info("Connecting '%s' to '%s' via service '%s' requires a protocol stack." % (e[0].attrib,
-                        e[1].attrib, req_service))
+                    logging.info("Connecting '%s' to '%s' via service '%s' requires a protocol stack." % (e.source.attrib,
+                        e.target.attrib, req_service))
                     found = False
                     for c in self.repo._find_component_by_class('protocol'):
                         if found:
@@ -556,17 +648,20 @@ class SystemGraph:
                         for prot in c.findall('protocol'):
                             if prot.get('to') == req_service:
                                 if prot.get('from') in provisions:
-                                    # FIXME check specs and RTE
-                                    found = True
-                                    self.insert_protocol(c, e[0], e[1], prot.get('from'), prot.get('to'), label)
-                                    break
+                                    # check specs and RTE
+                                    sub1 = self.mapping_query2subsystem[e.source]
+                                    sub2 = self.mapping_query2subsystem[e.target]
+                                    if sub1.is_compatible(c) or sub2.is_compatible(c):
+                                        found = True
+                                        self.insert_protocol(c, e, prot.get('from'), prot.get('to'), label)
+                                        break
 
                     if not found:
                         logging.critical("Cannot find suitable protocol stack from='%s' to='%s'." % (req_service, provisions))
                         return False
 
             else: # service
-                self._connect_children(e[0], e[1], req_service, label)
+                self._connect_children(e, req_service, label)
 
         return True
 
@@ -661,9 +756,9 @@ class SystemGraph:
                     self.write_query_node(dotfile, ch, prefix="    ")
 
                 # add internal dependencies
-                for e in self.query_graph.edges(data=True):
-                    if self.mapping_query2subsystem[e[0]] == sub and self.mapping_query2subsystem[e[1]] == sub:
-                        self.write_query_edge(dotfile, e[0], e[1], e[2], prefix="    ")
+                for e in self.query_edges():
+                    if self.mapping_query2subsystem[e.source] == sub and self.mapping_query2subsystem[e.target] == sub:
+                        self.write_query_edge(dotfile, e.source, e.target, e.attr, prefix="    ")
 
                 dotfile.write("  }\n")
 
@@ -687,9 +782,9 @@ class SystemGraph:
                     self.write_query_node(dotfile, ch)
 
             # add child dependencies between subsystems
-            for e in self.query_graph.edges(data=True):
-                if self.mapping_query2subsystem[e[0]] != self.mapping_query2subsystem[e[1]]:
-                    self.write_query_edge(dotfile, e[0], e[1], e[2])
+            for e in self.query_edges():
+                if self.mapping_query2subsystem[e.source] != self.mapping_query2subsystem[e.target]:
+                    self.write_query_edge(dotfile, e.source, e.target, e.attr)
 
             dotfile.write("}\n")
 
@@ -710,8 +805,8 @@ class SystemGraph:
                 self.write_query_node(dotfile, ch, prefix="    ")
 
             # connect query nodes
-            for s, t, attr in self.query_graph.edges(data=True):
-                self.write_query_edge(dotfile, s, t, attr, prefix="    ")
+            for e in self.query_edges():
+                self.write_query_edge(dotfile, e.source, e.target, e.attr, prefix="    ")
 
             dotfile.write("  }\n")
 
@@ -726,13 +821,16 @@ class SystemGraph:
                 self.write_component_node(dotfile, comp, prefix="    ")
 
             # connect components
-            for s, t, attr in self.component_graph.edges(data=True):
-                self.write_component_edge(dotfile, s, t, attr, prefix="    ")
+            for edge in self.component_edges():
+                self.write_component_edge(dotfile, edge.source, edge.target, edge.attr, prefix="    ")
 
             dotfile.write("  }\n")
 
             # add mappings (nodes)
             for (comp, child) in self.mapping_component2query.items():
+                if comp is child: # skip dummy mappings
+                    continue
+
                 style = self.edge_type_styles['mapping']
                 if child is not None:
                     dotfile.write("  %s -> %s [%s];" % (self.query_graph.node[child]['id'],
@@ -743,20 +841,84 @@ class SystemGraph:
 
             dotfile.write("}\n")
 
-    def add_proxy(self, proxy, source, target, callback):
+    def write_subsystem_dot(self, filename):
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+            dotfile.write("  compound=true;\n")
+
+            # write subsystem nodes
+            i = 1
+            n = 1
+            clusternodes = dict()
+            for sub in self.subsystem_graph.nodes():
+                # generate and store node id
+                self.subsystem_graph.node[sub]['id'] = "cluster%d" % i
+                i += 1
+
+                label = ""
+                if 'name' in sub.root.keys():
+                    label = "label=\"%s\";" % sub.root.get('name')
+
+                style = self.node_type_styles['subsystem']
+                dotfile.write("  subgraph %s {\n    %s\n" % (self.subsystem_graph.node[sub]['id'], label))
+                for s in style:
+                    dotfile.write("    %s;\n" % s)
+
+                # add components of this subsystem
+                for comp in self.component_graph.nodes():
+                    # only process children in this subsystem
+                    if sub is not self.mapping_query2subsystem[self.mapping_component2query[comp]]:
+                        continue
+
+                    self.component_graph.node[comp]['id'] = "c%d" % n
+                    n += 1
+
+                    # remember first node as cluster node
+                    if sub not in clusternodes:
+                        clusternodes[sub] = self.component_graph.node[comp]['id']
+
+                    self.write_component_node(dotfile, comp, prefix="    ")
+
+                # add internal dependencies
+                for edge in self.component_edges():
+                    sub1 = self.mapping_query2subsystem[self.mapping_component2query[edge.source]]
+                    sub2 = self.mapping_query2subsystem[self.mapping_component2query[edge.target]]
+                    if sub1 == sub and sub2 == sub:
+                        self.write_component_edge(dotfile, edge.source, edge.target, edge.attr, prefix="    ")
+
+                dotfile.write("  }\n")
+
+            # write subsystem edges
+            for e in self.subsystem_graph.edges():
+                # skip if one of the subsystems is empty
+                if e[0] not in clusternodes or e[1] not in clusternodes:
+                    continue
+                style = self.edge_type_styles['subsystem']
+                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e[0]],
+                                                      clusternodes[e[1]],
+                                                      self.subsystem_graph.node[e[0]]['id'],
+                                                      self.subsystem_graph.node[e[1]]['id'],
+                                                      style))
+
+            # add child dependencies between subsystems
+            for edge in self.component_edges():
+                sub1 = self.mapping_query2subsystem[self.mapping_component2query[edge.source]]
+                sub2 = self.mapping_query2subsystem[self.mapping_component2query[edge.target]]
+                if sub1 != sub2:
+                    self.write_component_edge(dotfile, edge.source, edge.target, edge.attr)
+
+            dotfile.write("}\n")
+
+    def add_proxy(self, proxy, edge):
         # remark: This is a good example why it is better to have another modelling layer (i.e. functional communication
         #         layer) as inserting a proxy obfuscated functional dependencies and the actual query.
 
         # remove edge between source and target
-        edge_attrib = self.query_graph.get_edge_data(source, target)
-        self.query_graph.remove_edge(source, target)
+        self.query_remove_edge(edge)
 
         # add proxy node (create XML node)
         xml = ET.Element('child')
         xml.set('composite', proxy.get('name'))
-
-        if not callback(proxy, xml):
-            return False
 
         self.query_graph.add_node(xml, {'chosen' : proxy, 'options' : set(proxy), 'dismissed' : set()})
         self.query_graph.node[xml]['patterns'] = PatternManager(proxy, self.repo)
@@ -765,47 +927,221 @@ class SystemGraph:
         self.mapping_query2subsystem[xml] = None
 
         # add edge from proxy to target
-        self.query_graph.add_edge(xml, target, edge_attrib)
+        self.add_query_edge(xml, edge.target, edge.attr)
 
         # add edge from source to proxy
-        if 'function' in edge_attrib.keys():
-            del edge_attrib['function']
-        self.query_graph.add_edge(source, xml, edge_attrib)
+        if 'function' in edge.attr.keys():
+            del edge.attr['function']
+        self.add_query_edge(edge.source, xml, edge.attr)
 
         return True
 
-    def insert_muxers(self, callback):
-        for e in self.component_graph.edges(data=True):
-            source_node = e[0]
-            target_node = e[1]
-            service = e[2]['service']
+    def add_mux(self, mux, edge):
+        # remove edge between source and target
+        self.component_remove_edge(edge)
+
+        # add mux node
+        node = Component(mux)
+        self.component_graph.add_node(node)
+
+        # add dummy mapping
+        self.mapping_component2query[node] = node
+        self.mapping_query2subsystem[node] = None
+
+        # add edge from mux to target
+        self.component_graph.add_component_edge(node, edge.target, edge.attr)
+
+        # add edge from source to mux
+        self.component_graph.add_component_edge(edge.source, node, edge.attr)
+
+        # change all other connections
+        for e in self.component_in_edges(edge.target):
+            if e.source is not node and e.attr['service'] == edge.attr['service']:
+                self.component_graph.remove_edge(e.source, e.target)
+                self.component_graph.add_component_edge(e.source, node, e.attr)
+
+        return True
+
+    def insert_muxers(self):
+        for edge in self.component_edges():
+            service = edge.attr['service']
+            source_sys = self.mapping_query2subsystem[self.mapping_component2query[edge.source]]
+            target_sys = self.mapping_query2subsystem[self.mapping_component2query[edge.target]]
+
             # check max_clients
-            if target_node.max_clients(service) < target_node.connections(self.component_graph, service):
-                logging.info("Multiplexer required for service '%s' of component '%s'." % (service, target_node.xml.get('name')))
-                logging.critical("MUX INSERTION NOT IMPLEMENTED")
-                return False
+            if edge.target.max_clients(service) < edge.target.connections(self, service):
+                logging.info("Multiplexer required for service '%s' of component '%s'." % (service, edge.target.xml.get('name')))
+                found = False
+                for comp in self.repo._find_component_by_class("mux"):
+                    if found:
+                        break
+                    for mux in comp.findall('mux'):
+                        if mux.get('service') == service:
+                            if (source_sys is not None and source_sys.is_compatible(comp)) or (target_sys is not None and target_sys.is_compatible(comp)):
+                                found = self.add_mux(comp, edge)
+                                break
+
+                if not found:
+                    logging.critical("No compatible mux found.")
+                    return False
 
         return True
 
-    def insert_proxies(self, callback):
-        for (source, target, attrib) in self.query_graph.edges(data=True):
+    def insert_proxies(self):
+        for edge in self.query_edges():
             # check reachability
-            source_sys = self.mapping_query2subsystem[source]
-            target_sys = self.mapping_query2subsystem[target]
+            source_sys = self.mapping_query2subsystem[edge.source]
+            target_sys = self.mapping_query2subsystem[edge.target]
 
             # provider must be a parent
             if not nx.has_path(self.subsystem_graph, target_sys, source_sys):
-                logging.info("Connecting '%s' to '%s' via service '%s' requires a proxy." % (source.attrib, target.attrib, attrib['service']))
-                for proxy in self.repo._find_proxies(attrib['service']):
+                logging.info("Connecting '%s' to '%s' via service '%s' requires a proxy." % (edge.source.attrib, edge.target.attrib, edge.attr['service']))
+                for proxy in self.repo._find_proxies(edge.attr['service']):
                     carrier = proxy.find('proxy').get('carrier')
                     # check that carrier is provided by both subsystems
                     if carrier in source_sys.services() and carrier in target_sys.services():
-                        return self.add_proxy(proxy, source, target, callback)
+                        if source_sys.is_compatible(proxy) and target_sys.is_compatible(proxy):
+                            return self.add_proxy(proxy, edge)
                     else:
                         logging.info("Cannot find carrier for proxy '%s' in all subsystems." % proxy.get('name'))
 
                 logging.critical("No compatible proxy found.")
                 return False
+
+        return True
+
+    def _get_subsystems_recursive(self, subsystem):
+        unprocessed = set([subsystem])
+        subsystems = list()
+        while len(unprocessed):
+            current = unprocessed.pop()
+            current_subsystems = self.subsystem_graph.successors(current)
+            subsystems = subsystems + current_subsystems
+            unprocessed.update(current_subsystems)
+
+        return subsystems
+
+    def _get_parents_recursive(self, subsystem):
+        unprocessed = set([subsystem])
+        parents = list()
+        while len(unprocessed):
+            current = unprocessed.pop()
+            current_parents = self.subsystem_graph.predecessors(current)
+            parents = parents + current_parents
+            unprocessed.update(current_parents)
+
+        return parents
+
+    def map_unmapped_components(self):
+        for comp in self.component_graph.nodes():
+            assert(self.mapping_component2query[comp] is not None)
+            if self.mapping_query2subsystem[self.mapping_component2query[comp]] is None:
+                logging.info("mapping unmapped component '%s' to 'lowest' possible subsystem" % comp.xml.get('name'))
+                candidates = set(self.subsystem_graph.nodes())
+                # a) if component provides a service it must not be on a lower subsystem than its clients
+                for (client, x) in self.component_graph.in_edges(comp, data=False):
+                    child = self.mapping_component2query[client]
+                    assert(child is not None)
+
+                    # get subsystem of this client
+                    sys = self.mapping_query2subsystem[child]
+                    if sys is None:   # skip unmapped
+                        continue
+
+                    # skip leaves
+                    if self.subsystem_graph.out_degree(sys) == 0:
+                        continue
+
+                    # remove subsystems of client's subsystem from candidates
+                    candidates = candidates - self._get_subsystems_recursive(sys)
+
+                # b) if component requires a service it must not be on a higher subsystem than its servers
+                for (server, x) in self.component_graph.out_edges(comp, data=False):
+                    child = self.mapping_component2query[server]
+                    assert(child is not None)
+
+                    # get subsystem of this server
+                    sys = self.mapping_query2subsystem[child]
+                    if sys is None:   # skip unmapped
+                        continue
+
+                    # skip root
+                    if self.subsystem_graph.in_degree(sys) == 0:
+                        continue
+
+                    # remove subsystems of client's subsystem from candidates
+                    pred = nx.dfs_predecessors(self.subsystem_graph, sys)
+                    candidates = candidates - self._get_parents_recursive(sys)
+
+                # c) the subsystem must satisfy the RTE and spec requirements of the component
+                for candidate in candidates:
+                    if not candidate.is_compatible(comp.component()):
+                        candidates.remove(candidate)
+
+                if len(candidates) == 0:
+                    logging.error("Cannot find compatible subsystem for unmapped component '%s'." % (comp.xml.get('name')))
+                    return False
+
+                best = candidates.pop()
+                hierarchy = [self.subsystem_root] + self._get_subsystems_recursive(self.subsystem_root)
+                if len(candidates) > 0:
+                    # select lowest candidate subsystem in the hierarchy of subsystems
+                    best_index = hierarchy.index(best)
+
+                    for candidate in candidates:
+                        index = hierarchy.index(candidate)
+                        if index > best_index:
+                            best_index = index
+                            best = candidate
+
+                self.mapping_query2subsystem[self.mapping_component2query[comp]] = best
+
+        return True
+
+    def _merge_component(self, c1, c2):
+        sub1 = self.mapping_query2subsystem[self.mapping_component2query[c1]]
+        sub2 = self.mapping_query2subsystem[self.mapping_component2query[c2]]
+        if sub1 == sub2:
+            logging.info("Merging components '%s'." % c1.xml.get('name'))
+
+            # redirect edges of c2
+            for edge in self.component_in_edges(c2):
+                self.component_graph.remove_edge(edge.source, edge.target)
+                newedge = self.add_component_edge(edge.source, c1, edge.attr)
+                self.mapping_session2query[newedge] = self.mapping_session2query[edge]
+                del self.mapping_session2query[edge]
+
+            for edge in self.component_out_edges(c2):
+                self.component_graph.remove_edge(edge.source, edge.target)
+                newedge = self.add_component_edge(c1, edge.target, edge.attr)
+                self.mapping_session2query[newedge] = self.mapping_session2query[edge]
+                del self.mapping_session2query[edge]
+
+            # remove node
+            self.component_graph.remove_node(c2)
+            # remark: this actually removes information about from which query this component resulted
+            del self.mapping_component2query[c2]
+        else:
+            logging.info("Not merging component '%s' because is present in different subsystems." % c1.xml.get('name'))
+
+        return True
+
+    def merge_components(self, singleton=True):
+        # find duplicates
+        processed = set()
+        for comp in self.component_graph.nodes():
+            if comp in processed:
+                continue
+
+            # skip non-singleton components if we only operate on singletons
+            if singleton and ('singleton' not in comp.xml.keys() or comp.xml.get('singleton').lower() != "true"):
+                continue
+
+            for dup in self.component_graph.nodes():
+                if dup is not comp and dup.is_comp(comp.component()):
+                    processed.add(dup)
+                    if not self._merge_component(comp, dup):
+                        return False
 
         return True
 
@@ -857,6 +1193,15 @@ class SubsystemConfig:
 
         if self.get_rte(component) != rtename:
             logging.info("Component '%s' is incompatible because of RTE requirement '%s' does not match '%s'." % (self.get_rte(component), rtename))
+            return False
+
+        return True
+
+    def is_compatible(self, component):
+        if not self._check_specs(component):
+            return False
+
+        if not self._check_rte(component):
             return False
 
         return True
@@ -986,22 +1331,6 @@ class SystemConfig(SubsystemConfig):
 
         return result
 
-    def _check_proxy(self, component, child):
-        if not self._check_specs(component, child):
-            return False
-
-        # FIXME check RTE (or rather map proxy components to any parent subsystem that satisfies the RTE requirements)
-        
-        return True
-
-    def _check_mux(self, component, child):
-        if not self._check_specs(component, child):
-            return False
-
-        # FIXME check RTE 
-        
-        return True
-
     def _check_explicit_routes(self, component, child):
         # check provisions for each incoming edge
         provides, requires = self.graph().explicit_routes(child)
@@ -1048,7 +1377,7 @@ class SystemConfig(SubsystemConfig):
             return False
 
         # solve reachability
-        if not self.graph().insert_proxies(self._check_proxy):
+        if not self.graph().insert_proxies():
             logging.critical("Cannot insert proxies.")
             return False
 
@@ -1071,10 +1400,15 @@ class SystemConfig(SubsystemConfig):
         if not self.graph().solve_pending():
             return False
 
-        if not self.graph().insert_muxers(self._check_mux):
+        if not self.graph().insert_muxers():
             return False
 
-        # TODO merge component instances?
+        # (heuristically) map unmapped components to lowest subsystem
+        if not self.graph().map_unmapped_components():
+            return False
+
+        # merge non-singleton components
+        self.graph().merge_components(singleton=True)
 
         return True
 
@@ -1519,7 +1853,7 @@ class ConfigModelParser:
                         loggin.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
 
         # required external service must be pending exactly once
-        # FIXME or explicitly routed to external service
+        # or explicitly routed to external service
         for s in composite.find("requires").findall("service"):
             sname = s.get("name")
             pending_count = 0
@@ -1631,6 +1965,7 @@ class ConfigModelParser:
 
         if args.dotpath is not None:
             system.graph().write_component_dot(args.dotpath+"component_graph.dot")
+            system.graph().write_subsystem_dot(args.dotpath+"subsystem_graph.dot")
 
         return True
 
