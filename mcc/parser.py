@@ -1,4 +1,4 @@
-import logging
+import xml.etree.ElementTree as ET
 
 class PatternManager:
     def __init__(self, composite, repo):
@@ -143,8 +143,9 @@ class ConfigModelParser:
 
     def __init__(self, config_model_file):
         self._file = config_model_file
-        self._tree = ET.parse(self._file)
-        self._root = self._tree.getroot()
+        if self._file is not None:
+            self._tree = ET.parse(self._file)
+            self._root = self._tree.getroot()
 
         self._structure = { "binary" : { "required-attrs" : ["name"], "children" : { "component" : { "min" : 0,
                                                                                                      "required-attrs" : ["name"],
@@ -231,11 +232,12 @@ class ConfigModelParser:
                                 }},
                           }
 
-        # find <config_model>
-        if self._root.tag != "config_model":
-            self._root = self._root.find("config_model")
-            if self._root == None:
-                raise Exception("Cannot find <config_model> node.")
+        if self._file is not None:
+            # find <config_model>
+            if self._root.tag != "config_model":
+                self._root = self._root.find("config_model")
+                if self._root == None:
+                    raise Exception("Cannot find <config_model> node.")
 
     def _find_function_by_name(self, name):
         function_providers = list()
@@ -658,6 +660,115 @@ class ConfigModelParser:
                 if len(self._find_element_by_attribute("component", { "name" : b.get("name") })) == 0:
                     logging.error("Binary '%s' refers to non-existent component '%s'." %(b.get("name"), b.get("name")))
 
+    def structure_to_markdown(self, filename, structure=None, level=0, mdfile=None, path=None):
+        if structure is None:
+            structure = self._structure
+
+        header = ['---',
+                    'title: Title',
+                    'author:',
+                    '- name: Johannes Schlatow',
+                    '  affiliation: TU Braunschweig, IDA',
+                    '  email: schlatow@ida.ing.tu-bs.de',
+                    'date: \\today',
+                    'abstract: Lorem ipsum.',
+                    'lang: english',
+                    'papersize: a4paper',
+                    'numbersections: 1',
+                    'draft: 1',
+                    'todomargin: 3cm',
+                    'packages:',
+                    '- tubscolors',
+                    '- array',
+                    '- booktabs',
+                    '- hyperref',
+                    'sfdefault: 1',
+                    'fancyhdr: 1',
+                    'compiletex: 0',
+                    'scalefigures: 1',
+                    'table_caption_above: 0',
+                    'floatpos: ht',
+                    'versiontag: draft -- \\today',
+                    '...',
+                    '---']
+
+        if level == 0:
+
+            with open(filename, 'w') as mdfile:
+                for l in header:
+                    mdfile.write(l + '\n')
+
+                self.structure_to_markdown(filename, structure, level=1, mdfile=mdfile)
+
+        else:
+
+            if path is None:
+                path = list()
+
+            # iterate children
+            for node in structure.keys():
+                if 'leaf' in structure[node] and structure[node]['leaf'] is False:
+                    continue
+                if 'recursive-children' in structure[node] and structure[node]['recursive-children'] is True:
+                    continue
+
+                mdfile.write('\clearpage\n\n')
+                for i in range(level):
+                    mdfile.write('#')
+                mdfile.write(' \<%s\> {#sec:%d-%s}\n' % (node, level, node))
+
+                # print path
+                mdfile.write('Hierarchy: \n')
+                mdfile.write('```\n')
+                indent = ''
+                for n in path + [node]:
+                    mdfile.write('%s<%s>\n' % (indent, n))
+                    indent += '  '
+                mdfile.write('```\n')
+
+                # print attribute table
+                mdfile.write('\n| attribute | use | type |\n')
+                mdfile.write(  '|-----------|-----|------|\n')
+                if 'required-attrs' in structure[node]:
+                    for attr in structure[node]['required-attrs']:
+                        typename = 'string' # FIXME
+                        mdfile.write('| %s | required | %s |\n' % (attr, typename))
+
+                if 'optional-attrs' in structure[node]:
+                    for attr in structure[node]['optional-attrs']:
+                        typename = 'string' # FIXME
+                        mdfile.write('| %s | optional | %s |\n' % (attr, typename))
+
+                mdfile.write(  ': Table of attributes\n\n')
+
+                # print children table
+                if 'children' in structure[node]:
+                    mdfile.write('\n| name | use | max | type |\n')
+                    mdfile.write(  '|------|-----|-----|------|\n')
+                    for name, spec in structure[node]['children'].items():
+                        if 'leaf' in spec and spec['leaf'] is False:
+                            typename = 'any'
+                        elif 'recursive-children' in spec and spec['recursive-children'] is True:
+                            typename = '[@sec:%d-%s]' % (level, node)
+                        else:
+                            typename = '[@sec:%d-%s]' % (level+1, name)
+
+                        if 'max' in spec:
+                            max_occur = str(spec['max'])
+                        else:
+                            max_occur = "-"
+
+                        use = 'optional'
+                        if 'min' in spec:
+                            if spec['min'] > 0:
+                                use = 'required'
+                        
+                        mdfile.write('| %s | %s | %s | %s |\n' % (name, use, max_occur, typename))
+
+                    mdfile.write(  ': Table of children\n\n')
+
+                    self.structure_to_markdown(filename, structure[node]['children'], level=level+1, mdfile=mdfile, path=path+[node])
+
     # check XML structure
     def check_structure(self, root=None, structure=None):
         if root is None:
@@ -902,7 +1013,6 @@ class SystemConfig(SubsystemConfig):
 
     def parse_routes(self):
         # parse routes between children
-        # TODO continue here
         fa = self.graph().by_name['func_arch']
         for child in fa.nodes():
             if child.find("route") is not None:
@@ -913,9 +1023,9 @@ class SystemConfig(SubsystemConfig):
                                 # we check later whether the target component actually provides this service
                                 edge = fa.add_edge(child, target, {'service' : s.get("name")})
                                 if 'label' in s.keys():
-        # TODO continue here
-                                    edge.attr['label'] = s.get('label')
+                                    fa.edge[child][target]['label'] = s.get('label')
                                 break
+        # TODO continue here
                     elif s.find("function") is not None:
                         fname = s.find('function').get('name')
                         for target in self.query_graph.nodes():
