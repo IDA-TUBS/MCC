@@ -51,9 +51,12 @@
 			 * mux:      A multiplexer which transforms a provided service interface with max_clients=1 to max_clients>1.
 			 * protocol: A protocol stack that converts between different service interfaces without changing the data.
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
-							 service interface Y) and vice versa.
+			             service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
-							 interface (complementary to the protocol stack).
+			             interface (complementary to the protocol stack).
+			 * function: TODO move function specification to component/composite level
+			             Also: composites, as wrappers, are sufficient to reduce the service provisions to the functionally
+			                   essential ones
 
 		  By default, a component is unclassified. 
 	//-->
@@ -211,7 +214,6 @@
 
 		<provides>
 			<service name="Nic" /> <!-- max_clients defaults to an unlimited number //-->
-			<function name="Network" />
 		</provides>
 		<requires>
 			<service name="Nic" />
@@ -324,6 +326,7 @@
 			</component>
 		</pattern>
 
+        <!--
 		<pattern>
 			<component name="rect_left">
 				<route><service name="ROM"><function name="CAMERA" /></service></route>
@@ -341,6 +344,7 @@
 				</expose>
 			</component>
 		</pattern>
+        //-->
 	</composite>
 
 	<composite>
@@ -403,10 +407,10 @@
 
 <!-- example abstract config //-->
 <system> 
-    <spec name="zynq" />
+	<spec name="zynq" />
 
-    <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
-    <child function="Network" />
+	<!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
+	<child function="Network" />
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="zynq">

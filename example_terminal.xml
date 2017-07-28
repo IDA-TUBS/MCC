@@ -44,9 +44,9 @@
 			 * mux:      A multiplexer which transforms a provided service interface with max_clients=1 to max_clients>1.
 			 * protocol: A protocol stack that converts between different service interfaces without changing the data.
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
-							 service interface Y) and vice versa.
+			             service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
-							 interface (complementary to the protocol stack).
+			             interface (complementary to the protocol stack).
 
 		  By default, a component is unclassified. 
 	//-->
@@ -136,7 +136,7 @@
 		</defaults>
 	</component>
 
-    <composite name="Nitpicker_GUI">
+	<composite name="Nitpicker_GUI">
 		<!-- In addition to providing the GUI function, the nitpicker also acts as a multiplexer and protocol stack, i.e.
 			  it mediates the access to the Input and Framebuffer driver and, at the same time, provides the multiplexed
 			  service in form of a Nitpicker session interface. However, those complex multi-purpose components are not
@@ -151,18 +151,18 @@
             <function name="INPUT_DRV" />
 		</requires>
 
-        <pattern>
-            <component name="nitpicker">
-                <route>
-                    <service name="Framebuffer"> <function name="FB_DRV" /> </service>
-                    <service name="Input"> <function name="INPUT_DRV" /> </service>
-                </route>
-                <expose>
-                    <service name="Nitpicker" />
-                </expose>
-            </component>
-        </pattern>
-    </composite>
+		<pattern>
+				<component name="nitpicker">
+					<route>
+						<service name="Framebuffer"> <function name="FB_DRV" /> </service>
+						<service name="Input"> <function name="INPUT_DRV" /> </service>
+					</route>
+					<expose>
+						<service name="Nitpicker" />
+					</expose>
+				</component>
+		</pattern>
+	</composite>
 
 	<component name="nit_fb">
 		<!-- This component acts as a protocol stack that converts the Nitpicker service to a Framebuffer and Input
@@ -279,7 +279,7 @@
 <!-- example abstract config //-->
 <system>
 
-    <spec name="sdl" />
+	<spec name="sdl" />
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
@@ -296,17 +296,17 @@
 
 		<subsystem name="init1.2">
 
-            <child function="GUI" />
+			<child function="GUI" />
 
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
 			<child component="pointer" />
 
-            <!-- manually insert graphical LOG //-->
-            <child composite="gui2log" name="foobar" />
+			<!-- manually insert graphical LOG //-->
+			<child composite="gui2log" name="foobar" />
 
 			<child component="launchpad">
 				<route>
-                    <!-- route LOG to gui2log //-->
+					<!-- route LOG to gui2log //-->
 					<service name="LOG"><child name="foobar" /></service>
 				</route>
 
