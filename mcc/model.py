@@ -72,16 +72,42 @@ class Component:
     def component(self):
         return self.xml
 
-class SystemGraph(framework.Registry):
+class PlatformModel(object):
+
+    def __init__(self):
+        self.platform_graph = nx.DiGraph()
+
+    def reachable(self, from_component, to_component):
+        # TODO implement
+        return
+
+class SubsystemModel(PlatformModel):
+    # the subsystem graph models the (hierarchical) structure of the subsystems
+
+    def __init__(self):
+        PlatformModel.__init__(self)
+        self.subsystem_root = None
+        self.subsystem_graph = self.platform_graph
+
+    def add_subsystem(self, subsystem, parent=None):
+        self.subsystem_graph.add_node(subsystem)
+
+        if parent is not None:
+            if parent not in self.subsystem_graph:
+                raise Exception("Cannot find parent '%s' in subsystem graph." % parent)
+            self.subsystem_graph.add_edge(parent, subsystem)
+        else:
+            self.subsystem_root = subsystem
+
+
+class SystemModel(framework.Registry):
     def __init__(self, repo):
         add_layer('func_arch')
         add_layer('comm_arch')
         add_layer('comp_arch')
         add_layer('comp_inst')
 
-        # the subsystem graph models the (hierarchical) structure of the subsystems
-        self.subsystem_graph = nx.DiGraph()
-        self.subsystem_root = None
+        self.platform_graph = PlatformModel()
 
         self.repo = repo
 
@@ -99,17 +125,7 @@ class SystemGraph(framework.Registry):
         # TODO reset/invalidate all graphs
         return
 
-    def add_subsystem(self, subsystem, parent=None):
-        self.subsystem_graph.add_node(subsystem)
-
-        if parent is not None:
-            if parent not in self.subsystem_graph:
-                raise Exception("Cannot find parent '%s' in subsystem graph." % parent)
-            self.subsystem_graph.add_edge(parent, subsystem)
-        else:
-            self.subsystem_root = subsystem
-
-    def add_query(self, child, subsystem=None):
+    def add_query(self, child, platform_component=None):
         # FIXME reset/invalidate component graph
         assert(len(self.component_graph) == 0)
 
@@ -118,8 +134,8 @@ class SystemGraph(framework.Registry):
         fa.add_node(child)
 
         # set pre-defined mapping
-        if subsystem is not None:
-            fa.node.set_param_candidates('mapping', child, set([subsystem]))
+        if platform_component is not None:
+            fa.node.set_param_candidates('mapping', child, set([platform_component]))
 
         # set pre-defined transformation patterns
         if "component" in child.keys():
@@ -167,6 +183,7 @@ class SystemGraph(framework.Registry):
         return self.subsystem_graph.successors(subsystem)
 
     def children(self, subsystem):
+        # TODO refactor
         if subsystem is None:
             return self.query_graph.nodes()
 
@@ -177,16 +194,16 @@ class SystemGraph(framework.Registry):
 
         return children
 
-    def explicit_routes(self, child):
-        res_in = list()
-        for e in self.query_in_edges(child):
-            res_in.append(e.attr)
-
-        res_out = list()
-        for e in self.query_out_edges(child):
-            res_out.append(e.attr)
-
-        return res_in, res_out
+#    def explicit_routes(self, child):
+#        res_in = list()
+#        for e in self.query_in_edges(child):
+#            res_in.append(e.attr)
+#
+#        res_out = list()
+#        for e in self.query_out_edges(child):
+#            res_out.append(e.attr)
+#
+#        return res_in, res_out
 
     def get_alternatives(self, child):
         return self.query_graph.node[child]['options'] - self.query_graph.node[child]['dismissed']
@@ -276,43 +293,43 @@ class SystemGraph(framework.Registry):
 
         return True
 
-    def query_in_edges(self, node):
-        edges = list()
-        for (s, t, d) in self.query_graph.in_edges(node, data=True):
-            edges = edges + d['container']
-
-        return edges
-
-    def query_out_edges(self, node):
-        edges = list()
-        for (s, t, d) in self.query_graph.out_edges(node, data=True):
-            edges = edges + d['container']
-
-        return edges
-
-    def query_edges(self, nbunch=None):
-        edges = list()
-        for (s, t, d) in self.query_graph.edges(nbunch=nbunch, data=True):
-            edges = edges + d['container']
-
-        return edges
-
-    def add_query_edge(self, s, t, attr):
-        edge = Edge(s, t, attr)
-        if self.query_graph.has_edge(s, t):
-            self.query_graph.edge[s][t]['container'].append(edge)
-        else:
-            self.query_graph.add_edge(s, t, { 'container' : [edge] })
-
-        return edge
-
-    def remove_query_edge(self, edge):
-        if self.query_graph.has_edge(edge.source, edge.target):
-            self.query_graph.edge[edge.source][edge.target]['container'].remove(edge)
-            if len(self.query_graph.edge[edge.source][edge.target]['container']) == 0:
-                self.query_graph.remove_edge(edge.source, edge.target)
-        else:
-            raise Exception("trying to remove non-existing edge")
+#    def query_in_edges(self, node):
+#        edges = list()
+#        for (s, t, d) in self.query_graph.in_edges(node, data=True):
+#            edges = edges + d['container']
+#
+#        return edges
+#
+#    def query_out_edges(self, node):
+#        edges = list()
+#        for (s, t, d) in self.query_graph.out_edges(node, data=True):
+#            edges = edges + d['container']
+#
+#        return edges
+#
+#    def query_edges(self, nbunch=None):
+#        edges = list()
+#        for (s, t, d) in self.query_graph.edges(nbunch=nbunch, data=True):
+#            edges = edges + d['container']
+#
+#        return edges
+#
+#    def add_query_edge(self, s, t, attr):
+#        edge = Edge(s, t, attr)
+#        if self.query_graph.has_edge(s, t):
+#            self.query_graph.edge[s][t]['container'].append(edge)
+#        else:
+#            self.query_graph.add_edge(s, t, { 'container' : [edge] })
+#
+#        return edge
+#
+#    def remove_query_edge(self, edge):
+#        if self.query_graph.has_edge(edge.source, edge.target):
+#            self.query_graph.edge[edge.source][edge.target]['container'].remove(edge)
+#            if len(self.query_graph.edge[edge.source][edge.target]['container']) == 0:
+#                self.query_graph.remove_edge(edge.source, edge.target)
+#        else:
+#            raise Exception("trying to remove non-existing edge")
 
     def add_component(self, component_xml):
         node = Component(component_xml)
@@ -587,6 +604,7 @@ class SystemGraph(framework.Registry):
                                                 style))
 
     def write_query_dot(self, filename):
+        # TODO continue refactoring
     
         with open(filename, 'w+') as dotfile:
             dotfile.write("digraph {\n")
@@ -1019,19 +1037,20 @@ class SystemGraph(framework.Registry):
 class Mcc:
 
     def __init__(self):
-        self.graph = SystemGraph()
+        self.model = SystemModel()
 
     def search_config(self):
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 1) we create a new system model
-        self.graph.reset()
+        self.model.reset()
 
         # 2) we parse the platform model (here: subsystem structure)
         # 3) we parse the queried components/functions from the subsystem structure
-        config = SystemConfig(self._root.find("system"), self.graph)
+        config = SystemConfig(self._root.find("system"), self.model)
         config.parse()
 
+        # TODO output parsed config
 
         # FIXME (continue refactoring)
 

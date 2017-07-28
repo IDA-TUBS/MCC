@@ -726,6 +726,8 @@ class ConfigModelParser:
                     indent += '  '
                 mdfile.write('```\n')
 
+                # TODO lookup elements from example file and add comments/annotations
+
                 # print attribute table
                 mdfile.write('\n| attribute | use | type |\n')
                 mdfile.write(  '|-----------|-----|------|\n')
@@ -843,7 +845,7 @@ class SubsystemConfig:
 
     def parse(self):
         # add subsystem to graph
-        self.graph().add_subsystem(self, self.parent)
+        self.model().add_subsystem(self, self.parent)
 
         for sub in self.root.findall("subsystem"):
             name = sub.get("name")
@@ -992,13 +994,13 @@ class SubsystemConfig:
         return self.parent.graph()
 
 class SystemConfig(SubsystemConfig):
-    def __init__(self, root_node, model, graph):
+    def __init__(self, root_node, model):
         SubsystemConfig.__init__(self, root_node, None, model)
         self.specs = set()
-        self.system_graph = graph
+        self.system_model = model
 
-    def graph(self):
-        return self.system_graph
+    def model(self):
+        return self.system_model
 
     def parse(self):
         # recursively parse subsystem config
@@ -1013,7 +1015,7 @@ class SystemConfig(SubsystemConfig):
 
     def parse_routes(self):
         # parse routes between children
-        fa = self.graph().by_name['func_arch']
+        fa = self.model().by_name['func_arch']
         for child in fa.nodes():
             if child.find("route") is not None:
                 for s in child.find("route").findall("service"):
@@ -1025,14 +1027,13 @@ class SystemConfig(SubsystemConfig):
                                 if 'label' in s.keys():
                                     fa.edge[child][target]['label'] = s.get('label')
                                 break
-        # TODO continue here
                     elif s.find("function") is not None:
                         fname = s.find('function').get('name')
-                        for target in self.query_graph.nodes():
+                        for target in fa.nodes():
                             if fname in self.provisions(target, 'function'):
-                                edge = self.add_query_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+                                edge = fa.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
                                 if 'label' in s.keys():
-                                    edge.attr['label'] = s.get('label')
+                                    fa.edge[child][target]['label'] = s.get('label')
                     else:
                         raise Exception("ERROR")
         return
@@ -1049,12 +1050,13 @@ class SystemConfig(SubsystemConfig):
 
     def _check_explicit_routes(self, component, child):
         # check provisions for each incoming edge
-        provides, requires = self.graph().explicit_routes(child)
+        provides = self.model().by_name['func_arch'].in_edges(child)
+        requires = self.model().by_name['func_arch'].out_edges(child)
         for p in provides:
             if 'function' in p:
                 found = False
                 if component.find('provides') is not None:
-                    if len(self.model._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
+                    if len(self.model().repo._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
                         found = True
 
                 if not found:
@@ -1064,7 +1066,7 @@ class SystemConfig(SubsystemConfig):
             else: # service
                 found = False
                 if component.find('provides') is not None:
-                    if len(self.model._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
+                    if len(self.model().repo._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
                         found = True
                 if not found:
                     logging.info("Child component '%s' does not provide service '%s'." % (component.get('name'), p['service']))
@@ -1074,7 +1076,7 @@ class SystemConfig(SubsystemConfig):
         for r in requires:
             found = False
             if component.find('requires') is not None:
-                if len(self.model._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
+                if len(self.model().repo._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
                     found = True
             if not found:
                 logging.info("Child component '%s' does not require routed service '%s'." % (component.get('name'), r['service']))
@@ -1084,47 +1086,47 @@ class SystemConfig(SubsystemConfig):
 
     def connect_functions(self):
         # choose compatible components based on explicit routes
-        for c in self.graph().children(None):
-            if not self.graph().find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
+        for c in self.model().children(None):
+            if not self.model().repo.find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
                 logging.critical("Failed to satisfy explicit routes for child '%s'." % c.attrib)
                 return False
 
-        if not self.graph().connect_functions():
+        if not self.model().connect_functions():
             return False
 
         # solve reachability
-        if not self.graph().insert_proxies():
+        if not self.model().insert_proxies():
             logging.critical("Cannot insert proxies.")
             return False
 
         # connect function requirements of proxies
-        if not self.graph().connect_functions():
+        if not self.model().connect_functions():
             return False
 
         return True
 
     def solve_dependencies(self):
 
-        self.graph().build_component_graph()
+        self.model().build_component_graph()
 
         # check/expand explicit routes (uses protocol to solve compatibility problems)
-        if not self.graph().solve_routes():
+        if not self.model().solve_routes():
             return False
 
         # solve pending requirements
         # warn if multiple candidates exist and dependencies are not decidable
-        if not self.graph().solve_pending():
+        if not self.model().solve_pending():
             return False
 
-        if not self.graph().insert_muxers():
+        if not self.model().insert_muxers():
             return False
 
         # (heuristically) map unmapped components to lowest subsystem
-        if not self.graph().map_unmapped_components():
+        if not self.model().map_unmapped_components():
             return False
 
         # merge non-singleton components
-        self.graph().merge_components(singleton=False)
+        self.model().merge_components(singleton=False)
 
         return True
 
@@ -1141,4 +1143,4 @@ class SystemConfig(SubsystemConfig):
         return self.specs
 
     def provided_functions(self):
-        return self.graph().functions
+        return self.model().functions

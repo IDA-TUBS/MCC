@@ -1,5 +1,5 @@
-import nx
 import logging
+from . import graph
 
 class Registry:
     def __init__(self):
@@ -12,16 +12,16 @@ class Registry:
 
 class Layer:
     def __init__(self, name):
-        self.graph = nx.MultiDiGraph()
+        self.graph = Graph()
         self.name = name
 
     def _get_params(self, obj):
-        if isinstance(obj, tuple):
+        if isinstance(obj, Edge):
             # obj is an edge
-            attributes = self.graph.edge[obj[0]][obj[1]][obj[2]]
+            attributes = self.graph.edge_attributes(obj)
         else:
             # obj is a node
-            attributes = self.graph.node[obj]
+            attributes = self.graph.node_attributes(obj)
 
         if 'params' not in attributes:
             attributes['params'] = dict()
