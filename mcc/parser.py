@@ -155,10 +155,9 @@ class ConfigModelParser:
                             "component" : { "required-attrs" : ["name"], "optional-attrs" : ["singleton", "version"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
                                                                             "optional-attrs" : ["max_clients", "filter"], },
-                                                              "function": { "required-attrs" : ["name"] },
                                                               "rte"     : { "required-attrs" : ["name"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter"],
+                                                                            "optional-attrs" : ["label", "filter", "function"],
                                                                             "children" : {
                                                                                 "exclude-component" : { 
                                                                                     "required-attrs" : ["name"],
@@ -174,6 +173,7 @@ class ConfigModelParser:
                                     "reset"  : { "required-attrs" : ["tag"] },
                                     }
                                 },
+                                "function" : { "required-attrs" : ["name"] },
                                 "mux"      : { "required-attrs" : ["service"] },
                                 "protocol" : { "required-attrs" : ["from", "to"] },
                                 "defaults" : { "leaf" : False },
@@ -181,26 +181,24 @@ class ConfigModelParser:
                             },
                             "composite" : { "optional-attrs" : ["name"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients", "filter"], },
-                                                              "function": { "required-attrs" : ["name"] }, } },
+                                                                            "optional-attrs" : ["max_clients", "filter"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter"] },
-                                                              "function": { "required-attrs" : ["name"] } } },
+                                                                            "optional-attrs" : ["label", "filter", "function"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
-                                "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
+                                "filter"   : { "max" : 1, "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
                                     "reset"  : { "required-attrs" : ["tag"] },
                                     }
                                 },
                                 "mux"      : { "required-attrs" : ["service"] },
+                                "function" : { "required-attrs" : ["name"] },
                                 "protocol" : { "required-attrs" : ["from", "to"] },
                                 "pattern"  : { "min" : 1, "children" : {
                                     "component" : { "min" : 1, "required-attrs" : ["name"], "children" : {
                                         "route" : { "max" : 1, "children" : {
-                                            "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                                "function" : { "required-attrs" : ["name"] },
-                                                "service"  : { },
+                                            "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label", "function", "filter"],  "children" : {
+                                                "external"  : { },
                                                 "child"    : { "required-attrs" : ["name"] }
                                                 }}
                                             }},
