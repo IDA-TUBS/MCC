@@ -34,8 +34,6 @@
 			 * service: Specifies the service interface, i.e. the communication on the IPC/RPC level.
 			 * spec: Describes a platform requirement.
 			 * rte: Specifies the required/provided run-time environment.
-			 * function: (Unambiguously) identifies a requirement/provision to/of an implementation- and
-			             platform-independent abstract service (functionality).
 
 		  A function is thus a means to model dependencies between components (or even functions) in a more generic way.
 		  The end user does typically not (want to) care about, e.g., what component implements the network driver or how
@@ -53,7 +51,8 @@
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
 							 service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
-							 interface (complementary to the protocol stack).
+			             interface (complementary to the protocol stack).
+			 * function: (Unambiguously) identifies a particular (but platform- and implementation-independent functionaliy.
 
 		  By default, a component is unclassified. 
 	//-->
@@ -77,17 +76,12 @@
 
 	<!-- Camera driver must be a singleton (at most one instance) as it needs exclusive access to the hardware. //-->
 	<component name="camera" singleton="true">
-		<!-- This component is implicitly classified as a function provider. //-->
+		<!-- This component is classified as a function provider. //-->
+		<function name="CAMERA" />
 
 		<provides>
 			<!-- The camera driver provides a left and a right image to the clients (depending on the session label?). //-->
 			<service name="ROM" />
-
-			<!-- list implemented functions
-
-					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder for a service
-					 implemented by an atomic or a composite component.  //-->
-			<function name="CAMERA" />
 		</provides>
 		<requires>
 			<!-- list specs (i.e. platform compatibility) //-->
@@ -96,9 +90,8 @@
 	</component>
 
 	<component name="debay_left">
-		<!-- This is a filter component. Filters can be modelled by tags that are added/removed/replaced. An alias can be
-			  defined to associate the service interfaces with this filter (for component-internal use only). //-->
-		<filter alias="main">
+		<!-- This is a filter component. Filters can be modelled by tags that are added/removed/replaced. //-->
+		<filter>
 			<!-- Add the `debay` tag to indicate that the provided image has been debayered. //-->
 			<add tag="debay" />
 			<!-- Remove the `right` tag since this component extracts only the left image from the camera. //-->
@@ -106,10 +99,11 @@
 		</filter>
 
 		<provides>
-			<service name="ROM" filter="main" />
+			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="main" />
+			<!-- service requirements can be constrained by the presence/absence of filter tags (e.g. 'left !debay') //-->
+			<service name="ROM" filter="left" />
 		</requires>
 
 		<!-- specify default configuration //-->
@@ -129,7 +123,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" />
+			<service name="ROM" filter="left" />
 		</requires>
 
 		<defaults>
@@ -148,7 +142,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" />
+			<service name="ROM" filter="right" />
 		</requires>
 
 		<defaults>
@@ -167,7 +161,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" />
+			<service name="ROM" filter="right" />
 		</requires>
 
 		<defaults>
@@ -177,6 +171,7 @@
 	
 	<component name="disp_to_pc">
 		<filter>
+			<!-- remove all tags and replace with new ones //-->
 			<reset tag="pointcloud" />
 		</filter>
 
@@ -200,9 +195,9 @@
 	</component>
 
 	<component name="nic_drv" singleton="true">
+		<function name="Network" />
 		<provides>
 			<service name="Nic" max_clients="1" />
-			<function name="Network" />
 		</provides>
 	</component>
 
@@ -211,7 +206,6 @@
 
 		<provides>
 			<service name="Nic" /> <!-- max_clients defaults to an unlimited number //-->
-			<function name="Network" />
 		</provides>
 		<requires>
 			<service name="Nic" />
@@ -239,7 +233,7 @@
 
     <component name="object_recog">
         <requires>
-            <service name="ROM" />
+            <service name="ROM" filter="pointcloud" />
         </requires>
     </component>
 
@@ -259,7 +253,7 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
-            <function name="Network" />
+			<service name="Nic" function="Network" />
 		</requires>
 
 		<pattern>
@@ -268,40 +262,36 @@
                 <expose>
                     <service name="ROM" />
                 </expose>
-                <route>
-                    <service name="Nic"><function name="Network" /></service>
-                </route>
             </component>
             <component name="remote_rom_server">
                 <route>
-                    <service name="ROM"><service /></service>
-                    <service name="Nic"><function name="Network" /></service>
+						 <service name="ROM"><external /></service>
                 </route>
             </component>
 		</pattern>
 	</composite>
 
 	<composite>
-		<!-- This component is implicitly classified as a function provider. //-->
+		<!-- This component is classified as a function provider. //-->
+		<function name="STEREO_MATCH" />
 
 		<!-- Provisions and requirements could (in principle) be derived from the patterns. However, it is supposedly a
 			  good idea to specify at this level to what specification all pattern must adhere. //-->
 		<provides>
-			<function name="STEREO_MATCH" />
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<function name="CAMERA" />
+			<service name="ROM" function="CAMERA" />
 		</requires>
 
 		<pattern>
 			<component name="debay_left">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external/></service></route>
 			</component>
 			<component name="debay_right">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external/></service></route>
 			</component>
 			<component name="rect_left">
 				<!-- route ROM requirement internally //-->
@@ -326,10 +316,10 @@
 
 		<pattern>
 			<component name="rect_left">
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 			<component name="rect_right">
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 			<component name="stereo_match">
 				<route>
@@ -344,18 +334,18 @@
 	</composite>
 
 	<composite>
+		<function name="DISP_TO_PC" />
 		<provides>
-			<function name="DISP_TO_PC" />
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<function name="CAMERA" />
-			<function name="STEREO_MATCH" />
+			<service name="ROM" function="CAMERA" />
+			<service name="ROM" function="STEREO_MATCH" />
 		</requires>
 
 		<pattern>
 			<component name="debay_left">
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 
 			<component name="rect_left">
@@ -365,7 +355,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_left" /></service>
-					<service name="ROM" label="disp"><function name="STEREO_MATCH" /></service>
+					<service name="ROM" label="disp"><external /></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -379,7 +369,7 @@
 
 		<pattern>
 			<component name="debay_right">
-				<route><service name="ROM"><function name="CAMERA" /></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 
 			<component name="rect_right">
@@ -389,7 +379,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_right" /></service>
-					<service name="ROM" label="disp"><function name="STEREO_MATCH" /></service>
+					<service name="ROM" label="disp"><external /></service>
 				</route>
 				<expose>
 					<service name="ROM" />
