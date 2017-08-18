@@ -27,8 +27,6 @@
 			 * service: Specifies the service interface, i.e. the communication on the IPC/RPC level.
 			 * spec: Describes a platform requirement.
 			 * rte: Specifies the required/provided run-time environment.
-			 * function: (Unambiguously) identifies a requirement/provision to/of an implementation- and
-			             platform-independent abstract service (functionality).
 
 		  A function is thus a means to model dependencies between components (or even functions) in a more generic way.
 		  The end user does typically not (want to) care about, e.g., what component implements the network driver or how
@@ -46,26 +44,20 @@
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
 							 service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
-							 interface (complementary to the protocol stack).
+			             interface (complementary to the protocol stack).
+			 * function: (Unambiguously) identifies a particular (but platform- and implementation-independent functionaliy.
 
 		  By default, a component is unclassified. 
 	//-->
 
 	<!-- A driver must be a singleton (at most one instance) as it needs exclusive access to the hardware. //-->
 	<component name="fb_sdl" singleton="true">
-		<!-- This component is implicitly classified as a function provider. //-->
 
 		<provides>
 			<!-- list provided services //-->
 			<service name="Framebuffer" max_clients="1" /> <!-- max_clients defaults to an unlimited number //-->
 			<service name="Input" max_clients="1" />
 
-			<!-- list implemented functions
-
-					 A function is a more abstract (i.e. implementation- and platform-independent) placeholder for a service
-					 implemented by an atomic or a composite component.  //-->
-			<function name="FB_DRV" />
-			<function name="INPUT_DRV" />
 		</provides>
 		<requires>
 			<!-- list specs (i.e. platform compatibility) //-->
@@ -77,10 +69,7 @@
 	</component>
 
 	<component name="fb_drv" version="100" singleton="true">
-		<!-- This component is implicitly classified as a function provider. //-->
-
 		<provides>
-			<function name="FB_DRV" />
 			<service name="Framebuffer" max_clients="1" />
 		</provides>
 		<requires>
@@ -89,10 +78,7 @@
 	</component>
 	
 	<component name="fb_drv" version="090" singleton="true">
-		<!-- This component is implicitly classified as a function provider. //-->
-
 		<provides>
-			<function name="FB_DRV" />
 			<service name="Framebuffer" max_clients="1" />
 		</provides>
 		<requires>
@@ -101,10 +87,7 @@
 	</component>
 
 	<component name="ps2_drv" singleton="true">
-		<!-- This component is implicitly classified as a function provider. //-->
-
 		<provides>
-			<function name="INPUT_DRV" />
 			<service name="Input" max_clients="1" />
 		</provides>
 		<requires>
@@ -113,7 +96,8 @@
 	</component>
 
 	<component name="nitpicker">
-		<!-- This component will be classified in the scope of a composite. //-->
+		<function name="GUI" />
+
 		<provides>
 			<service name="Nitpicker" />
 		</provides>
@@ -136,33 +120,33 @@
 		</defaults>
 	</component>
 
-    <composite name="Nitpicker_GUI">
-		<!-- In addition to providing the GUI function, the nitpicker also acts as a multiplexer and protocol stack, i.e.
-			  it mediates the access to the Input and Framebuffer driver and, at the same time, provides the multiplexed
-			  service in form of a Nitpicker session interface. However, those complex multi-purpose components are not
-			  expected to be suitable for auto-insertion, we therefore model the nitpicker only as a function
-			  provider. //-->
-		<provides>
-			<function name="GUI" />
-			<service name="Nitpicker" />
-		</provides>
-		<requires>
-            <function name="FB_DRV" />
-            <function name="INPUT_DRV" />
-		</requires>
+	<composite>
+		<function name="INPUT_DRV" />
+		<pattern>
+			<component name="fb_sdl">
+				<expose><service name="Input" /></expose>
+			</component>
+		</pattern>
+		<pattern>
+			<component name="ps2_drv">
+				<expose><service name="Input" /></expose>
+			</component>
+		</pattern>
+	</composite>
 
-        <pattern>
-            <component name="nitpicker">
-                <route>
-                    <service name="Framebuffer"> <function name="FB_DRV" /> </service>
-                    <service name="Input"> <function name="INPUT_DRV" /> </service>
-                </route>
-                <expose>
-                    <service name="Nitpicker" />
-                </expose>
-            </component>
-        </pattern>
-    </composite>
+	<composite>
+		<function name="FB_DRV" />
+		<pattern>
+			<component name="fb_sdl">
+				<expose><service name="Framebuffer" /></expose>
+			</component>
+		</pattern>
+		<pattern>
+			<component name="fb_drv">
+				<expose><service name="Framebuffer" /></expose>
+			</component>
+		</pattern>
+	</composite>
 
 	<component name="nit_fb">
 		<!-- This component acts as a protocol stack that converts the Nitpicker service to a Framebuffer and Input
@@ -249,18 +233,14 @@
 		<provides>
 			<service name="LOG" />
 		</provides>
-		<requires>
-			<!-- We do not specify by which services this function is accessed as this may vary between the patterns. //-->
-			<function name="GUI" />
-		</requires>
 
 		<pattern>
 			<component name="terminal">
 				<route>
 					<!-- route Framebuffer requirement to the service provided by `GUI` function //-->
-					<service name="Framebuffer"><function name="GUI" /></service>
+					<service name="Framebuffer"><external /></service>
 					<!-- route Input requirement to the service provided by `GUI` function //-->
-					<service name="Input"><function name="GUI" /></service>
+					<service name="Input"><external /></service>
 				</route>
 			</component>
 			<component name="terminal_log">
