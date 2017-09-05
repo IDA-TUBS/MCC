@@ -6,6 +6,7 @@ import networkx as nx
 
 import logging
 import argparse
+from mcc import parser as cfgparser
 
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('file', metavar='xml_file', type=str, 
@@ -24,14 +25,14 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s')
     logging.getLogger().setLevel(logging.INFO)
 
-    parser = ConfigModelParser(args.file)
-    parser.check_structure()
-    parser.check_functions_unambiguous()
-    parser.check_components_unambiguous()
-    parser.check_classification_unambiguous()
-    parser.check_binaries()
-    parser.check_atomic_components()
-    parser.check_composite_components()
+    cfg = cfgparser.ConfigModelParser(args.file)
+    cfg.check_structure()
+#    parser.check_functions_unambiguous()
+#    parser.check_components_unambiguous()
+#    parser.check_classification_unambiguous()
+#    parser.check_binaries()
+#    parser.check_atomic_components()
+#    parser.check_composite_components()
 
 
-    parser.check_system()
+#    parser.check_system()

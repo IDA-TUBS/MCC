@@ -111,15 +111,22 @@ class SystemModel(framework.Registry):
 
         self.repo = repo
 
-        self.node_type_styles = { "subsystem" : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
-                                  "function"  : "shape=rectangle, colorscheme=set39, fillcolor=5, style=filled",
-                                  "composite" : "shape=component, colorscheme=set39, fillcolor=9, style=filled",
-                                  "component" : "shape=component, colorscheme=set39, fillcolor=6, style=filled" }
-        
-        self.edge_type_styles = { "subsystem"   : "",
-                                  "service"     : "arrowhead=normal",
-                                  "function"    : "arrowhead=normal, style=dotted, colorscheme=set39, color=3",
-                                  "mapping"     : "arrowhead=none, style=dashed, color=dimgray" }
+        self.dot_styles = { 
+                self.by_name['func_arch'] : 
+                { 'node' : ['shape=rectangle', 'colorscheme=set39', 'fillcolor=5', 'style=filled'],
+                  'edge' : 'arrowhead=normal, style=dotted, colorscheme=set39, color=3',
+                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
+                self.by_name['comp_arch'] :
+                { 'node' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
+                  'edge' : 'arrowhead=normal',
+                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
+                self.platform_graph :
+                { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
+                  'edge' : '' }
+                }
+
+        self.dot_styles[self.by_name['comm_arch']] = self.dot_styles[self.by_name['func_arch']]
+        self.dot_styles[self.by_name['comp_inst']] = self.dot_styles[self.by_name['comp_arch']]
 
     def reset(self):
         # TODO reset/invalidate all graphs
@@ -127,7 +134,7 @@ class SystemModel(framework.Registry):
 
     def add_query(self, child, platform_component=None):
         # FIXME reset/invalidate component graph
-        assert(len(self.component_graph) == 0)
+        assert(self.by_name['comp_arch'].graph().nodes() == 0)
 
         # add node to functional architecture layer
         fa = self.by_name['func_arch']
@@ -149,6 +156,7 @@ class SystemModel(framework.Registry):
                 fa.set_param_candidates('components', child, set(components))
 
         elif "composite" in child.keys():
+            # FIXME: do not distinguish between components and composites in the query
             components = self.repo._find_element_by_attribute("composite", { "name" : child.get("composite") })
             if len(components) == 0:
                 logging.error("Cannot find referenced child composite '%s'." % child.get("composite"))
@@ -167,6 +175,7 @@ class SystemModel(framework.Registry):
             else:
                 if len(functions) > 1:
                     logging.info("Multiple candidates found for child function '%s'." % child.get("function"))
+                    assert(False)
 
                 fa.set_param_candidates('components', child, set(functions))
 #                if functions[0].tag == "composite":
@@ -179,8 +188,8 @@ class SystemModel(framework.Registry):
 #        else:
 #            self.functions[name] = child
 
-    def subsystems(self, subsystem):
-        return self.subsystem_graph.successors(subsystem)
+#    def subsystems(self, subsystem):
+#        return self.subsystem_graph.successors(subsystem)
 
     def children(self, subsystem):
         # TODO refactor
@@ -1051,6 +1060,8 @@ class Mcc:
         config.parse()
 
         # TODO output parsed config
+        if args.dotpath is not None:
+            config.graph().write_query_dot(args.dotpath+"query_graph.dot")
 
         # FIXME (continue refactoring)
 
