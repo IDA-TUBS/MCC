@@ -122,6 +122,9 @@
 
 	<composite>
 		<function name="INPUT_DRV" />
+        <provides>
+            <service name="Input" />
+        </provides>
 		<pattern>
 			<component name="fb_sdl">
 				<expose><service name="Input" /></expose>
@@ -136,6 +139,9 @@
 
 	<composite>
 		<function name="FB_DRV" />
+        <provides>
+            <service name="Framebuffer" />
+        </provides>
 		<pattern>
 			<component name="fb_sdl">
 				<expose><service name="Framebuffer" /></expose>
@@ -238,9 +244,9 @@
 			<component name="terminal">
 				<route>
 					<!-- route Framebuffer requirement to the service provided by `GUI` function //-->
-					<service name="Framebuffer"><external /></service>
+					<service name="Framebuffer"><external function="GUI" /></service>
 					<!-- route Input requirement to the service provided by `GUI` function //-->
-					<service name="Input"><external /></service>
+					<service name="Input"><external function="GUI" /></service>
 				</route>
 			</component>
 			<component name="terminal_log">

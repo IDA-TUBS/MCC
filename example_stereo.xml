@@ -103,7 +103,7 @@
 		</provides>
 		<requires>
 			<!-- service requirements can be constrained by the presence/absence of filter tags (e.g. 'left !debay') //-->
-			<service name="ROM" filter="left" />
+			<service name="ROM" filter="left !debay" />
 		</requires>
 
 		<!-- specify default configuration //-->
@@ -123,7 +123,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="left" />
+			<service name="ROM" filter="left !rect" />
 		</requires>
 
 		<defaults>
@@ -142,7 +142,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="right" />
+			<service name="ROM" filter="right !debay" />
 		</requires>
 
 		<defaults>
@@ -161,7 +161,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="right" />
+			<service name="ROM" filter="right !rect" />
 		</requires>
 
 		<defaults>
@@ -266,6 +266,7 @@
             <component name="remote_rom_server">
                 <route>
 						 <service name="ROM"><external /></service>
+                         <service name="Nic"><external /></service>
                 </route>
             </component>
 		</pattern>
@@ -345,7 +346,7 @@
 
 		<pattern>
 			<component name="debay_left">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external function="CAMERA"/></service></route>
 			</component>
 
 			<component name="rect_left">
@@ -355,7 +356,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_left" /></service>
-					<service name="ROM" label="disp"><external /></service>
+					<service name="ROM" label="disp"><external function="STEREO_MATCH"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -369,7 +370,7 @@
 
 		<pattern>
 			<component name="debay_right">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external function="CAMERA"/></service></route>
 			</component>
 
 			<component name="rect_right">
@@ -379,7 +380,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_right" /></service>
-					<service name="ROM" label="disp"><external /></service>
+					<service name="ROM" label="disp"><external function="STEREO_MATCH"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -425,7 +426,7 @@
 		<!-- explicitly connect ROM service to DISP_TO_PC //-->
 		<child component="object_recog">
 			<route>
-				<service name="ROM"><function name="DISP_TO_PC" /></service>
+				<service name="ROM"><child name="DISP_TO_PC" /></service>
 			</route>
 		</child>
 

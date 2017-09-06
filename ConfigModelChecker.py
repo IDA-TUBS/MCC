@@ -158,22 +158,6 @@ class PatternManager:
 
         return components
 
-    def services_routed_to_function(self, composite, functionname):
-        result = set()
-        for c in self.patterns[composite]['chosen'].findall('component'):
-            if c.find('route') is not None:
-                for s in c.find('route').findall('service'):
-                    slabel = None
-                    if 'label' in s.keys():
-                        slabel = s.get('label')
-
-                    f = s.find('function')
-                    if f is not None:
-                        if functionname is None or f.get('name') == functionname:
-                            result.add((s.get('name'), slabel))
-
-        return result
-
     def component_exposing_service(self, composite, servicename):
         result = set()
         for c in self.patterns[composite]['chosen'].findall('component'):
@@ -201,11 +185,11 @@ class PatternManager:
                             slabel = s.get('label')
 
                         if label is None or slabel == label:
-                            if functionname is not None:
-                                if s.find('function') is not None and s.find('function').get('name') == functionname:
-                                    result.add((self._get_component_from_repo(c), slabel))
-                            else:
-                                if s.find('service') is not None or s.find('function') is not None:
+                            if s.find('external') is not None:
+                                if functionname is not None:
+                                    if 'function' in s.find('external').keys() and s.find('external').get('function') == functionname:
+                                        result.add((self._get_component_from_repo(c), slabel))
+                                else:
                                     result.add((self._get_component_from_repo(c), slabel))
                         else:
                             logging.info("label mismatch %s != %s" % (slabel, label))
@@ -334,13 +318,12 @@ class SystemGraph:
                                 if 'label' in s.keys():
                                     edge.attr['label'] = s.get('label')
                                 break
-                    elif s.find("function") is not None:
-                        fname = s.find('function').get('name')
-                        for target in self.query_graph.nodes():
-                            if fname in self.provisions(target, 'function'):
-                                edge = self.add_query_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+                            elif target.get("function") == s.find("child").get("name"):
+                                # we check later whether the target component actually provides this service
+                                edge = self.add_query_edge(child, target, {'service' : s.get("name"), 'function' : target.get('function')})
                                 if 'label' in s.keys():
                                     edge.attr['label'] = s.get('label')
+                                break
                     else:
                         raise Exception("ERROR")
         return
@@ -440,27 +423,33 @@ class SystemGraph:
     def connect_functions(self):
         for child in self.query_graph.nodes():
             chosen = self.query_graph.node[child]['chosen']
-            if chosen.find('requires') is not None:
-                for f in chosen.find('requires').findall('function'):
+            patternmanager = None if 'patterns' not in self.query_graph.node[child] else self.query_graph.node[child]['patterns']
+            if patternmanager is not None:
+                for c in patternmanager.patterns[chosen]['chosen'].findall('component'):
+                    if c.find('route') is not None:
+                        for s in c.find('route').findall('service'):
+                            if s.find('external') is not None and s.find('external').get('function') is not None:
+                                fname = s.find('external').get('function')
+                                provider = self.functions[fname]
 
-                    # function requirements are only allowed for composites
-                    assert(chosen.tag == "composite")
-                    fname = f.get('name')
-                    provider = self.functions[fname]
-                    # get services from chosen composite pattern
-                    for (sname, slabel) in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
-                        # skip if edge already exists
-                        exists = False
-                        for e in self.query_out_edges(child):
-                            if ('label' not in e.attr or e.attr['label'] == slabel) and e.attr['service'] == sname:
-                                if 'function' in e.attr:
-                                    if e.attr['function'] == fname:
-                                        exists = True
-                                else:
-                                    exists = True
+                                slabel = None
+                                if 'label' in s.keys():
+                                    slabel = s.get('label')
 
-                        if not exists:
-                            self.add_query_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
+                                sname = s.get('name')
+
+                                # skip if edge already exists
+                                exists = False
+                                for e in self.query_out_edges(child):
+                                    if ('label' not in e.attr or e.attr['label'] == slabel) and e.attr['service'] == sname:
+                                        if 'function' in e.attr:
+                                            if e.attr['function'] == fname:
+                                                exists = True
+                                        else:
+                                            exists = True
+
+                                if not exists:
+                                    self.add_query_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
 
         return True
 
@@ -1397,7 +1386,7 @@ class SystemConfig(SubsystemConfig):
             if 'function' in p:
                 found = False
                 if component.find('provides') is not None:
-                    if len(self.model._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
+                    if len(self.model._find_element_by_attribute('function', { 'name' : p['function'] }, component)):
                         found = True
 
                 if not found:
@@ -1501,7 +1490,6 @@ class ConfigModelParser:
                             "component" : { "required-attrs" : ["name"], "optional-attrs" : ["singleton", "version"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
                                                                             "optional-attrs" : ["max_clients", "filter"], },
-                                                              "function": { "required-attrs" : ["name"] },
                                                               "rte"     : { "required-attrs" : ["name"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
                                                                             "optional-attrs" : ["label", "filter"],
@@ -1514,6 +1502,7 @@ class ConfigModelParser:
                                                               "rte"     : { "max" : 1, "required-attrs" : ["name"] },
                                                               "spec"    : { "required-attrs" : ["name"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
+                                "function"    : { "required-attrs" : ["name"] },
                                 "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
@@ -1527,13 +1516,12 @@ class ConfigModelParser:
                             },
                             "composite" : { "optional-attrs" : ["name"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients", "filter"], },
-                                                              "function": { "required-attrs" : ["name"] }, } },
+                                                                            "optional-attrs" : ["max_clients"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter"] },
-                                                              "function": { "required-attrs" : ["name"] } } },
+                                                                            "optional-attrs" : ["label", "filter", "function"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
-                                "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
+                                "function"    : { "required-attrs" : ["name"] },
+                                "filter"   : { "max" : 1, "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
                                     "reset"  : { "required-attrs" : ["tag"] },
@@ -1545,8 +1533,7 @@ class ConfigModelParser:
                                     "component" : { "min" : 1, "required-attrs" : ["name"], "children" : {
                                         "route" : { "max" : 1, "children" : {
                                             "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                                "function" : { "required-attrs" : ["name"] },
-                                                "service"  : { },
+                                                "external"  : { "optional-attrs" : ["function"] },
                                                 "child"    : { "required-attrs" : ["name"] }
                                                 }}
                                             }},
@@ -1566,7 +1553,6 @@ class ConfigModelParser:
                                 "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
                                     "route" : { "max" : 1, "children" : {
                                         "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                            "function" : { "required-attrs" : ["name"] },
                                             "child"    : { "required-attrs" : ["name"] }
                                             }}
                                         }},
@@ -1588,17 +1574,13 @@ class ConfigModelParser:
         function_providers = list()
         # iterate components
         for c in self._root.findall("component"):
-            p = c.find("provides")
-            if p is not None:
-                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
-                    function_providers.append(c)
+            for f in self._find_element_by_attribute("function", { "name" : name }, root=c):
+                function_providers.append(c)
 
         # iterate composites
         for c in self._root.findall("composite"):
-            p = c.find("provides")
-            if p is not None:
-                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
-                    function_providers.append(c)
+            for f in self._find_element_by_attribute("function", { "name" : name }, root=c):
+                function_providers.append(c)
 
         return function_providers
 
@@ -1744,13 +1726,6 @@ class ConfigModelParser:
             else:
                 provides.add(p.get("name"))
 
-            # referenced filter must be defined
-            if "filter" in p.keys():
-                if len(self._find_element_by_attribute("filter", { "alias" : p.get("filter") }, component)) == 0:
-                    logging.error("Provision <service name=\"%s\" filter=\"%s\" /> refers to unknown alias." %
-                        (p.get("name"), p.get("filter")))
-
-
     def _check_requirements(self, component):
         if component.find("requires") is None:
             return
@@ -1760,20 +1735,22 @@ class ConfigModelParser:
             # service required twice must be distinguished by label
             if r.get("name") in services:
                 labels = set()
-                if "label" not in r.keys():
+                functions = set()
+                if "label" not in r.keys() and "function" not in r.keys():
                     logging.error("Requirement <service name=\"%s\" /> is ambiguous and must therefore specify a label." %(r.get("name")))
                 elif r.get("label") in labels:
                     logging.error("Requirement <service name=\"%s\" label=\"%s\" /> is ambiguous" % (r.get("name"), r.get("label")))
-                else:
+                elif r.get("function") in functions:
+                    logging.error("Requirement <service name=\"%s\" function=\"%s\" /> is ambiguous" % (r.get("name"), r.get("function")))
+                elif "label" in r.keys():
                     labels.add(r.get("label"))
+                elif "function" in r.keys():
+                    functions.add(r.get("function"))
             else:
                 services.add(r.get("name"))
 
             # referenced filter must be defined
-            if "filter" in r.keys():
-                if len(self._find_element_by_attribute("filter", { "alias" : r.get("filter") }, component)) == 0:
-                    logging.error("Requirement <service name=\"%s\" filter=\"%s\" /> refers to unknown alias." %
-                        (r.get("name"), r.get("filter")))
+            # FIXME check in a later stage that filter tags of connected component are correct (analysis engine)
 
         # functions must not be required twice
         functions = set()
@@ -1887,10 +1864,10 @@ class ConfigModelParser:
                         if len(self._find_element_by_attribute("service", { "name" : sname }, cspec.find("requires"))) == 0:
                             logging.error("Routing of unknown service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
 
-                    if s.find("function") != None:
-                        fname = s.find("function").get("name")
-                        if len(self._find_element_by_attribute("function", { "name" : fname }, composite.find("requires"))) == 0:
-                            logging.error("Routing of service '%s' to function '%s' does not match composite spec '%s'." % (sname, fname, composite.get("name")))
+#                    if s.find("function") != None:
+#                        fname = s.find("function").get("name")
+#                        if len(self._find_element_by_attribute("function", { "name" : fname }, composite.find("requires"))) == 0:
+#                            logging.error("Routing of service '%s' to function '%s' does not match composite spec '%s'." % (sname, fname, composite.get("name")))
 
                     if s.find("child") != None:
                         chname = s.find("child").get("name")
@@ -1899,7 +1876,7 @@ class ConfigModelParser:
                         else:
                             provided_services[chname]["used"].add(sname)
 
-                    if s.find("service") != None:
+                    if s.find("external") != None:
                         required_services[cname]["external"].add(sname)
 
             # references in <expose> must be specified
@@ -1909,39 +1886,41 @@ class ConfigModelParser:
                     provided_services[cname]["used"].add(sname)
                     provided_services[cname]["exposed"].add(sname)
                     if len(self._find_element_by_attribute("service", { "name" : sname }, composite.find("provides"))) == 0:
-                        loggin.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
+                        logging.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
 
         # required external service must be pending exactly once
         # or explicitly routed to external service
-        for s in composite.find("requires").findall("service"):
-            sname = s.get("name")
-            pending_count = 0
-            for r in required_services.values():
-                if sname in r['external']:
-                    pending_count = 1
-                    break
+        if composite.find("requires") is not None:
+            for s in composite.find("requires").findall("service"):
+                sname = s.get("name")
+                pending_count = 0
+                for r in required_services.values():
+                    if sname in r['external']:
+                        pending_count = 1
+                        break
 
-                if sname in r["specified"] - r["used"]:
-                    pending_count += 1
+                    if sname in r["specified"] - r["used"]:
+                        pending_count += 1
 
-            if pending_count != 1:
-                logging.error("Service '%s' required by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
+                if pending_count != 1:
+                    logging.error("Service '%s' required by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
 
         # provided external service must be either exposed or pending exactly once
-        for s in composite.find("provides").findall("service"):
-            sname = s.get("name")
-            exposed_count = 0
-            pending_count = 0
-            for p in provided_services.values():
-                if sname in p["exposed"]:
-                    exposed_count += 1
-                if sname in p["specified"] - p["used"]:
-                    pending_count += 1
+        if composite.find("provides") is not None:
+            for s in composite.find("provides").findall("service"):
+                sname = s.get("name")
+                exposed_count = 0
+                pending_count = 0
+                for p in provided_services.values():
+                    if sname in p["exposed"]:
+                        exposed_count += 1
+                    if sname in p["specified"] - p["used"]:
+                        pending_count += 1
 
-            if exposed_count > 1:
-                logging.error("Service '%s' exposed multiple times in composite '%s'." % (sname, composite.get("name")))
-            elif exposed_count == 0 and pending_count != 1:
-                logging.error("Service '%s' provided by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
+                if exposed_count > 1:
+                    logging.error("Service '%s' exposed multiple times in composite '%s'." % (sname, composite.get("name")))
+                elif exposed_count == 0 and pending_count != 1:
+                    logging.error("Service '%s' provided by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
 
     # perform model check for <component> nodes: 
     def check_atomic_components(self):
