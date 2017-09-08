@@ -1200,6 +1200,7 @@ class SubsystemConfig:
         self.parent = parent
         self.model = model
         self.rte = None
+        self.specs = set()
 
     def parse(self):
         # add subsystem to graph
@@ -1209,6 +1210,11 @@ class SubsystemConfig:
             name = sub.get("name")
             subsystem = SubsystemConfig(sub, self, self.model)
             subsystem.parse()
+
+        # parse <specs>
+        for s in self.root.findall("spec"):
+            self.specs.add(s.get("name"))
+
 
         # parse <child> nodes
         for c in self.root.findall("child"):
@@ -1340,7 +1346,7 @@ class SubsystemConfig:
         return services
 
     def system_specs(self):
-        return self.parent.system_specs()
+        return self.parent.system_specs() | self.specs
 
     def services(self):
         return self.parent_services() | self.child_services()
@@ -1362,10 +1368,6 @@ class SystemConfig(SubsystemConfig):
 
     def parse(self):
         SubsystemConfig.parse(self)
-
-        # parse <specs>
-        for s in self.root.findall("spec"):
-            self.specs.add(s.get("name"))
 
         # parse routes
         self.graph().parse_routes()
