@@ -1,0 +1,290 @@
+<config_model>
+	<binary name="LET_tx" />
+	<binary name="LET_rx" />
+	<binary name="speed_control" />
+	<binary name="steering" />
+	<binary name="tc" />
+	<binary name="acc" />
+	<binary name="imu_drv" />
+	<binary name="nic_drv" />
+	<binary name="nic_bridge" />
+	<binary name="long" />
+	<binary name="lat" />
+
+	<component name="imu" singleton="true">
+		<function name="IMU" />
+
+		<provides>
+			<service name="imu" type="legacy" />
+		</provides>
+		<requires>
+			<rte name="imu" />
+		</requires>
+	</component>
+
+	<component name="camera" singleton="true">
+		<function name="CAM" />
+
+		<provides>
+			<service name="camera" type="network" />
+		</provides>
+		<requires>
+			<rte name="camera" />
+		</requires>
+	</component>
+
+	<component name="radar" singleton="true">
+		<function name="RADAR" />
+
+		<provides>
+			<service name="radar" type="network" />
+		</provides>
+		<requires>
+			<rte name="radar" />
+		</requires>
+	</component>
+
+	<component name="imu_drv" singleton="true">
+		<protocol from="imu" to="ROM" />
+
+		<provides>
+			<service name="ROM" />
+		</provides>
+	</component>
+
+	<component name="steering" singleton="true">
+		<function name="STEERING" />
+
+		<provides>
+			<service name="CTRL_STEERING" />
+		</provides>
+		<requires>
+			<spec name="ecu1" />
+		</requires>
+	</component>
+
+	<component name="speed_control">
+		<function name="SPEED" />
+		<provides>
+			<service name="CTRL_SPEED" />
+		</provides>
+		<requires>
+			<spec name="ecu1" />
+		</requires>
+	</component>
+
+	<component name="tc">
+		<function name="TC" />
+
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="acc">
+		<function name="ACC" />
+		
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="long">
+		<function name="LONG" />
+		<requires>
+			<service name="ROM" label="velocity" />
+			<service name="ROM" label="accel" />
+		</requires>
+	</component>
+
+	<component name="lat">
+		<function name="LAT" />
+		<requires>
+			<service name="ROM" label="trajectory" />
+			<service name="ROM" label="gyro" />
+		</requires>
+	</component>
+
+	<component name="nic_drv" singleton="true">
+		<function name="Network" />
+		<provides>
+			<service name="Nic" max_clients="1" />
+		</provides>
+	</component>
+
+	<composite name="CAM_IF">
+		<protocol from="camera" to="Nic" />
+
+		<provides>
+			<service name="Nic" />
+		</provides>
+		<requires>
+			<service name="camera" />
+		</requires>
+
+		<pattern>
+			<component name="nic_drv">
+				<requires>
+					<service name="camera" />
+				</requires>
+				<expose>
+					<service name="Nic" />
+				</expose>
+				<route>
+					<service name="camera"><external /></service>
+				</route>
+			</component>
+		</pattern>
+	</composite>
+
+	<composite name="RADAR_IF">
+		<protocol from="radar" to="Nic" />
+
+		<provides>
+			<service name="Nic" />
+		</provides>
+		<requires>
+			<service name="radar" />
+		</requires>
+
+		<pattern>
+			<component name="nic_drv">
+				<requires>
+					<service name="radar" />
+				</requires>
+				<expose>
+					<service name="Nic" />
+				</expose>
+				<route>
+					<service name="radar"><external /></service>
+				</route>
+			</component>
+		</pattern>
+	</composite>
+
+	<component name="nic_bridge">
+		<mux service="Nic" />
+
+		<provides>
+			<service name="Nic" /> 
+		</provides>
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="LET_rx">
+		<provides>
+			<service name="ROM" />
+		</provides>
+
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="LET_tx">
+		<requires>
+			<service name="Nic" />
+			<service name="ROM" />
+		</requires>
+	</component>
+
+	<composite name="ROM_PROXY">
+		<proxy carrier="Nic" />
+
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+			<service name="Nic" function="Network" />
+		</requires>
+
+		<pattern>
+			<component name="LET_rx">
+				<expose>
+					<service name="ROM" />
+				</expose>
+			</component>
+			<component name="LET_tx">
+				<route>
+					<service name="ROM"><external /></service>
+					<service name="Nic"><external /></service>
+				</route>
+			</component>
+		</pattern>
+	</composite>
+
+<!-- example abstract config //-->
+<system> 
+	<subsystem name="ecu1">
+		<provides>
+			<spec name="ecu1" />
+			<spec name="nic" />
+		</provides>
+		<child function="SPEED" />
+		<child function="STEERING" />
+		<child function="LONG">
+			<route>
+				<service name="ROM" label="accel"><child name="imu" /></service>
+				<service name="CTRL_SPEED"><child name="SPEED" /></service>
+				<service name="ROM" label="velocity"><child name="ACC" /></service>
+			</route>
+		</child>
+		<child function="LAT">
+			<route>
+				<service name="ROM" label="gyro"><child name="imu" /></service>
+				<service name="CTRL_STEERING"><child name="STEERING" /></service>
+				<service name="ROM" label="trajectory"><child name="TC" /></service>
+			</route>
+		</child>
+
+		<subsystem name="imu">
+			<provides>
+				<rte name="imu" />
+				<spec name="imu" />
+			</provides>
+
+			<child function="IMU" />
+		</subsystem>
+	</subsystem>
+	<subsystem name="ecu2">
+		<provides>
+			<spec name="ecu2" />
+			<spec name="nic" />
+		</provides>
+		<child function="TC">
+			<route>
+				<service name="Nic"><child name="camera" /></service>
+			</route>
+		</child>
+		<child function="ACC">
+			<route>
+				<service name="Nic"><child name="radar" /></service>
+			</route>
+		</child>
+	</subsystem>
+
+	<subsystem name="camera">
+		<provides>
+			<spec name="camera" />
+		</provides>
+		<child function="CAM" />
+	</subsystem>
+	<subsystem name="radar">
+		<provides>
+			<spec name="radar" />
+		</provides>
+		<child function="RADAR" />
+	</subsystem>
+
+</system>
+
+</config_model>
