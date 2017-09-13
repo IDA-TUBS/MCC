@@ -219,16 +219,6 @@
 		</requires>
 	</component>
 
-	<component name="init">
-		<provides>
-			<!-- components can also provide a run-time environment //-->
-			<rte name="native" />
-		</provides>
-		<requires>
-			<!-- TODO list required services //-->
-		</requires>
-	</component>
-
 	<composite name="gui2log">
 		<!-- remark: A composite only specifies the "external" (i.e. functionally relevant) requirements/provisions.
 			          Internal requirements are taken from the component specifications. //-->
@@ -265,10 +255,13 @@
 <!-- example abstract config //-->
 <system>
 
-    <spec name="sdl" />
+    <provides>
+        <spec name="sdl" />
+    </provides>
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
+
 		<!-- we can decide on the component based on the rte requirements //-->
 
 		<!-- we can define some default routing rules for trivial services //-->

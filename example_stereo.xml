@@ -19,7 +19,6 @@
 	<binary name="nic_bridge" />
 	<binary name="remote_rom_client" />
 	<binary name="remote_rom_server" />
-	<binary name="init" />
 
 	<!-- (global) component repository
 		    * Contains the model description of all known components.
@@ -181,16 +180,6 @@
 		<requires>
 			<service name="ROM" label="disp" />
 			<service name="ROM" label="camera" />
-		</requires>
-	</component>
-
-	<component name="init">
-		<provides>
-			<!-- components can also provide a run-time environment //-->
-			<rte name="native" />
-		</provides>
-		<requires>
-			<!-- TODO list required services //-->
 		</requires>
 	</component>
 
@@ -394,7 +383,9 @@
 
 <!-- example abstract config //-->
 <system> 
-    <spec name="zynq" />
+    <provides>
+        <spec name="zynq" />
+    </provides>
 
     <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
     <child function="Network" />
