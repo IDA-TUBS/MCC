@@ -1,5 +1,5 @@
 import logging
-from . import graph
+from mcc.graph import *
 
 class Registry:
     def __init__(self):

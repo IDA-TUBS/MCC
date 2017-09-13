@@ -1,4 +1,6 @@
+import networkx as nx
 from . import parser
+from mcc.framework import *
 
 # wrapper class to allow multiple nodes of the same component
 class Component:
@@ -84,10 +86,25 @@ class PlatformModel(object):
 class SubsystemModel(PlatformModel):
     # the subsystem graph models the (hierarchical) structure of the subsystems
 
-    def __init__(self):
+    def __init__(self, parser):
         PlatformModel.__init__(self)
         self.subsystem_root = None
         self.subsystem_graph = self.platform_graph
+        self.parser = parser
+
+        self._parse()
+
+    def _parse(self, start=None):
+        if self.subsystem_root is None:
+            self.subsystem_root = self.parser.root()
+            self.add_subsystem(self.subsystem_root)
+
+        if start is None:
+            start = self.subsystem_root
+
+        for sub in start.subsystems():
+            self.add_subsystem(sub, parent=start)
+            self._parse(sub)
 
     def add_subsystem(self, subsystem, parent=None):
         self.subsystem_graph.add_node(subsystem)
@@ -100,15 +117,15 @@ class SubsystemModel(PlatformModel):
             self.subsystem_root = subsystem
 
 
-class SystemModel(framework.Registry):
-    def __init__(self, repo):
-        add_layer('func_arch')
-        add_layer('comm_arch')
-        add_layer('comp_arch')
-        add_layer('comp_inst')
+class SystemModel(Registry):
+    def __init__(self, repo, platform):
+        Registry.__init__(self)
+        self.add_layer(Layer('func_arch'))
+        self.add_layer(Layer('comm_arch'))
+        self.add_layer(Layer('comp_arch'))
+        self.add_layer(Layer('comp_inst'))
 
-        self.platform_graph = PlatformModel()
-
+        self.platform = platform
         self.repo = repo
 
         self.dot_styles = { 
@@ -120,7 +137,7 @@ class SystemModel(framework.Registry):
                 { 'node' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
                   'edge' : 'arrowhead=normal',
                   'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
-                self.platform_graph :
+                self.platform :
                 { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                   'edge' : '' }
                 }
@@ -1045,19 +1062,25 @@ class SystemModel(framework.Registry):
 
 class Mcc:
 
-    def __init__(self):
-        self.model = SystemModel()
+    def __init__(self, repo):
+        self.repo  = repo
 
-    def search_config(self):
+    def search_config(self, subsystem_xml, args):
         # check function/composite/component references, compatibility and routes in system and subsystems
 
-        # 1) we create a new system model
-        self.model.reset()
+        # 1) we parse the platform model (here: subsystem structure)
+        subsys_platform = SubsystemModel(parser.SubsystemParser(subsystem_xml))
 
-        # 2) we parse the platform model (here: subsystem structure)
-        # 3) we parse the queried components/functions from the subsystem structure
-        config = SystemConfig(self._root.find("system"), self.model)
-        config.parse()
+        # 2) we create a new system model
+        self.model = SystemModel(self.repo, subsys_platform)
+
+        # TODO 3) create query model (in SubsystemModel)
+
+        # TODO 4) create system model from query model
+
+#        # 3) we parse the queried components/functions from the subsystem structure
+#        config = SystemConfig(self._root.find("system"), self.model)
+#        config.parse()
 
         # TODO output parsed config
         if args.dotpath is not None:

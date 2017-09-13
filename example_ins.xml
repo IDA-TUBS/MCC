@@ -1,4 +1,5 @@
-<config_model>
+<xml>
+<repository>
 	<binary name="LET_tx" />
 	<binary name="LET_rx" />
 	<binary name="speed_control" />
@@ -223,6 +224,7 @@
 			</component>
 		</pattern>
 	</composite>
+</repository>
 
 <!-- example abstract config //-->
 <system> 
@@ -286,7 +288,5 @@
 		</provides>
 		<child function="RADAR" />
 	</subsystem>
-
 </system>
-
-</config_model>
+</xml>

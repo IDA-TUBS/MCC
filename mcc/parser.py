@@ -139,14 +139,84 @@ class PatternManager:
         # return set of added nodes
         return child_lookup.values()
 
-
-class ConfigModelParser:
-
-    def __init__(self, config_model_file):
-        self._file = config_model_file
+class XMLParser:
+    def __init__(self, xml_file):
+        self._file = xml_file
         if self._file is not None:
             self._tree = ET.parse(self._file)
             self._root = self._tree.getroot()
+
+        self._structure = dict()
+
+    # check XML structure
+    def check_structure(self, root=None, structure=None):
+        if root is None:
+            root = self._root
+        if structure is None:
+            structure = self._structure
+
+        node_count = dict()
+        # iterate direct child nodes
+        for node in root:
+            if node.tag in structure.keys():
+                # count number of appearances
+                if node.tag in node_count:
+                    node_count[node.tag] += 1
+                else:
+                    node_count[node.tag] = 1
+
+                # check node attributes
+                attr_present = node.keys()
+                attr_required = list()
+                attr_optional = list()
+                if "required-attrs" in structure[node.tag]:
+                    attr_required = structure[node.tag]["required-attrs"]
+                if "optional-attrs" in structure[node.tag]:
+                    attr_optional = structure[node.tag]["optional-attrs"]
+                attr_allowed  = attr_required + attr_optional
+
+                for attr in attr_present:
+                    if attr not in attr_allowed:
+                        logging.error("Unexpected attribute '%s' of node '<%s>'." % (attr, node.tag))
+
+                for attr in attr_required:
+                    if attr not in attr_present:
+                        logging.error("Required attribute '%s' not found for node '<%s>'." % (attr, node.tag))
+
+                # check children
+                leaf = True
+                if "leaf" in structure[node.tag]:
+                    leaf = structure[node.tag]["leaf"]
+
+                if "children" in structure[node.tag]:
+                    self.check_structure(node, structure[node.tag]["children"])
+                elif "recursive-children" in structure[node.tag] and structure[node.tag]["recursive-children"]:
+                    self.check_structure(node, structure)
+                elif leaf:
+                    self.check_structure(node, dict())
+                
+            else:
+                logging.error("Unexpected node '<%s>' below '<%s>'." % (node.tag, root.tag))
+
+        # check node_count
+        for tag in structure.keys():
+            found = 0
+            if tag in node_count:
+                found = node_count[tag]
+
+            if "min" in structure[tag]:
+                if found < structure[tag]["min"]:
+                    logging.error("Node '<%s>' must be present %d times below '<%s>' (found %d)." % 
+                            (tag, structure[tag]["min"], root.tag, found))
+            if "max" in structure[tag]:
+                if found > structure[tag]["max"]:
+                    logging.error("Node '<%s>' must not be present more than %d times below '<%s>' (found %d)." % 
+                            (tag, structure[tag]["max"], root.tag, found))
+
+class Repository(XMLParser):
+
+    def __init__(self, config_model_file):
+        XMLParser.__init__(self, config_model_file)
 
         self._structure = { "binary" : { "required-attrs" : ["name"], "children" : { "component" : { "min" : 0,
                                                                                                      "required-attrs" : ["name"],
@@ -212,33 +282,14 @@ class ConfigModelParser:
                                         }}
                                     }}
                                 }
-                            },
-                            "system" : { "max" : 1, "children" : {
-                                "provides" : { "max" : 1, "children" : {
-                                    "spec"    : { "required-attrs" : ["name"] },
-                                    "rte"     : { "required-attrs" : ["name"] },
-                                    "service" : { "required-attrs" : ["name"] }
-                                    }},
-                                "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
-                                    "route" : { "max" : 1, "children" : {
-                                        "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                            "child"    : { "required-attrs" : ["name"] }
-                                            }}
-                                        }},
-                                    "config"   : { "leaf" : False },
-                                    "resource" : { "required-attrs" : ["name", "quantum"] },
-                                    }},
-                                "default-routes" : { "leaf" : False },
-                                "subsystem" : { "required-attrs" : ["name"], "recursive-children" : True }
-                                }},
-                          }
+                            }}
 
         if self._file is not None:
-            # find <config_model>
-            if self._root.tag != "config_model":
-                self._root = self._root.find("config_model")
+            # find <repository>
+            if self._root.tag != "repository":
+                self._root = self._root.find("repository")
                 if self._root == None:
-                    raise Exception("Cannot find <config_model> node.")
+                    raise Exception("Cannot find <repository> node.")
 
     def _find_function_by_name(self, name):
         function_providers = list()
@@ -772,70 +823,81 @@ class ConfigModelParser:
 
                     self.structure_to_markdown(filename, structure[node]['children'], level=level+1, mdfile=mdfile, path=path+[node])
 
-    # check XML structure
-    def check_structure(self, root=None, structure=None):
-        if root is None:
-            root = self._root
-        if structure is None:
-            structure = self._structure
+class Subsystem:
+    def __init__(self, xml_node, parent=None):
+        self._root   = xml_node
+        self._parent = parent
+        self._subsystems = set()
 
-        node_count = dict()
-        # iterate direct child nodes
-        for node in root:
-            if node.tag in structure.keys():
-                # count number of appearances
-                if node.tag in node_count:
-                    node_count[node.tag] += 1
-                else:
-                    node_count[node.tag] = 1
+        self._parse()
 
-                # check node attributes
-                attr_present = node.keys()
-                attr_required = list()
-                attr_optional = list()
-                if "required-attrs" in structure[node.tag]:
-                    attr_required = structure[node.tag]["required-attrs"]
-                if "optional-attrs" in structure[node.tag]:
-                    attr_optional = structure[node.tag]["optional-attrs"]
-                attr_allowed  = attr_required + attr_optional
+    def _parse(self):
+        for sub in self._root.findall("subsystem"):
+            self._subsystems.add(Subsystem(sub, parent=self))
 
-                for attr in attr_present:
-                    if attr not in attr_allowed:
-                        logging.error("Unexpected attribute '%s' of node '<%s>'." % (attr, node.tag))
+    def specs(self):
+        specs = set()
+        if self._parent is not None:
+            specs = self._parent.specs()
+            
+        # parse <specs>
+        if self._root.find("provides") is not None:
+            for s in self._root.find("provides").findall("spec"):
+                specs.add(s.get("name"))
 
-                for attr in attr_required:
-                    if attr not in attr_present:
-                        logging.error("Required attribute '%s' not found for node '<%s>'." % (attr, node.tag))
+        return specs
 
-                # check children
-                leaf = True
-                if "leaf" in structure[node.tag]:
-                    leaf = structure[node.tag]["leaf"]
+    def rte(self):
+        # parse <rte>
+        if self._root.find("provides") is not None:
+            node = self._root.find("provides").find("rte")
+            if node is not None:
+                return node.get("name")
 
-                if "children" in structure[node.tag]:
-                    self.check_structure(node, structure[node.tag]["children"])
-                elif "recursive-children" in structure[node.tag] and structure[node.tag]["recursive-children"]:
-                    self.check_structure(node, structure)
-                elif leaf:
-                    self.check_structure(node, dict())
-                
-            else:
-                logging.error("Unexpected node '<%s>' below '<%s>'." % (node.tag, root.tag))
+        return "native"
 
-        # check node_count
-        for tag in structure.keys():
-            found = 0
-            if tag in node_count:
-                found = node_count[tag]
+    def subsystems(self):
+        return self._subsystems
 
-            if "min" in structure[tag]:
-                if found < structure[tag]["min"]:
-                    logging.error("Node '<%s>' must be present %d times below '<%s>' (found %d)." % 
-                            (tag, structure[tag]["min"], root.tag, found))
-            if "max" in structure[tag]:
-                if found > structure[tag]["max"]:
-                    logging.error("Node '<%s>' must not be present more than %d times below '<%s>' (found %d)." % 
-                            (tag, structure[tag]["max"], root.tag, found))
+    def parent(self):
+        return self._parent
+
+
+class SubsystemParser:
+    def __init__(self, xml_file):
+ 
+        XMLParser.__init__(self, xml_file)
+
+        self._structure = { "system" : { "max" : 1, "children" : {
+                                "provides" : { "max" : 1, "children" : {
+                                    "spec"    : { "required-attrs" : ["name"] },
+                                    "rte"     : { "required-attrs" : ["name"] },
+                                    "service" : { "required-attrs" : ["name"] }
+                                    }},
+                                "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
+                                    "route" : { "max" : 1, "children" : {
+                                        "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
+                                            "child"    : { "required-attrs" : ["name"] }
+                                            }}
+                                        }},
+                                    "config"   : { "leaf" : False },
+                                    "resource" : { "required-attrs" : ["name", "quantum"] },
+                                    }},
+                                "default-routes" : { "leaf" : False },
+                                "subsystem" : { "required-attrs" : ["name"], "recursive-children" : True }
+                                }}}
+
+        if self._file is not None:
+            # find <system>
+            if self._root.tag != "system":
+                self._root = self._root.find("system")
+                if self._root == None:
+                    raise Exception("Cannot find <system> node.")
+
+    def root(self):
+        return Subsystem(self._root)
+
+####################################################
 
 class SubsystemConfig:
     def __init__(self, root_node, parent, model):
