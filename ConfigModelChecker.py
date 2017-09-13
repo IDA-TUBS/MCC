@@ -377,7 +377,7 @@ class SystemGraph:
     def components(self, child):
         chosen = self.query_graph.node[child]['chosen']
         if chosen.tag == "component":
-            return set(chosen)
+            return set([chosen])
         else: # composite
             return self.query_graph.node[child]['patterns'].components(chosen)
 
@@ -1199,7 +1199,7 @@ class SubsystemConfig:
         self.root = root_node
         self.parent = parent
         self.model = model
-        self.rte = None
+        self.rte = "native"
         self.specs = set()
 
     def parse(self):
@@ -1212,9 +1212,13 @@ class SubsystemConfig:
             subsystem.parse()
 
         # parse <specs>
-        for s in self.root.findall("spec"):
-            self.specs.add(s.get("name"))
+        if self.root.find("provides") is not None:
+            p = self.root.find("provides")
+            for s in p.findall("spec"):
+                self.specs.add(s.get("name"))
 
+            if p.find("rte") is not None:
+                self.rte = p.find("rte").get("name")
 
         # parse <child> nodes
         for c in self.root.findall("child"):
@@ -1243,7 +1247,7 @@ class SubsystemConfig:
         if component.tag == "composite":
             return True
 
-        rtename = self.rte.find("provides").find("rte").get("name")
+        rtename = self.rte
 
         if self.get_rte(component) != rtename:
             logging.info("Component '%s' is incompatible because of RTE requirement '%s' does not match '%s'." % (self.get_rte(component), rtename))
@@ -1312,16 +1316,8 @@ class SubsystemConfig:
             return False
         else:
             # find component which provides this rte
-            for p in self.model._root.iter("provides"):
-                for r in p.findall("rte"):
-                    if r.get("name") in required_rtes:
-                        if self.rte is None:
-                            self.rte = [x for x in self.model._root.iter("component") if x.find("provides") is p][0]
-                        else:
-                            logging.warn("Multiple provider of RTE '%s' found. (TO BE IMPLEMENTED)" % r.get("name")) 
-
-            if self.rte is None:
-                logging.critical("Cannot find provider for RTE '%s'." % required_rtes.pop())
+            if self.rte not in required_rtes:
+                logging.critical("Subsystem '%s' does not provide RTE '%s'." % (self.root.get('name'), required_rtes.pop()))
                 return False
 
         # dismiss all components in conflict with selected RTE
@@ -1376,8 +1372,8 @@ class SystemConfig(SubsystemConfig):
         result = SubsystemConfig.select_rte(self)
 
         if result:
-            if self.rte.find('provides').find('rte').get('name') != "native":
-                logging.error("Top-level RTE must be 'native' (found: %s)." % (self.rte.find('provides').find('rte').get('name')))
+            if self.rte != "native":
+                logging.error("Top-level RTE must be 'native' (found: %s)." % (self.rte))
 
         return result
 
@@ -1491,8 +1487,8 @@ class ConfigModelParser:
                             },
                             "component" : { "required-attrs" : ["name"], "optional-attrs" : ["singleton", "version"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients", "filter"], },
-                                                              "rte"     : { "required-attrs" : ["name"] } } },
+                                                                            "optional-attrs" : ["max_clients",
+                                                                                "filter", "type"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
                                                                             "optional-attrs" : ["label", "filter"],
                                                                             "children" : {
@@ -1533,6 +1529,8 @@ class ConfigModelParser:
                                 "protocol" : { "required-attrs" : ["from", "to"] },
                                 "pattern"  : { "min" : 1, "children" : {
                                     "component" : { "min" : 1, "required-attrs" : ["name"], "children" : {
+                                        "requires" : { "max" : 1, "children" : { "service" : { "required-attrs" : ["name"],
+                                                                                               "optional-attrs" : ["label", "filter", "function"] } } },
                                         "route" : { "max" : 1, "children" : {
                                             "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
                                                 "external"  : { "optional-attrs" : ["function"] },
@@ -1548,8 +1546,9 @@ class ConfigModelParser:
                                 }
                             },
                             "system" : { "max" : 1, "children" : {
-                                "spec"      : { "required-attrs" : ["name"] },
-                                "parent-provides" : { "max" : 1, "children" : {
+                                "provides" : { "max" : 1, "children" : {
+                                    "spec"    : { "required-attrs" : ["name"] },
+                                    "rte"     : { "required-attrs" : ["name"] },
                                     "service" : { "required-attrs" : ["name"] }
                                     }},
                                 "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
