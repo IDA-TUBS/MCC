@@ -19,7 +19,6 @@
 	<binary name="nic_bridge" />
 	<binary name="remote_rom_client" />
 	<binary name="remote_rom_server" />
-	<binary name="init" />
 
 	<!-- (global) component repository
 		    * Contains the model description of all known components.
@@ -49,7 +48,7 @@
 			 * mux:      A multiplexer which transforms a provided service interface with max_clients=1 to max_clients>1.
 			 * protocol: A protocol stack that converts between different service interfaces without changing the data.
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
-			             service interface Y) and vice versa.
+							 service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
 			             interface (complementary to the protocol stack).
 			 * function: (Unambiguously) identifies a particular (but platform- and implementation-independent functionaliy.
@@ -103,7 +102,7 @@
 		</provides>
 		<requires>
 			<!-- service requirements can be constrained by the presence/absence of filter tags (e.g. 'left !debay') //-->
-			<service name="ROM" filter="left" />
+			<service name="ROM" filter="left !debay" />
 		</requires>
 
 		<!-- specify default configuration //-->
@@ -123,7 +122,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="left" />
+			<service name="ROM" filter="left !rect" />
 		</requires>
 
 		<defaults>
@@ -142,7 +141,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="right" />
+			<service name="ROM" filter="right !debay" />
 		</requires>
 
 		<defaults>
@@ -161,7 +160,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" filter="right" />
+			<service name="ROM" filter="right !rect" />
 		</requires>
 
 		<defaults>
@@ -181,16 +180,6 @@
 		<requires>
 			<service name="ROM" label="disp" />
 			<service name="ROM" label="camera" />
-		</requires>
-	</component>
-
-	<component name="init">
-		<provides>
-			<!-- components can also provide a run-time environment //-->
-			<rte name="native" />
-		</provides>
-		<requires>
-			<!-- TODO list required services //-->
 		</requires>
 	</component>
 
@@ -266,6 +255,7 @@
             <component name="remote_rom_server">
                 <route>
 						 <service name="ROM"><external /></service>
+                         <service name="Nic"><external /></service>
                 </route>
             </component>
 		</pattern>
@@ -314,7 +304,6 @@
 			</component>
 		</pattern>
 
-        <!--
 		<pattern>
 			<component name="rect_left">
 				<route><service name="ROM"><external /></service></route>
@@ -332,7 +321,6 @@
 				</expose>
 			</component>
 		</pattern>
-        //-->
 	</composite>
 
 	<composite>
@@ -347,7 +335,7 @@
 
 		<pattern>
 			<component name="debay_left">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external function="CAMERA"/></service></route>
 			</component>
 
 			<component name="rect_left">
@@ -357,7 +345,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_left" /></service>
-					<service name="ROM" label="disp"><external /></service>
+					<service name="ROM" label="disp"><external function="STEREO_MATCH"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -371,7 +359,7 @@
 
 		<pattern>
 			<component name="debay_right">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external function="CAMERA"/></service></route>
 			</component>
 
 			<component name="rect_right">
@@ -381,7 +369,7 @@
 			<component name="disp_to_pc">
 				<route>
 					<service name="ROM" label="camera"><child name="rect_right" /></service>
-					<service name="ROM" label="disp"><external /></service>
+					<service name="ROM" label="disp"><external function="STEREO_MATCH"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -395,10 +383,12 @@
 
 <!-- example abstract config //-->
 <system> 
-	<spec name="zynq" />
+    <provides>
+        <spec name="zynq" />
+    </provides>
 
-	<!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
-	<child function="Network" />
+    <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
+    <child function="Network" />
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="zynq">
@@ -427,7 +417,7 @@
 		<!-- explicitly connect ROM service to DISP_TO_PC //-->
 		<child component="object_recog">
 			<route>
-				<service name="ROM"><function name="DISP_TO_PC" /></service>
+				<service name="ROM"><child name="DISP_TO_PC" /></service>
 			</route>
 		</child>
 

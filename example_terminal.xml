@@ -42,7 +42,7 @@
 			 * mux:      A multiplexer which transforms a provided service interface with max_clients=1 to max_clients>1.
 			 * protocol: A protocol stack that converts between different service interfaces without changing the data.
 			 * proxy:    A proxy that transfers the data exchanged in service interface X over another carrier (e.g.
-			             service interface Y) and vice versa.
+							 service interface Y) and vice versa.
 			 * filter:   A filter that represents arbitrary data processing that typically does not change the service
 			             interface (complementary to the protocol stack).
 			 * function: (Unambiguously) identifies a particular (but platform- and implementation-independent functionaliy.
@@ -122,6 +122,9 @@
 
 	<composite>
 		<function name="INPUT_DRV" />
+        <provides>
+            <service name="Input" />
+        </provides>
 		<pattern>
 			<component name="fb_sdl">
 				<expose><service name="Input" /></expose>
@@ -136,6 +139,9 @@
 
 	<composite>
 		<function name="FB_DRV" />
+        <provides>
+            <service name="Framebuffer" />
+        </provides>
 		<pattern>
 			<component name="fb_sdl">
 				<expose><service name="Framebuffer" /></expose>
@@ -213,16 +219,6 @@
 		</requires>
 	</component>
 
-	<component name="init">
-		<provides>
-			<!-- components can also provide a run-time environment //-->
-			<rte name="native" />
-		</provides>
-		<requires>
-			<!-- TODO list required services //-->
-		</requires>
-	</component>
-
 	<composite name="gui2log">
 		<!-- remark: A composite only specifies the "external" (i.e. functionally relevant) requirements/provisions.
 			          Internal requirements are taken from the component specifications. //-->
@@ -238,9 +234,9 @@
 			<component name="terminal">
 				<route>
 					<!-- route Framebuffer requirement to the service provided by `GUI` function //-->
-					<service name="Framebuffer"><external /></service>
+					<service name="Framebuffer"><external function="GUI" /></service>
 					<!-- route Input requirement to the service provided by `GUI` function //-->
-					<service name="Input"><external /></service>
+					<service name="Input"><external function="GUI" /></service>
 				</route>
 			</component>
 			<component name="terminal_log">
@@ -259,10 +255,13 @@
 <!-- example abstract config //-->
 <system>
 
-	<spec name="sdl" />
+    <provides>
+        <spec name="sdl" />
+    </provides>
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
+
 		<!-- we can decide on the component based on the rte requirements //-->
 
 		<!-- we can define some default routing rules for trivial services //-->
@@ -276,17 +275,17 @@
 
 		<subsystem name="init1.2">
 
-			<child function="GUI" />
+            <child function="GUI" />
 
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
 			<child component="pointer" />
 
-			<!-- manually insert graphical LOG //-->
-			<child composite="gui2log" name="foobar" />
+            <!-- manually insert graphical LOG //-->
+            <child composite="gui2log" name="foobar" />
 
 			<child component="launchpad">
 				<route>
-					<!-- route LOG to gui2log //-->
+                    <!-- route LOG to gui2log //-->
 					<service name="LOG"><child name="foobar" /></service>
 				</route>
 
