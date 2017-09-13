@@ -100,6 +100,7 @@
 		<requires>
 			<service name="ROM" label="velocity" />
 			<service name="ROM" label="accel" />
+			<service name="CTRL_SPEED" />
 		</requires>
 	</component>
 
@@ -108,6 +109,7 @@
 		<requires>
 			<service name="ROM" label="trajectory" />
 			<service name="ROM" label="gyro" />
+			<service name="CTRL_STEERING" />
 		</requires>
 	</component>
 
@@ -274,13 +276,13 @@
 
 	<subsystem name="camera">
 		<provides>
-			<spec name="camera" />
+			<rte name="camera" />
 		</provides>
 		<child function="CAM" />
 	</subsystem>
 	<subsystem name="radar">
 		<provides>
-			<spec name="radar" />
+			<rte name="radar" />
 		</provides>
 		<child function="RADAR" />
 	</subsystem>
