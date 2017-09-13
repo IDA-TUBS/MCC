@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import logging
 
 class PatternManager:
     def __init__(self, composite, repo):
@@ -154,10 +155,10 @@ class ConfigModelParser:
                             },
                             "component" : { "required-attrs" : ["name"], "optional-attrs" : ["singleton", "version"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients", "filter"], },
-                                                              "rte"     : { "required-attrs" : ["name"] } } },
+                                                                            "optional-attrs" : ["max_clients",
+                                                                                "filter", "type"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter", "function"],
+                                                                            "optional-attrs" : ["label", "filter"],
                                                                             "children" : {
                                                                                 "exclude-component" : { 
                                                                                     "required-attrs" : ["name"],
@@ -167,13 +168,13 @@ class ConfigModelParser:
                                                               "rte"     : { "max" : 1, "required-attrs" : ["name"] },
                                                               "spec"    : { "required-attrs" : ["name"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
+                                "function"    : { "required-attrs" : ["name"] },
                                 "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
                                     "reset"  : { "required-attrs" : ["tag"] },
                                     }
                                 },
-                                "function" : { "required-attrs" : ["name"] },
                                 "mux"      : { "required-attrs" : ["service"] },
                                 "protocol" : { "required-attrs" : ["from", "to"] },
                                 "defaults" : { "leaf" : False },
@@ -181,10 +182,11 @@ class ConfigModelParser:
                             },
                             "composite" : { "optional-attrs" : ["name"], "children" : {
                                 "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients", "filter"] } } },
+                                                                            "optional-attrs" : ["max_clients"] } } },
                                 "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
                                                                             "optional-attrs" : ["label", "filter", "function"] } } },
                                 "proxy"    : { "required-attrs" : ["carrier"] },
+                                "function"    : { "required-attrs" : ["name"] },
                                 "filter"   : { "max" : 1, "children" : {
                                     "add"    : { "required-attrs" : ["tag"] },
                                     "remove" : { "required-attrs" : ["tag"] },
@@ -192,13 +194,14 @@ class ConfigModelParser:
                                     }
                                 },
                                 "mux"      : { "required-attrs" : ["service"] },
-                                "function" : { "required-attrs" : ["name"] },
                                 "protocol" : { "required-attrs" : ["from", "to"] },
                                 "pattern"  : { "min" : 1, "children" : {
                                     "component" : { "min" : 1, "required-attrs" : ["name"], "children" : {
+                                        "requires" : { "max" : 1, "children" : { "service" : { "required-attrs" : ["name"],
+                                                                                               "optional-attrs" : ["label", "filter", "function"] } } },
                                         "route" : { "max" : 1, "children" : {
-                                            "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label", "function", "filter"],  "children" : {
-                                                "external"  : { },
+                                            "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
+                                                "external"  : { "optional-attrs" : ["function"] },
                                                 "child"    : { "required-attrs" : ["name"] }
                                                 }}
                                             }},
@@ -211,14 +214,14 @@ class ConfigModelParser:
                                 }
                             },
                             "system" : { "max" : 1, "children" : {
-                                "spec"      : { "required-attrs" : ["name"] },
-                                "parent-provides" : { "max" : 1, "children" : {
+                                "provides" : { "max" : 1, "children" : {
+                                    "spec"    : { "required-attrs" : ["name"] },
+                                    "rte"     : { "required-attrs" : ["name"] },
                                     "service" : { "required-attrs" : ["name"] }
                                     }},
                                 "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
                                     "route" : { "max" : 1, "children" : {
                                         "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                            "function" : { "required-attrs" : ["name"] },
                                             "child"    : { "required-attrs" : ["name"] }
                                             }}
                                         }},
