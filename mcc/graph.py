@@ -32,11 +32,18 @@ class Graph:
 
         return edges
 
+    def edges(self):
+        edges = set()
+        for (s, t, e) in self.graph.edges(keys=True):
+            edges.add(e)
+
+        return edges
+
     def node_attributes(self, node):
-        return self.node[node]
+        return self.graph.node[node]
 
     def edge_attributes(self, edge):
-        return self.edge[edge.source][edge.target][edge]
+        return self.graph.edge[edge.source][edge.target][edge]
 
     def nodes(self):
         return self.graph.node.keys()

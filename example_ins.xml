@@ -237,14 +237,14 @@
 		<child function="STEERING" />
 		<child function="LONG">
 			<route>
-				<service name="ROM" label="accel"><child name="imu" /></service>
+				<service name="ROM" label="accel"><child name="IMU" /></service>
 				<service name="CTRL_SPEED"><child name="SPEED" /></service>
 				<service name="ROM" label="velocity"><child name="ACC" /></service>
 			</route>
 		</child>
 		<child function="LAT">
 			<route>
-				<service name="ROM" label="gyro"><child name="imu" /></service>
+				<service name="ROM" label="gyro"><child name="IMU" /></service>
 				<service name="CTRL_STEERING"><child name="STEERING" /></service>
 				<service name="ROM" label="trajectory"><child name="TC" /></service>
 			</route>
@@ -266,12 +266,12 @@
 		</provides>
 		<child function="TC">
 			<route>
-				<service name="Nic"><child name="camera" /></service>
+				<service name="Nic"><child name="CAM" /></service>
 			</route>
 		</child>
 		<child function="ACC">
 			<route>
-				<service name="Nic"><child name="radar" /></service>
+				<service name="Nic"><child name="RADAR" /></service>
 			</route>
 		</child>
 	</subsystem>

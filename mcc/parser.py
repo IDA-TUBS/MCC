@@ -824,16 +824,66 @@ class Repository(XMLParser):
                     self.structure_to_markdown(filename, structure[node]['children'], level=level+1, mdfile=mdfile, path=path+[node])
 
 class Subsystem:
+
+    class Child(object):
+        def __init__(self, xml_node, subsystem):
+            self._root      = xml_node
+            self._subsystem = subsystem
+
+            self._parse()
+
+        def _parse(self):
+            self._type = None
+
+            for t in [ "composite", "function", "component" ]:
+                if t in self._root.keys():
+                    self._type = t
+                    self._identifier = self._root.get(t)
+
+            assert(self._type is not None)
+
+        def subsystem(self):
+            return self._subsystem
+
+        def identifier(self):
+            return self._identifier
+
+        def type(self):
+            return self._type
+
+        def routes(self):
+            routes = list()
+            route = self._root.find("route")
+            if route is not None:
+                for s in self._root.find("route").findall("service"):
+                    attribs = { "service" : s.get("name") }
+                    if s.find("child") is not None:
+                        # collect attributes
+                        attribs['child'] = s.find("child").get("name")
+                        if 'label' in s.keys():
+                            attribs['label'] = s.get('label')
+
+                    else:
+                        raise Exception("ERROR")
+
+                    routes.append(attribs)
+
+            return routes
+
     def __init__(self, xml_node, parent=None):
         self._root   = xml_node
         self._parent = parent
         self._subsystems = set()
+        self._children = set()
 
         self._parse()
 
     def _parse(self):
         for sub in self._root.findall("subsystem"):
             self._subsystems.add(Subsystem(sub, parent=self))
+
+        for child in self._root.findall("child"):
+            self._children.add(Subsystem.Child(child, subsystem=self))
 
     def specs(self):
         specs = set()
@@ -861,6 +911,15 @@ class Subsystem:
 
     def parent(self):
         return self._parent
+
+    def children(self):
+        return self._children
+
+    def name(self, default=None):
+        if 'name' in self._root.keys():
+            return self._root.get('name')
+
+        return default
 
 
 class SubsystemParser:

@@ -74,16 +74,56 @@ class Component:
     def component(self):
         return self.xml
 
+class QueryModel(object):
+
+    def __init__(self):
+        self.query_graph = Graph()
+        self.dot_styles = { 'node' : { 'function'  : ['shape=rectangle', 'colorscheme=set39', 'fillcolor=5', 'style=filled'],
+                                       'component' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
+                                       'composite' : ['shape=component', 'colorscheme=set39', 'fillcolor=9', 'style=filled'] },
+                            'edge' : { 'service'   : ['arrowhead=normal'],
+                                       'function'  : ['arrowhead=normal', 'style=dotted', 'colorscheme=set39', 'color=3']
+                            }}
+
+    def children(self):
+        return self.query_graph.nodes()
+
+    def _write_dot_node(self, dotfile, node, prefix=""):
+        label = ""
+        label = "label=\"%s\"," % node.identifier()
+        style = ','.join(self.dot_styles['node'][node.type()])
+
+        dotfile.write("%s%s [%s%s];\n" % (prefix, self.query_graph.node_attributes(node)['id'], label, style))
+
+    def _write_dot_edge(self, dotfile, edge, prefix="  "):
+        attr = self.query_graph.edge_attributes(edge)
+        if 'function' in attr:
+            style = ','.join(self.dot_styles['edge']['function'])
+            label = "label=\"%s\"," % attr['function']
+        else:
+            style = ','.join(self.dot_styles['edge']['service'])
+            label = "label=\"%s\"," % attr['service']
+
+        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
+                                                self.query_graph.node_attributes(edge.source)['id'],
+                                                self.query_graph.node_attributes(edge.target)['id'],
+                                                label,
+                                                style))
+
+
 class PlatformModel(object):
 
     def __init__(self):
-        self.platform_graph = nx.DiGraph()
+        self.platform_graph = Graph()
+
+        self.pf_dot_styles = { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
+                               'edge' : '' }
 
     def reachable(self, from_component, to_component):
         # TODO implement
         return
 
-class SubsystemModel(PlatformModel):
+class SubsystemModel(PlatformModel, QueryModel):
     # the subsystem graph models the (hierarchical) structure of the subsystems
 
     def __init__(self, parser):
@@ -93,6 +133,9 @@ class SubsystemModel(PlatformModel):
         self.parser = parser
 
         self._parse()
+
+        QueryModel.__init__(self)
+        self._create_query_model()
 
     def _parse(self, start=None):
         if self.subsystem_root is None:
@@ -106,15 +149,110 @@ class SubsystemModel(PlatformModel):
             self.add_subsystem(sub, parent=start)
             self._parse(sub)
 
+    def _create_query_model(self):
+        for sub in self.subsystem_graph.nodes():
+            for ch in sub.children():
+                self.query_graph.add_node(ch)
+
+        # parse and add explicit routes
+        for ch in self.query_graph.nodes():
+            for route in ch.routes():
+                target = self.find_child(route['child'])
+                if target is not None:
+                    e = self.query_graph.add_edge(ch, target)
+                    self.query_graph.edge_attributes(e).update(route)
+                else:
+                    raise Exception("ERROR")
+
+    def find_child(self, name):
+        for ch in self.query_graph.nodes():
+            if ch.identifier() == name:
+                return ch
+
+        return None
+
     def add_subsystem(self, subsystem, parent=None):
         self.subsystem_graph.add_node(subsystem)
 
         if parent is not None:
-            if parent not in self.subsystem_graph:
+            if parent not in self.subsystem_graph.nodes():
                 raise Exception("Cannot find parent '%s' in subsystem graph." % parent)
             self.subsystem_graph.add_edge(parent, subsystem)
         else:
             self.subsystem_root = subsystem
+
+    def write_dot(self, filename):
+    
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+            dotfile.write("  compound=true;\n")
+
+            # write subsystem nodes
+            i = 1
+            n = 1
+            clusternodes = dict()
+            for sub in self.subsystem_graph.nodes():
+                # generate and store node id
+                self.subsystem_graph.node_attributes(sub)['id'] = "cluster%d" % i
+                i += 1
+
+                label = ""
+                if sub.name(None) is not None:
+                    label = "label=\"%s\";" % sub.name()
+
+                style = self.pf_dot_styles['node']
+                dotfile.write("  subgraph %s {\n    %s\n" % (self.subsystem_graph.node_attributes(sub)['id'], label))
+                for s in style:
+                    dotfile.write("    %s;\n" % s)
+
+                # add children of this subsystem
+                for ch in self.query_graph.nodes():
+                    # only process children in this subsystem
+                    if ch.subsystem() is not sub:
+                        continue
+
+                    self.query_graph.node_attributes(ch)['id'] = "ch%d" % n
+                    n += 1
+                    # remember first child node as cluster node
+                    if sub not in clusternodes:
+                        clusternodes[sub] = self.query_graph.node_attributes(ch)['id']
+
+                    QueryModel._write_dot_node(self, dotfile, ch, prefix="    ")
+
+                # add internal dependencies
+                for e in self.query_graph.edges():
+                    if e.source.subsystem() == sub and e.target.subsystem() == sub:
+                        QueryModel._write_dot_edge(self, dotfile, e, prefix="    ")
+
+                dotfile.write("  }\n")
+
+            # write subsystem edges
+            for e in self.subsystem_graph.edges():
+                # skip if one of the subsystems is empty
+                if e.source not in clusternodes or e.target not in clusternodes:
+                    continue
+                style = self.pf_dot_styles['edge']
+                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e.source],
+                                                      clusternodes[e.target],
+                                                      self.subsystem_graph.node_attributes(e.source)['id'],
+                                                      self.subsystem_graph.node_attributes(e.target)['id'],
+                                                      style))
+
+            # add children with no subsystem
+            for ch in self.query_graph.nodes():
+                if ch.subsystem() is None:
+                    self.query_graph.node[ch]['id'] = "ch%d" % n
+                    n += 1
+                    QueryModel._write_dot_node(self, dotfile, ch)
+
+            # add child dependencies between subsystems
+            for e in self.query_graph.edges():
+                if e.source.subsystem() != e.target.subsystem():
+                    QueryModel._write_dot_edge(self, dotfile, e)
+
+            dotfile.write("}\n")
+
+        return
 
 
 class SystemModel(Registry):
@@ -582,37 +720,6 @@ class SystemModel(Registry):
 
         return True
 
-    def write_query_node(self, dotfile, child, prefix="  "):
-        label = ""
-        if 'composite' in child.keys():
-            label = "label=\"%s\"," % child.get('composite')
-            style = self.node_type_styles['composite']
-        elif 'component' in child.keys():
-            label = "label=\"%s\"," % child.get('component')
-            style = self.node_type_styles['component']
-        elif 'function' in child.keys():
-            label = "label=\"%s\"," % child.get('function')
-            style = self.node_type_styles['function']
-
-        if 'name' in child.keys():
-            label = "label=\"%s\"," % child.get('name')
-
-        dotfile.write("%s%s [%s%s];\n" % (prefix, self.query_graph.node[child]['id'], label, style))
-
-    def write_query_edge(self, dotfile, v, u, attrib, prefix="  "):
-        if 'function' in attrib:
-            style = self.edge_type_styles['function']
-            label = "label=\"%s\"," % attrib['function']
-        else:
-            style = self.edge_type_styles['service']
-            label = "label=\"%s\"," % attrib['service']
-
-        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
-                                                self.query_graph.node[v]['id'],
-                                                self.query_graph.node[u]['id'],
-                                                label,
-                                                style))
-
     def write_component_node(self, dotfile, comp, prefix="  "):
         label = "label=\"%s\"," % comp.xml.get('name')
         style = self.node_type_styles['component']
@@ -1074,17 +1181,22 @@ class Mcc:
         # 2) we create a new system model
         self.model = SystemModel(self.repo, subsys_platform)
 
-        # TODO 3) create query model (in SubsystemModel)
+        # 3) create query model (in SubsystemModel)
+        query_model = subsys_platform
 
-        # TODO 4) create system model from query model
+        # output query model
+        if args.dotpath is not None:
+            subsys_platform.write_dot(args.dotpath+"query_graph.dot")
+
+        logging.critical("not implemented")
+        return True
+
+
+        # 4) create system model from query model
 
 #        # 3) we parse the queried components/functions from the subsystem structure
 #        config = SystemConfig(self._root.find("system"), self.model)
 #        config.parse()
-
-        # TODO output parsed config
-        if args.dotpath is not None:
-            config.graph().write_query_dot(args.dotpath+"query_graph.dot")
 
         # FIXME (continue refactoring)
 
