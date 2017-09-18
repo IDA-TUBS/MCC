@@ -10,10 +10,23 @@ class Registry:
         self.by_order.append(layer)
         self.by_name[layer.name] = layer
 
+    def reset(self, layer=None):
+        # clear all layers from 'layer' and below
+        if layer is None:
+            start = 0
+        else:
+            start = self.by_order.index(layer)
+
+        for i in range(start, len(self.by_order)):
+            self.by_order[i].clear()
+
 class Layer:
     def __init__(self, name):
         self.graph = Graph()
         self.name = name
+
+    def clear(self):
+        self.graph = Graph()
 
     def _get_params(self, obj):
         if isinstance(obj, Edge):
@@ -39,10 +52,13 @@ class Layer:
     def set_param_candidates(self, param, obj, candidates):
         params = self._get_params(obj)
 
-        if param not in params['params']:
+        if param not in params:
             params[param] = { 'value' : None, 'candidates' : set() }
 
         params[param]['candidates'] = candidates
+
+        if len(candidates) == 1:
+            params[param]['value'] = list(candidates)[0]
 
     def get_param_value(self, param, obj):
         params = self._get_params(obj)

@@ -88,6 +88,9 @@ class QueryModel(object):
     def children(self):
         return self.query_graph.nodes()
 
+    def routes(self):
+        return self.query_graph.edges()
+
     def _write_dot_node(self, dotfile, node, prefix=""):
         label = ""
         label = "label=\"%s\"," % node.identifier()
@@ -275,89 +278,149 @@ class SystemModel(Registry):
                 { 'node' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
                   'edge' : 'arrowhead=normal',
                   'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
-                self.platform :
-                { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
-                  'edge' : '' }
+                self.platform : self.platform.pf_dot_styles
                 }
 
         self.dot_styles[self.by_name['comm_arch']] = self.dot_styles[self.by_name['func_arch']]
         self.dot_styles[self.by_name['comp_inst']] = self.dot_styles[self.by_name['comp_arch']]
 
-    def reset(self):
-        # TODO reset/invalidate all graphs
-        return
+    def from_query(self, query_model):
+        fa = self.by_name['func_arch']
+        self.reset(fa)
 
-    def add_query(self, child, platform_component=None):
-        # FIXME reset/invalidate component graph
-        assert(self.by_name['comp_arch'].graph().nodes() == 0)
+        # insert nodes
+        for child in query_model.children():
+            self._insert_query(child)
+
+        # insert edges
+        for route in query_model.routes():
+            # remark: nodes in query_model and fa are the same objects
+            e = fa.graph.add_edge(route.source, route.target)
+            fa.graph.edge_attributes(e).update(query_model.query_graph.edge_attributes(route))
+
+    def _insert_query(self, child):
+        assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
 
         # add node to functional architecture layer
         fa = self.by_name['func_arch']
-        fa.add_node(child)
+        fa.graph.add_node(child)
 
         # set pre-defined mapping
-        if platform_component is not None:
-            fa.node.set_param_candidates('mapping', child, set([platform_component]))
+        if child.platform_component() is not None:
+            fa.set_param_candidates('mapping', child, set([child.platform_component()]))
 
-        # set pre-defined transformation patterns
-        if "component" in child.keys():
-            components = self.repo._find_element_by_attribute("component", { "name" : child.get("component") })
-            if len(components) == 0:
-                logging.error("Cannot find referenced child component '%s'." % child.get("component"))
-            else:
-                if len(components) > 1:
-                    logging.info("Multiple candidates found for child component '%s'." % child.get("component"))
+        components = self.repo.find_components_by_type(child.identifier(), child.type())
+        if len(components) == 0:
+            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.identifier()))
+        else:
+            if len(components) > 1:
+                logging.info("Multiple candidates found for child %s '%s'." % (child.type(), child.identified()))
 
-                fa.set_param_candidates('components', child, set(components))
+            fa.set_param_candidates('components', child, set(components))
 
-        elif "composite" in child.keys():
-            # FIXME: do not distinguish between components and composites in the query
-            components = self.repo._find_element_by_attribute("composite", { "name" : child.get("composite") })
-            if len(components) == 0:
-                logging.error("Cannot find referenced child composite '%s'." % child.get("composite"))
-            else:
-                if len(components) > 1:
-                    logging.info("Multiple candidates found for child composite '%s'." % child.get("composite"))
+    def _write_dot_node(self, layer, dotfile, node, prefix="  "):
+        label = "label=\"%s\"," % node.identifier()
+        style = ','.join(self.dot_styles[layer]['node'])
 
-                fa.set_param_candidates('components', child, set(components))
-#                self.query_graph.node[child]['patterns']  = PatternManager(components[0], self.repo)
+        dotfile.write("%s%s [%s%s];\n" % (prefix, layer.graph.node_attributes(node)['id'], label, style))
 
-        elif "function" in child.keys():
-            functions = self.repo._find_function_by_name(child.get("function"))
-            
-            if len(functions) == 0:
-                logging.error("Cannot find referenced child function '%s'." % child.get("function"))
-            else:
-                if len(functions) > 1:
-                    logging.info("Multiple candidates found for child function '%s'." % child.get("function"))
-                    assert(False)
+    def _write_dot_edge(self, layer, dotfile, edge, prefix="  "):
+        style = self.dot_styles[layer]['edge']
+        # FIXME consider function dependencies
+        label = "label=\"%s\"," % layer.graph.edge_attributes(edge)['service']
 
-                fa.set_param_candidates('components', child, set(functions))
-#                if functions[0].tag == "composite":
-#                    self.query_graph.node[child]['patterns']  = PatternManager(functions[0], self.repo)
-#                self.add_function(child.get("function"), child)
+        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
+                                                layer.graph.node_attributes(edge.source)['id'],
+                                                layer.graph.node_attributes(edge.target)['id'],
+                                                label,
+                                                style))
 
-#    def add_function(self, name, child):
-#        if name in self.functions.keys():
-#            loggging.error("Function '%s' cannot be present multiple times." % name) 
-#        else:
-#            self.functions[name] = child
 
-#    def subsystems(self, subsystem):
-#        return self.subsystem_graph.successors(subsystem)
+    def write_dot_layer(self, layername, filename):
+        layer = self.by_name[layername]
 
-    def children(self, subsystem):
-        # TODO refactor
-        if subsystem is None:
-            return self.query_graph.nodes()
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+            dotfile.write("  compound=true;\n")
 
-        children = set()
-        for child in self.mapping_query2subsystem.keys():
-            if self.mapping_query2subsystem[child] == subsystem:
-                children.add(child)
 
-        return children
+            # write subsystem nodes
+            i = 1
+            n = 1
+            clusternodes = dict()
+            pfg = self.platform.platform_graph
+            for sub in pfg.nodes():
+                # generate and store node id
+                pfg.node_attributes(sub)['id'] = "cluster%d" % i
+                i += 1
 
+                label = ""
+                if sub.name(None) is not None:
+                    label = "label=\"%s\";" % sub.name()
+
+                style = self.dot_styles[self.platform]['node']
+                dotfile.write("  subgraph %s {\n    %s\n" % (pfg.node_attributes(sub)['id'], label))
+                for s in style:
+                    dotfile.write("    %s;\n" % s)
+
+                # add components of this subsystem
+                for comp in layer.graph.nodes():
+                    # only process children in this subsystem
+                    if sub is not layer.get_param_value('mapping', comp):
+                        continue
+
+                    layer.graph.node_attributes(comp)['id'] = "c%d" % n
+                    n += 1
+
+                    # remember first node as cluster node
+                    if sub not in clusternodes:
+                        clusternodes[sub] = layer.graph.node_attributes(comp)['id']
+
+                    self._write_dot_node(layer, dotfile, comp, prefix="    ")
+
+                # add internal dependencies
+                for edge in layer.graph.edges():
+                    sub1 = layer.get_param_value('mapping', edge.source)
+                    sub2 = layer.get_param_value('mapping', edge.target)
+                    if sub1 == sub and sub2 == sub:
+                        self._write_dot_edge(layer, dotfile, edge, prefix="    ")
+
+                dotfile.write("  }\n")
+
+            # write subsystem edges
+            for e in pfg.edges():
+                # skip if one of the subsystems is empty
+                if e.source not in clusternodes or e.target not in clusternodes:
+                    continue
+                style = self.dot_styles[self.platform]['edge']
+                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e.source],
+                                                      clusternodes[e.target],
+                                                      pfg.node_attributes(e.source)['id'],
+                                                      pfg.node_attributes(e.target)['id'],
+                                                      style))
+
+            # add child dependencies between subsystems
+            for edge in layer.graph.edges():
+                sub1 = layer.get_param_value('mapping', edge.source)
+                sub2 = layer.get_param_value('mapping', edge.target)
+                if sub1 != sub2:
+                    self._write_dot_edge(layer, dotfile, edge)
+
+            dotfile.write("}\n")
+
+
+#    def children(self, subsystem):
+#        # TODO refactor
+#        if subsystem is None:
+#            return self.query_graph.nodes()
+#
+#        children = set()
+#        for child in self.mapping_query2subsystem.keys():
+#            if self.mapping_query2subsystem[child] == subsystem:
+#                children.add(child)
+#
+#        return children
+#
 #    def explicit_routes(self, child):
 #        res_in = list()
 #        for e in self.query_in_edges(child):
@@ -431,31 +494,17 @@ class SystemModel(Registry):
         return True
 
     def connect_functions(self):
-        for child in self.query_graph.nodes():
-            chosen = self.query_graph.node[child]['chosen']
-            if chosen.find('requires') is not None:
-                for f in chosen.find('requires').findall('function'):
+        fa = self.by_name['func_arch']
 
-                    # function requirements are only allowed for composites
-                    assert(chosen.tag == "composite")
-                    fname = f.get('name')
-                    provider = self.functions[fname]
-                    # get services from chosen composite pattern
-                    for (sname, slabel) in self.query_graph.node[child]['patterns'].services_routed_to_function(chosen, fname):
-                        # skip if edge already exists
-                        exists = False
-                        for e in self.query_out_edges(child):
-                            if ('label' not in e.attr or e.attr['label'] == slabel) and e.attr['service'] == sname:
-                                if 'function' in e.attr:
-                                    if e.attr['function'] == fname:
-                                        exists = True
-                                else:
-                                    exists = True
+        for child in fa.graph.nodes():
+            component = fa.get_param_value('components', child)
+            if component is not None:
+                functions = self.repo.function_requirements(component)
 
-                        if not exists:
-                            self.add_query_edge(child, provider, { 'service' : sname, 'label' : slabel, 'function' : fname})
-
-        return True
+                if len(functions) > 0:
+                    # TODO find function and add edge if there is not already one with matching attributes
+                    logging.info("Child %s has function requirements to '%s'." % (child.identifier(), functions))
+                    raise Exception("not implemented")
 
 #    def query_in_edges(self, node):
 #        edges = list()
@@ -735,80 +784,6 @@ class SystemModel(Registry):
                                                 self.component_graph.node[u]['id'],
                                                 label,
                                                 style))
-
-    def write_query_dot(self, filename):
-        # TODO continue refactoring
-    
-        with open(filename, 'w+') as dotfile:
-            dotfile.write("digraph {\n")
-            dotfile.write("  compound=true;\n")
-
-            # write subsystem nodes
-            i = 1
-            n = 1
-            clusternodes = dict()
-            for sub in self.subsystem_graph.nodes():
-                # generate and store node id
-                self.subsystem_graph.node[sub]['id'] = "cluster%d" % i
-                i += 1
-
-                label = ""
-                if 'name' in sub.root.keys():
-                    label = "label=\"%s\";" % sub.root.get('name')
-
-                style = self.node_type_styles['subsystem']
-                dotfile.write("  subgraph %s {\n    %s\n" % (self.subsystem_graph.node[sub]['id'], label))
-                for s in style:
-                    dotfile.write("    %s;\n" % s)
-
-                # add children of this subsystem
-                for ch in self.query_graph.nodes():
-                    # only process children in this subsystem
-                    if self.mapping_query2subsystem[ch] is not sub:
-                        continue
-
-                    self.query_graph.node[ch]['id'] = "ch%d" % n
-                    n += 1
-                    # remember first child node as cluster node
-                    if sub not in clusternodes:
-                        clusternodes[sub] = self.query_graph.node[ch]['id']
-
-                    self.write_query_node(dotfile, ch, prefix="    ")
-
-                # add internal dependencies
-                for e in self.query_edges():
-                    if self.mapping_query2subsystem[e.source] == sub and self.mapping_query2subsystem[e.target] == sub:
-                        self.write_query_edge(dotfile, e.source, e.target, e.attr, prefix="    ")
-
-                dotfile.write("  }\n")
-
-            # write subsystem edges
-            for e in self.subsystem_graph.edges():
-                # skip if one of the subsystems is empty
-                if e[0] not in clusternodes or e[1] not in clusternodes:
-                    continue
-                style = self.edge_type_styles['subsystem']
-                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e[0]],
-                                                      clusternodes[e[1]],
-                                                      self.subsystem_graph.node[e[0]]['id'],
-                                                      self.subsystem_graph.node[e[1]]['id'],
-                                                      style))
-
-            # add children with no subsystem
-            for ch in self.query_graph.nodes():
-                if self.mapping_query2subsystem[ch] is None:
-                    self.query_graph.node[ch]['id'] = "ch%d" % n
-                    n += 1
-                    self.write_query_node(dotfile, ch)
-
-            # add child dependencies between subsystems
-            for e in self.query_edges():
-                if self.mapping_query2subsystem[e.source] != self.mapping_query2subsystem[e.target]:
-                    self.write_query_edge(dotfile, e.source, e.target, e.attr)
-
-            dotfile.write("}\n")
-
-        return
 
     def write_component_dot(self, filename):
         with open(filename, 'w+') as dotfile:
@@ -1188,17 +1163,28 @@ class Mcc:
         if args.dotpath is not None:
             subsys_platform.write_dot(args.dotpath+"query_graph.dot")
 
-        logging.critical("not implemented")
-        return True
+        # 4a) create system model from query model
+        self.model.from_query(query_model)
 
+        # 4b) solve function dependencies (if already known)
+        self.model.connect_functions()
 
-        # 4) create system model from query model
-
-#        # 3) we parse the queried components/functions from the subsystem structure
-#        config = SystemConfig(self._root.find("system"), self.model)
-#        config.parse()
+        # output first layer
+        if args.dotpath is not None:
+            self.model.write_dot_layer('func_arch', args.dotpath+"func_arch.dot")
 
         # FIXME (continue refactoring)
+
+        # TODO implement transformation steps:
+        # - check specs and rte requirements (assign mapping)
+        # - solve reachability (assign edges to optional proxies)
+        # - create comm arch
+        # - assign component patterns
+        # - create component arch
+        # - ...
+
+        logging.critical("not implemented")
+        return True
 
         if not system.match_specs():
             logging.critical("abort")
@@ -1216,10 +1202,6 @@ class Mcc:
         if not system.connect_functions():
             logging.critical("abort")
             return False
-
-        # draw query_graph (for devel/debugging/validation)
-        if args.dotpath is not None:
-            system.graph().write_query_dot(args.dotpath+"query_graph.dot")
 
         if not system.solve_dependencies():
             logging.critical("abort")

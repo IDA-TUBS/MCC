@@ -25,7 +25,7 @@ class Graph:
 
         return edges
 
-    def in_edges(self, node):
+    def out_edges(self, node):
         edges = set()
         for (s, t, e) in self.graph.out_edges(node, keys=True):
             edges.add(e)

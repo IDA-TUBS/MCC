@@ -295,17 +295,13 @@ class Repository(XMLParser):
         function_providers = list()
         # iterate components
         for c in self._root.findall("component"):
-            p = c.find("provides")
-            if p is not None:
-                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
-                    function_providers.append(c)
+            for f in self._find_element_by_attribute("function", { "name" : name }, root=c):
+                function_providers.append(c)
 
         # iterate composites
         for c in self._root.findall("composite"):
-            p = c.find("provides")
-            if p is not None:
-                for f in self._find_element_by_attribute("function", { "name" : name }, root=p):
-                    function_providers.append(c)
+            for f in self._find_element_by_attribute("function", { "name" : name }, root=c):
+                function_providers.append(c)
 
         return function_providers
 
@@ -388,6 +384,25 @@ class Repository(XMLParser):
                 result.add(p)
 
         return result
+
+    def find_components_by_type(self, name, querytype):
+        if querytype == 'function':
+            components = self._find_function_by_name(name)
+        else: # 'component' or 'composite'
+            components = self._find_element_by_attribute(querytype, { "name" : name })
+
+        return components
+
+    def function_requirements(self, component):
+        functions = set()
+        if component.tag == "composite":
+            self._find_element_by_attribute("service")
+            if component.find("requires") is not None:
+                for s in component.find("requires").findall("service"):
+                    if "function" in s.keys():
+                        functions.add(s.get("function"))
+
+        return functions
 
     # check whether all function names are only provided once
     def check_functions_unambiguous(self):
@@ -845,6 +860,9 @@ class Subsystem:
         def subsystem(self):
             return self._subsystem
 
+        def platform_component(self):
+            return self._subsystem
+
         def identifier(self):
             return self._identifier
 
@@ -958,311 +976,311 @@ class SubsystemParser:
 
 ####################################################
 
-class SubsystemConfig:
-    def __init__(self, root_node, parent, model):
-        self.root = root_node
-        self.parent = parent
-        self.model = model
-        self.rte = None
-
-    def parse(self):
-        # add subsystem to graph
-        self.model().add_subsystem(self, self.parent)
-
-        for sub in self.root.findall("subsystem"):
-            name = sub.get("name")
-            subsystem = SubsystemConfig(sub, self, self.model)
-            subsystem.parse()
-
-        # parse <child> nodes
-        for c in self.root.findall("child"):
-            self.graph().add_query(c, self)
-
-    def _check_specs(self, component, child=None):
-        if component.tag == "composite":
-            return True
-
-        system_specs = self.system_specs()
-
-        component_specs = set()
-        if component.find("requires") is not None:
-            for spec in component.find("requires").findall("spec"):
-                component_specs.add(spec.get("name"))
-
-
-        for spec in component_specs:
-            if spec not in system_specs:
-                logging.info("Component '%s' incompatible because of spec requirement '%s'." % (component.get("name"), spec))
-                return False
-
-        return True
-
-    def _check_rte(self, component, child=None):
-        if component.tag == "composite":
-            return True
-
-        rtename = self.rte.find("provides").find("rte").get("name")
-
-        if self.get_rte(component) != rtename:
-            logging.info("Component '%s' is incompatible because of RTE requirement '%s' does not match '%s'." % (self.get_rte(component), rtename))
-            return False
-
-        return True
-
-    def is_compatible(self, component):
-        if not self._check_specs(component):
-            return False
-
-        if not self._check_rte(component):
-            return False
-
-        return True
-
-    def _check_function_requirement(self, component, child=None):
-        if component.find("requires") is not None:
-            for f in component.find("requires").findall("function"):
-                if f.get("name") not in self.provided_functions():
-                    logging.error("Function '%s' required by '%s' is not explicitly instantiated." % (f.get("name"), component.get("name")))
-                    return False
-
-        return True
-
-    def _choose_compatible(self, callback, check_pattern=True):
-        for c in self.graph().children(self):
-            if not self.graph().find_compatible_component(c, callback, check_pattern):
-                return False
-
-        return True
-
-    # check and select compatible components (regarding to specs)
-    def match_specs(self):
-        for sub in self.graph().subsystems(self):
-            if not sub.match_specs():
-                return False
-
-        return self._choose_compatible(self._check_specs)
-
-    def get_rte(self, component):
-        if component.find("requires") is not None:
-            rte = component.find("requires").find("rte")
-            if rte is not None:
-                return rte.get("name")
-
-        return "native"
-
-    def select_rte(self):
-        for sub in self.graph().subsystems(self):
-            if not sub.select_rte():
-                return False
-
-        # build set of required RTEs
-        required_rtes = set()
-        for c in self.graph().children(self):
-            for comp in self.graph().components(c):
-                required_rtes.add(self.get_rte(comp))
-
-        if len(required_rtes) == 0:
-            required_rtes.add("native")
-
-        if len(required_rtes) > 1:
-            # FIXME find alternatives and patterns for each candidate rte
-            logging.critical("RTE undecidable: %s. (TO BE IMPLEMENTED)" % required_rtes)
-            return False
-        else:
-            # find component which provides this rte
-            for p in self.model._root.iter("provides"):
-                for r in p.findall("rte"):
-                    if r.get("name") in required_rtes:
-                        if self.rte is None:
-                            self.rte = [x for x in self.model._root.iter("component") if x.find("provides") is p][0]
-                        else:
-                            logging.warn("Multiple provider of RTE '%s' found. (TO BE IMPLEMENTED)" % r.get("name")) 
-
-            if self.rte is None:
-                logging.critical("Cannot find provider for RTE '%s'." % required_rtes.pop())
-                return False
-
-        # dismiss all components in conflict with selected RTE
-        return self._choose_compatible(self._check_rte)
-
-    def filter_by_function_requirements(self):
-        for sub in self.graph().subsystems(self):
-            if not sub.filter_by_function_requirements():
-                return False
-
-        return self._choose_compatible(self._check_function_requirement, check_pattern=False)
-
-    def parent_services(self):
-        return self.parent.services()
-
-    def child_services(self):
-        # return child services
-        services = set()
-        for c in self.graph().children(self):
-            services.update(self.graph().provisions(c))
-
-        return services
-
-    def system_specs(self):
-        return self.parent.system_specs()
-
-    def services(self):
-        return self.parent_services() | self.child_services()
-
-    def provided_functions(self):
-        return self.parent.provided_functions()
-
-    def graph(self):
-        return self.parent.graph()
-
-class SystemConfig(SubsystemConfig):
-    def __init__(self, root_node, model):
-        SubsystemConfig.__init__(self, root_node, None, model)
-        self.specs = set()
-        self.system_model = model
-
-    def model(self):
-        return self.system_model
-
-    def parse(self):
-        # recursively parse subsystem config
-        SubsystemConfig.parse(self)
-
-        # parse <specs>
-        for s in self.root.findall("spec"):
-            self.specs.add(s.get("name"))
-
-        # parse routes
-        self.parse_routes()
-
-    def parse_routes(self):
-        # parse routes between children
-        fa = self.model().by_name['func_arch']
-        for child in fa.nodes():
-            if child.find("route") is not None:
-                for s in child.find("route").findall("service"):
-                    if s.find("child") is not None:
-                        for target in fa.nodes():
-                            if target.get("name") == s.find("child").get("name"):
-                                # we check later whether the target component actually provides this service
-                                edge = fa.add_edge(child, target, {'service' : s.get("name")})
-                                if 'label' in s.keys():
-                                    fa.edge[child][target]['label'] = s.get('label')
-                                break
-                    elif s.find("function") is not None:
-                        fname = s.find('function').get('name')
-                        for target in fa.nodes():
-                            if fname in self.provisions(target, 'function'):
-                                edge = fa.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
-                                if 'label' in s.keys():
-                                    fa.edge[child][target]['label'] = s.get('label')
-                    else:
-                        raise Exception("ERROR")
-        return
-
-
-    def select_rte(self):
-        result = SubsystemConfig.select_rte(self)
-
-        if result:
-            if self.rte.find('provides').find('rte').get('name') != "native":
-                logging.error("Top-level RTE must be 'native' (found: %s)." % (self.rte.find('provides').find('rte').get('name')))
-
-        return result
-
-    def _check_explicit_routes(self, component, child):
-        # check provisions for each incoming edge
-        provides = self.model().by_name['func_arch'].in_edges(child)
-        requires = self.model().by_name['func_arch'].out_edges(child)
-        for p in provides:
-            if 'function' in p:
-                found = False
-                if component.find('provides') is not None:
-                    if len(self.model().repo._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
-                        found = True
-
-                if not found:
-                    logging.info("Child component '%s' does not provide function '%s'." % (component.get('name'), p['function']))
-                    return False
-
-            else: # service
-                found = False
-                if component.find('provides') is not None:
-                    if len(self.model().repo._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
-                        found = True
-                if not found:
-                    logging.info("Child component '%s' does not provide service '%s'." % (component.get('name'), p['service']))
-                    return False
-
-        # check requirements for each outgoing edge
-        for r in requires:
-            found = False
-            if component.find('requires') is not None:
-                if len(self.model().repo._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
-                    found = True
-            if not found:
-                logging.info("Child component '%s' does not require routed service '%s'." % (component.get('name'), r['service']))
-                return False
-
-        return True
-
-    def connect_functions(self):
-        # choose compatible components based on explicit routes
-        for c in self.model().children(None):
-            if not self.model().repo.find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
-                logging.critical("Failed to satisfy explicit routes for child '%s'." % c.attrib)
-                return False
-
-        if not self.model().connect_functions():
-            return False
-
-        # solve reachability
-        if not self.model().insert_proxies():
-            logging.critical("Cannot insert proxies.")
-            return False
-
-        # connect function requirements of proxies
-        if not self.model().connect_functions():
-            return False
-
-        return True
-
-    def solve_dependencies(self):
-
-        self.model().build_component_graph()
-
-        # check/expand explicit routes (uses protocol to solve compatibility problems)
-        if not self.model().solve_routes():
-            return False
-
-        # solve pending requirements
-        # warn if multiple candidates exist and dependencies are not decidable
-        if not self.model().solve_pending():
-            return False
-
-        if not self.model().insert_muxers():
-            return False
-
-        # (heuristically) map unmapped components to lowest subsystem
-        if not self.model().map_unmapped_components():
-            return False
-
-        # merge non-singleton components
-        self.model().merge_components(singleton=False)
-
-        return True
-
-    def parent_services(self):
-        parent_services = set()
-
-        if self.root.find("parent-provides") is not None:
-            for p in self.root.find("parent-provides").findall("service"):
-                parent_services.add(p.get("name"))
-
-        return parent_services
-
-    def system_specs(self):
-        return self.specs
-
-    def provided_functions(self):
-        return self.model().functions
+#class SubsystemConfig:
+#    def __init__(self, root_node, parent, model):
+#        self.root = root_node
+#        self.parent = parent
+#        self.model = model
+#        self.rte = None
+#
+#    def parse(self):
+#        # add subsystem to graph
+#        self.model().add_subsystem(self, self.parent)
+#
+#        for sub in self.root.findall("subsystem"):
+#            name = sub.get("name")
+#            subsystem = SubsystemConfig(sub, self, self.model)
+#            subsystem.parse()
+#
+#        # parse <child> nodes
+#        for c in self.root.findall("child"):
+#            self.graph().add_query(c, self)
+#
+#    def _check_specs(self, component, child=None):
+#        if component.tag == "composite":
+#            return True
+#
+#        system_specs = self.system_specs()
+#
+#        component_specs = set()
+#        if component.find("requires") is not None:
+#            for spec in component.find("requires").findall("spec"):
+#                component_specs.add(spec.get("name"))
+#
+#
+#        for spec in component_specs:
+#            if spec not in system_specs:
+#                logging.info("Component '%s' incompatible because of spec requirement '%s'." % (component.get("name"), spec))
+#                return False
+#
+#        return True
+#
+#    def _check_rte(self, component, child=None):
+#        if component.tag == "composite":
+#            return True
+#
+#        rtename = self.rte.find("provides").find("rte").get("name")
+#
+#        if self.get_rte(component) != rtename:
+#            logging.info("Component '%s' is incompatible because of RTE requirement '%s' does not match '%s'." % (self.get_rte(component), rtename))
+#            return False
+#
+#        return True
+#
+#    def is_compatible(self, component):
+#        if not self._check_specs(component):
+#            return False
+#
+#        if not self._check_rte(component):
+#            return False
+#
+#        return True
+#
+#    def _check_function_requirement(self, component, child=None):
+#        if component.find("requires") is not None:
+#            for f in component.find("requires").findall("function"):
+#                if f.get("name") not in self.provided_functions():
+#                    logging.error("Function '%s' required by '%s' is not explicitly instantiated." % (f.get("name"), component.get("name")))
+#                    return False
+#
+#        return True
+#
+#    def _choose_compatible(self, callback, check_pattern=True):
+#        for c in self.graph().children(self):
+#            if not self.graph().find_compatible_component(c, callback, check_pattern):
+#                return False
+#
+#        return True
+#
+#    # check and select compatible components (regarding to specs)
+#    def match_specs(self):
+#        for sub in self.graph().subsystems(self):
+#            if not sub.match_specs():
+#                return False
+#
+#        return self._choose_compatible(self._check_specs)
+#
+#    def get_rte(self, component):
+#        if component.find("requires") is not None:
+#            rte = component.find("requires").find("rte")
+#            if rte is not None:
+#                return rte.get("name")
+#
+#        return "native"
+#
+#    def select_rte(self):
+#        for sub in self.graph().subsystems(self):
+#            if not sub.select_rte():
+#                return False
+#
+#        # build set of required RTEs
+#        required_rtes = set()
+#        for c in self.graph().children(self):
+#            for comp in self.graph().components(c):
+#                required_rtes.add(self.get_rte(comp))
+#
+#        if len(required_rtes) == 0:
+#            required_rtes.add("native")
+#
+#        if len(required_rtes) > 1:
+#            # FIXME find alternatives and patterns for each candidate rte
+#            logging.critical("RTE undecidable: %s. (TO BE IMPLEMENTED)" % required_rtes)
+#            return False
+#        else:
+#            # find component which provides this rte
+#            for p in self.model._root.iter("provides"):
+#                for r in p.findall("rte"):
+#                    if r.get("name") in required_rtes:
+#                        if self.rte is None:
+#                            self.rte = [x for x in self.model._root.iter("component") if x.find("provides") is p][0]
+#                        else:
+#                            logging.warn("Multiple provider of RTE '%s' found. (TO BE IMPLEMENTED)" % r.get("name")) 
+#
+#            if self.rte is None:
+#                logging.critical("Cannot find provider for RTE '%s'." % required_rtes.pop())
+#                return False
+#
+#        # dismiss all components in conflict with selected RTE
+#        return self._choose_compatible(self._check_rte)
+#
+#    def filter_by_function_requirements(self):
+#        for sub in self.graph().subsystems(self):
+#            if not sub.filter_by_function_requirements():
+#                return False
+#
+#        return self._choose_compatible(self._check_function_requirement, check_pattern=False)
+#
+#    def parent_services(self):
+#        return self.parent.services()
+#
+#    def child_services(self):
+#        # return child services
+#        services = set()
+#        for c in self.graph().children(self):
+#            services.update(self.graph().provisions(c))
+#
+#        return services
+#
+#    def system_specs(self):
+#        return self.parent.system_specs()
+#
+#    def services(self):
+#        return self.parent_services() | self.child_services()
+#
+#    def provided_functions(self):
+#        return self.parent.provided_functions()
+#
+#    def graph(self):
+#        return self.parent.graph()
+#
+#class SystemConfig(SubsystemConfig):
+#    def __init__(self, root_node, model):
+#        SubsystemConfig.__init__(self, root_node, None, model)
+#        self.specs = set()
+#        self.system_model = model
+#
+#    def model(self):
+#        return self.system_model
+#
+#    def parse(self):
+#        # recursively parse subsystem config
+#        SubsystemConfig.parse(self)
+#
+#        # parse <specs>
+#        for s in self.root.findall("spec"):
+#            self.specs.add(s.get("name"))
+#
+#        # parse routes
+#        self.parse_routes()
+#
+#    def parse_routes(self):
+#        # parse routes between children
+#        fa = self.model().by_name['func_arch']
+#        for child in fa.nodes():
+#            if child.find("route") is not None:
+#                for s in child.find("route").findall("service"):
+#                    if s.find("child") is not None:
+#                        for target in fa.nodes():
+#                            if target.get("name") == s.find("child").get("name"):
+#                                # we check later whether the target component actually provides this service
+#                                edge = fa.add_edge(child, target, {'service' : s.get("name")})
+#                                if 'label' in s.keys():
+#                                    fa.edge[child][target]['label'] = s.get('label')
+#                                break
+#                    elif s.find("function") is not None:
+#                        fname = s.find('function').get('name')
+#                        for target in fa.nodes():
+#                            if fname in self.provisions(target, 'function'):
+#                                edge = fa.add_edge(child, target, {'service' : s.get('name'), 'function' : fname })
+#                                if 'label' in s.keys():
+#                                    fa.edge[child][target]['label'] = s.get('label')
+#                    else:
+#                        raise Exception("ERROR")
+#        return
+#
+#
+#    def select_rte(self):
+#        result = SubsystemConfig.select_rte(self)
+#
+#        if result:
+#            if self.rte.find('provides').find('rte').get('name') != "native":
+#                logging.error("Top-level RTE must be 'native' (found: %s)." % (self.rte.find('provides').find('rte').get('name')))
+#
+#        return result
+#
+#    def _check_explicit_routes(self, component, child):
+#        # check provisions for each incoming edge
+#        provides = self.model().by_name['func_arch'].in_edges(child)
+#        requires = self.model().by_name['func_arch'].out_edges(child)
+#        for p in provides:
+#            if 'function' in p:
+#                found = False
+#                if component.find('provides') is not None:
+#                    if len(self.model().repo._find_element_by_attribute('function', { 'name' : p['function'] }, component.find('provides'))):
+#                        found = True
+#
+#                if not found:
+#                    logging.info("Child component '%s' does not provide function '%s'." % (component.get('name'), p['function']))
+#                    return False
+#
+#            else: # service
+#                found = False
+#                if component.find('provides') is not None:
+#                    if len(self.model().repo._find_element_by_attribute('service', { 'name' : p['service'] }, component.find('provides'))):
+#                        found = True
+#                if not found:
+#                    logging.info("Child component '%s' does not provide service '%s'." % (component.get('name'), p['service']))
+#                    return False
+#
+#        # check requirements for each outgoing edge
+#        for r in requires:
+#            found = False
+#            if component.find('requires') is not None:
+#                if len(self.model().repo._find_element_by_attribute('service', { 'name' : r['service'] }, component.find('requires'))):
+#                    found = True
+#            if not found:
+#                logging.info("Child component '%s' does not require routed service '%s'." % (component.get('name'), r['service']))
+#                return False
+#
+#        return True
+#
+#    def connect_functions(self):
+#        # choose compatible components based on explicit routes
+#        for c in self.model().children(None):
+#            if not self.model().repo.find_compatible_component(c, self._check_explicit_routes, check_pattern=False):
+#                logging.critical("Failed to satisfy explicit routes for child '%s'." % c.attrib)
+#                return False
+#
+#        if not self.model().connect_functions():
+#            return False
+#
+#        # solve reachability
+#        if not self.model().insert_proxies():
+#            logging.critical("Cannot insert proxies.")
+#            return False
+#
+#        # connect function requirements of proxies
+#        if not self.model().connect_functions():
+#            return False
+#
+#        return True
+#
+#    def solve_dependencies(self):
+#
+#        self.model().build_component_graph()
+#
+#        # check/expand explicit routes (uses protocol to solve compatibility problems)
+#        if not self.model().solve_routes():
+#            return False
+#
+#        # solve pending requirements
+#        # warn if multiple candidates exist and dependencies are not decidable
+#        if not self.model().solve_pending():
+#            return False
+#
+#        if not self.model().insert_muxers():
+#            return False
+#
+#        # (heuristically) map unmapped components to lowest subsystem
+#        if not self.model().map_unmapped_components():
+#            return False
+#
+#        # merge non-singleton components
+#        self.model().merge_components(singleton=False)
+#
+#        return True
+#
+#    def parent_services(self):
+#        parent_services = set()
+#
+#        if self.root.find("parent-provides") is not None:
+#            for p in self.root.find("parent-provides").findall("service"):
+#                parent_services.add(p.get("name"))
+#
+#        return parent_services
+#
+#    def system_specs(self):
+#        return self.specs
+#
+#    def provided_functions(self):
+#        return self.model().functions
