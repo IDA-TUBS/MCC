@@ -1,6 +1,7 @@
 import networkx as nx
-from . import parser
+from mcc.parser import *
 from mcc.framework import *
+from mcc.analyses import *
 
 # wrapper class to allow multiple nodes of the same component
 class Component:
@@ -261,10 +262,10 @@ class SubsystemModel(PlatformModel, QueryModel):
 class SystemModel(Registry):
     def __init__(self, repo, platform):
         Registry.__init__(self)
-        self.add_layer(Layer('func_arch'))
-        self.add_layer(Layer('comm_arch'))
-        self.add_layer(Layer('comp_arch'))
-        self.add_layer(Layer('comp_inst'))
+        self.add_layer(Layer('func_arch', nodetype=Subsystem.Child))
+        self.add_layer(Layer('comm_arch', nodetype=Subsystem.Child))
+        self.add_layer(Layer('comp_arch', nodetype=Repository.Component))
+        self.add_layer(Layer('comp_inst', nodetype=Repository.Component))
 
         self.platform = platform
         self.repo = repo
@@ -309,6 +310,7 @@ class SystemModel(Registry):
         if child.platform_component() is not None:
             fa.set_param_candidates('mapping', child, set([child.platform_component()]))
 
+        # TODO move into ComponentEngine
         components = self.repo.find_components_by_type(child.identifier(), child.type())
         if len(components) == 0:
             logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.identifier()))
@@ -316,7 +318,7 @@ class SystemModel(Registry):
             if len(components) > 1:
                 logging.info("Multiple candidates found for child %s '%s'." % (child.type(), child.identified()))
 
-            fa.set_param_candidates('components', child, set(components))
+            fa.set_param_candidates('component', child, set(components))
 
     def _write_dot_node(self, layer, dotfile, node, prefix="  "):
         label = "label=\"%s\"," % node.identifier()
@@ -497,9 +499,9 @@ class SystemModel(Registry):
         fa = self.by_name['func_arch']
 
         for child in fa.graph.nodes():
-            component = fa.get_param_value('components', child)
+            component = fa.get_param_value('component', child)
             if component is not None:
-                functions = self.repo.function_requirements(component)
+                functions = component.requires_functions()
 
                 if len(functions) > 0:
                     # TODO find function and add edge if there is not already one with matching attributes
@@ -1151,7 +1153,7 @@ class Mcc:
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 1) we parse the platform model (here: subsystem structure)
-        subsys_platform = SubsystemModel(parser.SubsystemParser(subsystem_xml))
+        subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml))
 
         # 2) we create a new system model
         self.model = SystemModel(self.repo, subsys_platform)
@@ -1169,11 +1171,28 @@ class Mcc:
         # 4b) solve function dependencies (if already known)
         self.model.connect_functions()
 
-        # output first layer
+        # remark: 'mapping' is already fixed in func_arch
+        #  we thus assign just assign nodes to platform components as queried
+        fa = self.model.by_name['func_arch']
+        qe = QueryEngine(fa)
+        NodeStep(Assign(qe)).execute()
+
+        # output first layer containing the query
         if args.dotpath is not None:
             self.model.write_dot_layer('func_arch', args.dotpath+"func_arch.dot")
 
         # FIXME (continue refactoring)
+
+        ce   = ComponentEngine(fa, self.repo)
+#        rtee = RteEngine()
+
+        comps = Map(ce)
+        pf_compat = NodeStep(comps)                 # choose components from repo
+#        comps.register_ae(rtee)                     #   consider rte requirements
+#        comps.register_ae(spe)                      #   consider spec requirements
+#       check = pf_compat.add_operation(Check(rtee)) # check rte requirements
+#       check.register_ae(spe)                       # check spec requirements
+        pf_compat.execute()
 
         # TODO implement transformation steps:
         # - check specs and rte requirements (assign mapping)

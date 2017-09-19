@@ -215,6 +215,26 @@ class XMLParser:
 
 class Repository(XMLParser):
 
+    class Component:
+        def __init__(self, xml_node, repo):
+            self.repo = repo
+            self.xml_node = xml_node
+
+        def requires_rte(self):
+            rte = self.xml_node.find('./requires/rte')
+            if rte is not None:
+                return rte.get('name')
+            else:
+                return 'native'
+
+        def requires_functions(self):
+            functions = set()
+            if self.xml_node.tag == "composite":
+                for s in self.xml_node.findall("./requires/service[@function]"):
+                    functions.add(s.get("function"))
+
+            return functions
+
     def __init__(self, config_model_file):
         XMLParser.__init__(self, config_model_file)
 
@@ -391,18 +411,7 @@ class Repository(XMLParser):
         else: # 'component' or 'composite'
             components = self._find_element_by_attribute(querytype, { "name" : name })
 
-        return components
-
-    def function_requirements(self, component):
-        functions = set()
-        if component.tag == "composite":
-            self._find_element_by_attribute("service")
-            if component.find("requires") is not None:
-                for s in component.find("requires").findall("service"):
-                    if "function" in s.keys():
-                        functions.add(s.get("function"))
-
-        return functions
+        return [Repository.Component(c, self) for c in components]
 
     # check whether all function names are only provided once
     def check_functions_unambiguous(self):
@@ -917,10 +926,9 @@ class Subsystem:
 
     def rte(self):
         # parse <rte>
-        if self._root.find("provides") is not None:
-            node = self._root.find("provides").find("rte")
-            if node is not None:
-                return node.get("name")
+        node = self._root.find("./provides/rte")
+        if node is not None:
+            return node.get("name")
 
         return "native"
 

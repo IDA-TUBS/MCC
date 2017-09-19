@@ -21,9 +21,10 @@ class Registry:
             self.by_order[i].clear()
 
 class Layer:
-    def __init__(self, name):
+    def __init__(self, name, nodetype=object):
         self.graph = Graph()
         self.name = name
+        self.nodetype = nodetype
 
     def clear(self):
         self.graph = Graph()
@@ -57,28 +58,26 @@ class Layer:
 
         params[param]['candidates'] = candidates
 
-        if len(candidates) == 1:
-            params[param]['value'] = list(candidates)[0]
-
     def get_param_value(self, param, obj):
         params = self._get_params(obj)
 
         if param in params:
             return params[param]['value']
         else:
-            return set()
+            return None
 
     def set_param_value(self, param, obj, value):
         params = self._get_params(obj)
 
-        if param not in params['params']:
+        if param not in params:
             params[param] = { 'value' : None, 'candidates' : set() }
 
         params[param]['value'] = value
 
 class AnalysisEngine:
-    def __init__(self):
-        return
+    def __init__(self, layer, param):
+        self.layer = layer
+        self.param = param
 
     def map(self, source):
         raise Exception("not implemented")
@@ -89,38 +88,58 @@ class AnalysisEngine:
     def transform(self, source):
         raise Exception("not implemented")
 
-    def check(self):
+    def check(self, obj):
         raise Exception("not implemented")
 
+    def source_types(self):
+        return set([object])
+
+    def target_type(self):
+        return object
+
 class Operation:
-    def __init__(self, source_type=object):
-        self.source_type = source_type
-        self.analysis_engines = list()
+    def __init__(self, ae):
+        self.analysis_engines = [ae]
+        self.param = ae.param
+        self.layer = ae.layer
 
     def register_ae(self, ae):
+        assert(ae.param == self.param)
         self.analysis_engines.append(ae)
+        return ae
 
-    def execute(self, iterable, layer):
+    def check_source_type(self, obj):
+        for ae in self.analysis_engines:
+            for t in ae.source_types():
+                if not isinstance(obj, t):
+                    return False
+
+        return True
+
+    def execute(self, iterable):
         raise Exception("not implemented")
 
 class Map(Operation):
-    def __init__(self, param, source_type=object, target_type=object):
-        Operation.__init__(self, source_type)
-        self.target_type = target_type
-        self.param = param
+    def __init__(self, ae):
+        Operation.__init__(self, ae)
 
-    def execute(self, iteratable, layer):
+    def execute(self, iterable):
 
-        for obj in iteratable:
-            assert(isinstance(obj, self.source_type))
+        for obj in iterable:
+            assert(self.check_source_type(obj))
+
             candidates = set()
             first = True
             for ae in self.analysis_engines:
+
                 if first:
                     candidates = ae.map(obj)
                 else:
                     # build intersection of candidates for all analyses
                     candidates &= ae.map(obj)
+
+                for c in candidates:
+                    assert(isinstance(c, ae.target_type()))
 
             # TODO (?) check target type
             # TODO (?) we may need to iterate over this multiple times
@@ -131,68 +150,68 @@ class Map(Operation):
         return True
 
 class Assign(Operation):
-    def __init__(self, param, source_type=object, target_type=object):
-        Operation.__init__(self)
-        Operation.__init__(self, source_type)
-        self.target_type = target_type
-        self.param = param
+    def __init__(self, ae):
+        Operation.__init__(self, ae)
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
-        assert len(self.analysis_engines) == 0
-        Operation.register_ae(ae)
+        assert(False)
 
-    def execute(self, iterable, layer):
+    def execute(self, iterable):
 
-        for obj in iteratable:
-            assert(isinstance(obj, self.source_type))
+        for obj in iterable:
+            assert(self.check_source_type(obj))
 
-            result = self.analysis_engines[0].assign(obj)
-            assert(isinstance(result, self.target_type))
+            candidates = self.layer.get_param_candidates(self.param, obj)
+            result = self.analysis_engines[0].assign(obj, candidates)
+            assert(result in candidates)
+            assert(isinstance(result, self.analysis_engines[0].target_type()))
 
-            layer.set_param_value(self.param, obj, result)
+            self.layer.set_param_value(self.param, obj, result)
 
         return True
 
 class Transform(Operation):
-    def __init__(self, source_type=object, target_type=object):
-        Operation.__init__(self)
-        Operation.__init__(self, source_type)
-        self.target_type = target_type
+    def __init__(self, ae):
+        Operation.__init__(self, ae)
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
-        assert len(self.analysis_engines) == 0
-        Operation.register_ae(ae)
+        assert(False)
 
     def execute(self, iterable, layer):
         # TODO implement
         raise Exception("not implemented")
 
 class Check(Operation):
-    def __init__(self):
-        Operation.__init__(self)
+    def __init__(self, ae):
+        Operation.__init__(self, ae)
 
-    def execute(self, iterable, layer):
+    def execute(self, iterable):
         for ae in self.analysis_engines:
-            if not ae.check():
-                return False
+            for obj in iterable:
+                assert(self.check_source_type(obj))
+
+                if not ae.check(obj):
+                    return False
 
         return True
 
 class Step:
-    def __init__(self, layer):
-        self.operations = list()
-        self.layer = layer
+    def __init__(self, op):
+        assert(isinstance(op, Operation))
+        self.operations = [op]
+        self.layer = op.layer
 
     def add_operation(self, op):
         assert(isinstance(op, Operation))
         self.operations.append(op)
+        return op
 
 class NodeStep(Step):
     def execute(self):
         for op in self.operations:
-            if not op.execute(self.layer.graph.nodes(), self.layer):
+            if not op.execute(self.layer.graph.nodes()):
                 return False
 
         return True
@@ -200,7 +219,7 @@ class NodeStep(Step):
 class EdgeStep(Step):
     def execute(self):
         for op in self.operations:
-            if not op.execute(self.layer.graph.edges(), self.layer):
+            if not op.execute(self.layer.graph.edges()):
                 return False
 
         return True
