@@ -166,7 +166,7 @@ class SubsystemModel(PlatformModel, QueryModel):
                     e = self.query_graph.add_edge(ch, target)
                     self.query_graph.edge_attributes(e).update(route)
                 else:
-                    raise Exception("ERROR")
+                    logging.error("Cannot route to referenced child %s. Not found." % (route['child']))
 
     def find_child(self, name):
         for ch in self.query_graph.nodes():
@@ -311,9 +311,9 @@ class SystemModel(Registry):
             fa.set_param_candidates('mapping', child, set([child.platform_component()]))
 
         # TODO move into ComponentEngine
-        components = self.repo.find_components_by_type(child.identifier(), child.type())
+        components = self.repo.find_components_by_type(child.query(), child.type())
         if len(components) == 0:
-            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.identifier()))
+            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
         else:
             if len(components) > 1:
                 logging.info("Multiple candidates found for child %s '%s'." % (child.type(), child.identified()))
@@ -321,7 +321,7 @@ class SystemModel(Registry):
             fa.set_param_candidates('component', child, set(components))
 
     def _write_dot_node(self, layer, dotfile, node, prefix="  "):
-        label = "label=\"%s\"," % node.identifier()
+        label = "label=\"%s\"," % node.label()
         style = ','.join(self.dot_styles[layer]['node'])
 
         dotfile.write("%s%s [%s%s];\n" % (prefix, layer.graph.node_attributes(node)['id'], label, style))
@@ -505,7 +505,7 @@ class SystemModel(Registry):
 
                 if len(functions) > 0:
                     # TODO find function and add edge if there is not already one with matching attributes
-                    logging.info("Child %s has function requirements to '%s'." % (child.identifier(), functions))
+                    logging.info("Child %s has function requirements to '%s'." % (child.label(), functions))
                     raise Exception("not implemented")
 
 #    def query_in_edges(self, node):

@@ -283,7 +283,8 @@ class Repository(XMLParser):
         if querytype == 'function':
             components = self._find_function_by_name(name)
         else: # 'component' or 'composite'
-            components = self._find_element_by_attribute(querytype, { "name" : name })
+            components = self._find_element_by_attribute('component', { "name" : name }) + \
+                         self._find_element_by_attribute('composite', { "name" : name })
 
         return [Repository.Component(c, self) for c in components]
 
@@ -349,19 +350,13 @@ class Repository(XMLParser):
             else:
                 provides.add(p.get("name"))
 
-            # referenced filter must be defined
-            if "filter" in p.keys():
-                if len(self._find_element_by_attribute("filter", { "alias" : p.get("filter") }, component)) == 0:
-                    logging.error("Provision <service name=\"%s\" filter=\"%s\" /> refers to unknown alias." %
-                        (p.get("name"), p.get("filter")))
-
-
     def _check_requirements(self, component):
         if component.find("requires") is None:
             return
 
         services = set()
-        for r in component.find("requires").findall("service"):
+        functions = set()
+        for r in component.findall("./requires/service"):
             # service required twice must be distinguished by label
             if r.get("name") in services:
                 labels = set()
@@ -374,19 +369,8 @@ class Repository(XMLParser):
             else:
                 services.add(r.get("name"))
 
-            # referenced filter must be defined
-            if "filter" in r.keys():
-                if len(self._find_element_by_attribute("filter", { "alias" : r.get("filter") }, component)) == 0:
-                    logging.error("Requirement <service name=\"%s\" filter=\"%s\" /> refers to unknown alias." %
-                        (r.get("name"), r.get("filter")))
-
-        # functions must not be required twice
-        functions = set()
-        for f in component.find("requires").findall("function"):
-            if f.get("name") in functions:
-                logging.error("Requirement <function name=\"%s\" /> is ambiguous." %(f.get("name")))
-            else:
-                functions.add(f.get("name"))
+            if 'function' in r.keys():
+                functions.add(r.get('function'))
 
         # required services must be available
         for s in services:
@@ -396,15 +380,9 @@ class Repository(XMLParser):
 
         # required functions must be available
         for f in functions:
-            provisions = self._find_provisions("function", f)
+            provisions = self._find_function_by_name(f)
             if len(provisions) == 0:
                 logging.error("Requirement <function name=\"%s\" /> cannot be satisfied." % f)
-
-        # required rte must be available
-        for r in component.find("requires").findall("rte"):
-            provisions = self._find_provisions("rte", r.get("name"))
-            if len(provisions) == 0:
-                logging.error("Requirement <rte name=\"%s\" /> cannot be satisfied." % r.get("name"))
 
     def _check_proxy(self, component, proxy):
         carrier = proxy.get("carrier")
@@ -471,41 +449,37 @@ class Repository(XMLParser):
             # store specified service requirements/provisions
             for cspec in cspecs:
                 tmp = set()
-                if cspec.find("requires") is not None:
-                    for s in cspec.find("requires").findall("service"):
-                        tmp.add(s.get("name"))
+                for s in cspec.findall("./requires/service"):
+                    tmp.add(s.get("name"))
                 required_services[cname]["specified"].update(tmp)
 
                 tmp = set()
-                if cspec.find("provides") is not None:
-                    for s in cspec.find("provides").findall("service"):
-                        tmp.add(s.get("name"))
+                for s in cspec.findall("./provides/service"):
+                    tmp.add(s.get("name"))
                 provided_services[cname]["specified"].update(tmp)
 
+            # additional requirements in composite spec
+            for s in c.findall("./requires/service"):
+                sname = s.get('name')
+                required_services[cname]['specified'].add(sname)
+
             # references in <route> must be specified
-            if c.find("route") is not None:
-                for s in c.find("route").findall("service"):
-                    sname = s.get("name")
-                    required_services[cname]["used"].add(sname)
+            for s in c.findall("./route/service"):
+                sname = s.get("name")
+                required_services[cname]["used"].add(sname)
 
-                    for cspec in cspecs:
-                        if len(self._find_element_by_attribute("service", { "name" : sname }, cspec.find("requires"))) == 0:
-                            logging.error("Routing of unknown service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
+                if sname not in required_services[cname]['specified']:
+                    logging.error("Routing of unknown service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
 
-                    if s.find("function") != None:
-                        fname = s.find("function").get("name")
-                        if len(self._find_element_by_attribute("function", { "name" : fname }, composite.find("requires"))) == 0:
-                            logging.error("Routing of service '%s' to function '%s' does not match composite spec '%s'." % (sname, fname, composite.get("name")))
+                if s.find("child") != None:
+                    chname = s.find("child").get("name")
+                    if len(self._find_element_by_attribute("component", { "name" : chname }, pattern)) == 0:
+                        logging.error("Routing of service '%s' to child '%s' of composite '%s' not possible." % (sname, chname, composite.get("name")))
+                    else:
+                        provided_services[chname]["used"].add(sname)
 
-                    if s.find("child") != None:
-                        chname = s.find("child").get("name")
-                        if len(self._find_element_by_attribute("component", { "name" : chname }, pattern)) == 0:
-                            logging.error("Routing of service '%s' to child '%s' of composite '%s' not possible." % (sname, chname, composite.get("name")))
-                        else:
-                            provided_services[chname]["used"].add(sname)
-
-                    if s.find("service") != None:
-                        required_services[cname]["external"].add(sname)
+                if s.find("external") != None:
+                    required_services[cname]["external"].add(sname)
 
             # references in <expose> must be specified
             if c.find("expose") is not None:
@@ -518,7 +492,7 @@ class Repository(XMLParser):
 
         # required external service must be pending exactly once
         # or explicitly routed to external service
-        for s in composite.find("requires").findall("service"):
+        for s in composite.findall("./requires/service"):
             sname = s.get("name")
             pending_count = 0
             for r in required_services.values():
@@ -736,7 +710,9 @@ class Subsystem:
             for t in [ "function", "component" ]:
                 if self._root.find(t) is not None:
                     self._type = t
-                    self._identifier = self._root.find(t).get('name')
+                    self._identifier = self._root.get('name')
+                    self._queryname  = self._root.find(t).get('name')
+                    break
 
             assert(self._type is not None)
 
@@ -748,6 +724,15 @@ class Subsystem:
 
         def identifier(self):
             return self._identifier
+
+        def label(self):
+            if self._identifier is not None:
+                return self._identifier
+            else:
+                return self._queryname
+
+        def query(self):
+            return self._queryname
 
         def type(self):
             return self._type
