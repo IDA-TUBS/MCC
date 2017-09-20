@@ -1,4 +1,6 @@
-import xml.etree.ElementTree as ET
+from lxml import objectify
+from lxml import etree as ET
+from lxml.etree import XMLSyntaxError
 import logging
 
 class PatternManager:
@@ -140,78 +142,16 @@ class PatternManager:
         return child_lookup.values()
 
 class XMLParser:
-    def __init__(self, xml_file):
+    def __init__(self, xml_file, xsd_file):
         self._file = xml_file
         if self._file is not None:
-            self._tree = ET.parse(self._file)
+            schema = ET.XMLSchema(file=xsd_file)
+            parser = ET.XMLParser(schema=schema)
+
+            self._tree = ET.parse(self._file, parser=parser)
             self._root = self._tree.getroot()
 
         self._structure = dict()
-
-    # check XML structure
-    def check_structure(self, root=None, structure=None):
-        if root is None:
-            root = self._root
-        if structure is None:
-            structure = self._structure
-
-        node_count = dict()
-        # iterate direct child nodes
-        for node in root:
-            if node.tag in structure.keys():
-                # count number of appearances
-                if node.tag in node_count:
-                    node_count[node.tag] += 1
-                else:
-                    node_count[node.tag] = 1
-
-                # check node attributes
-                attr_present = node.keys()
-                attr_required = list()
-                attr_optional = list()
-                if "required-attrs" in structure[node.tag]:
-                    attr_required = structure[node.tag]["required-attrs"]
-                if "optional-attrs" in structure[node.tag]:
-                    attr_optional = structure[node.tag]["optional-attrs"]
-                attr_allowed  = attr_required + attr_optional
-
-                for attr in attr_present:
-                    if attr not in attr_allowed:
-                        logging.error("Unexpected attribute '%s' of node '<%s>'." % (attr, node.tag))
-
-                for attr in attr_required:
-                    if attr not in attr_present:
-                        logging.error("Required attribute '%s' not found for node '<%s>'." % (attr, node.tag))
-
-                # check children
-                leaf = True
-                if "leaf" in structure[node.tag]:
-                    leaf = structure[node.tag]["leaf"]
-
-                if "children" in structure[node.tag]:
-                    self.check_structure(node, structure[node.tag]["children"])
-                elif "recursive-children" in structure[node.tag] and structure[node.tag]["recursive-children"]:
-                    self.check_structure(node, structure)
-                elif leaf:
-                    self.check_structure(node, dict())
-                
-            else:
-                logging.error("Unexpected node '<%s>' below '<%s>'." % (node.tag, root.tag))
-
-        # check node_count
-        for tag in structure.keys():
-            found = 0
-            if tag in node_count:
-                found = node_count[tag]
-
-            if "min" in structure[tag]:
-                if found < structure[tag]["min"]:
-                    logging.error("Node '<%s>' must be present %d times below '<%s>' (found %d)." % 
-                            (tag, structure[tag]["min"], root.tag, found))
-            if "max" in structure[tag]:
-                if found > structure[tag]["max"]:
-                    logging.error("Node '<%s>' must not be present more than %d times below '<%s>' (found %d)." % 
-                            (tag, structure[tag]["max"], root.tag, found))
 
 class Repository(XMLParser):
 
@@ -235,74 +175,8 @@ class Repository(XMLParser):
 
             return functions
 
-    def __init__(self, config_model_file):
-        XMLParser.__init__(self, config_model_file)
-
-        self._structure = { "binary" : { "required-attrs" : ["name"], "children" : { "component" : { "min" : 0,
-                                                                                                     "required-attrs" : ["name"],
-                                                                                                     "optional-attrs" : ["version"]
-                                                                                                   } }
-                            },
-                            "component" : { "required-attrs" : ["name"], "optional-attrs" : ["singleton", "version"], "children" : {
-                                "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients",
-                                                                                "filter", "type"] } } },
-                                "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter"],
-                                                                            "children" : {
-                                                                                "exclude-component" : { 
-                                                                                    "required-attrs" : ["name"],
-                                                                                    "optional-attrs" : ["version_above", "version_below"]
-                                                                                    }
-                                                                                }},
-                                                              "rte"     : { "max" : 1, "required-attrs" : ["name"] },
-                                                              "spec"    : { "required-attrs" : ["name"] } } },
-                                "proxy"    : { "required-attrs" : ["carrier"] },
-                                "function"    : { "required-attrs" : ["name"] },
-                                "filter"   : { "max" : 1, "optional-attrs" : ["alias"], "children" : {
-                                    "add"    : { "required-attrs" : ["tag"] },
-                                    "remove" : { "required-attrs" : ["tag"] },
-                                    "reset"  : { "required-attrs" : ["tag"] },
-                                    }
-                                },
-                                "mux"      : { "required-attrs" : ["service"] },
-                                "protocol" : { "required-attrs" : ["from", "to"] },
-                                "defaults" : { "leaf" : False },
-                                }
-                            },
-                            "composite" : { "optional-attrs" : ["name"], "children" : {
-                                "provides" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["max_clients"] } } },
-                                "requires" : { "children" : { "service" : { "required-attrs" : ["name"],
-                                                                            "optional-attrs" : ["label", "filter", "function"] } } },
-                                "proxy"    : { "required-attrs" : ["carrier"] },
-                                "function"    : { "required-attrs" : ["name"] },
-                                "filter"   : { "max" : 1, "children" : {
-                                    "add"    : { "required-attrs" : ["tag"] },
-                                    "remove" : { "required-attrs" : ["tag"] },
-                                    "reset"  : { "required-attrs" : ["tag"] },
-                                    }
-                                },
-                                "mux"      : { "required-attrs" : ["service"] },
-                                "protocol" : { "required-attrs" : ["from", "to"] },
-                                "pattern"  : { "min" : 1, "children" : {
-                                    "component" : { "min" : 1, "required-attrs" : ["name"], "children" : {
-                                        "requires" : { "max" : 1, "children" : { "service" : { "required-attrs" : ["name"],
-                                                                                               "optional-attrs" : ["label", "filter", "function"] } } },
-                                        "route" : { "max" : 1, "children" : {
-                                            "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                                "external"  : { "optional-attrs" : ["function"] },
-                                                "child"    : { "required-attrs" : ["name"] }
-                                                }}
-                                            }},
-                                        "expose" : { "max" : 1, "children" : {
-                                            "service" : { "required-attrs" : ["name"] }
-                                            }},
-                                        "config" : { "leaf" : False }
-                                        }}
-                                    }}
-                                }
-                            }}
+    def __init__(self, config_model_file, xsd_file):
+        XMLParser.__init__(self, config_model_file, xsd_file)
 
         if self._file is not None:
             # find <repository>
@@ -859,10 +733,10 @@ class Subsystem:
         def _parse(self):
             self._type = None
 
-            for t in [ "composite", "function", "component" ]:
-                if t in self._root.keys():
+            for t in [ "function", "component" ]:
+                if self._root.find(t) is not None:
                     self._type = t
-                    self._identifier = self._root.get(t)
+                    self._identifier = self._root.find(t).get('name')
 
             assert(self._type is not None)
 
@@ -949,28 +823,9 @@ class Subsystem:
 
 
 class SubsystemParser:
-    def __init__(self, xml_file):
+    def __init__(self, xml_file, xsd_file):
  
-        XMLParser.__init__(self, xml_file)
-
-        self._structure = { "system" : { "max" : 1, "children" : {
-                                "provides" : { "max" : 1, "children" : {
-                                    "spec"    : { "required-attrs" : ["name"] },
-                                    "rte"     : { "required-attrs" : ["name"] },
-                                    "service" : { "required-attrs" : ["name"] }
-                                    }},
-                                "child"     : { "optional-attrs" : ["function","component","composite","name"], "children" : {
-                                    "route" : { "max" : 1, "children" : {
-                                        "service" :  { "required-attrs" : ["name"], "optional-attrs" : ["label"],  "children" : {
-                                            "child"    : { "required-attrs" : ["name"] }
-                                            }}
-                                        }},
-                                    "config"   : { "leaf" : False },
-                                    "resource" : { "required-attrs" : ["name", "quantum"] },
-                                    }},
-                                "default-routes" : { "leaf" : False },
-                                "subsystem" : { "required-attrs" : ["name"], "recursive-children" : True }
-                                }}}
+        XMLParser.__init__(self, xml_file, xsd_file)
 
         if self._file is not None:
             # find <system>

@@ -227,22 +227,24 @@
 </repository>
 
 <!-- example abstract config //-->
-<system> 
+<system name="ins"> 
 	<subsystem name="ecu1">
 		<provides>
 			<spec name="ecu1" />
 			<spec name="nic" />
 		</provides>
-		<child function="SPEED" />
-		<child function="STEERING" />
-		<child function="LONG">
+        <child><function name="SPEED" /></child>
+        <child><function name="STEERING" /></child>
+        <child>
+            <function name="LONG" />
 			<route>
 				<service name="ROM" label="accel"><child name="IMU" /></service>
 				<service name="CTRL_SPEED"><child name="SPEED" /></service>
 				<service name="ROM" label="velocity"><child name="ACC" /></service>
 			</route>
 		</child>
-		<child function="LAT">
+        <child>
+            <function name="LAT" />
 			<route>
 				<service name="ROM" label="gyro"><child name="IMU" /></service>
 				<service name="CTRL_STEERING"><child name="STEERING" /></service>
@@ -256,7 +258,7 @@
 				<spec name="imu" />
 			</provides>
 
-			<child function="IMU" />
+            <child><function name="IMU" /></child>
 		</subsystem>
 	</subsystem>
 	<subsystem name="ecu2">
@@ -264,12 +266,14 @@
 			<spec name="ecu2" />
 			<spec name="nic" />
 		</provides>
-		<child function="TC">
+        <child>
+            <function name="TC" />
 			<route>
 				<service name="Nic"><child name="CAM" /></service>
 			</route>
 		</child>
-		<child function="ACC">
+        <child>
+            <function name="ACC" />
 			<route>
 				<service name="Nic"><child name="RADAR" /></service>
 			</route>
@@ -280,13 +284,13 @@
 		<provides>
 			<rte name="camera" />
 		</provides>
-		<child function="CAM" />
+        <child><function name="CAM" /></child>
 	</subsystem>
 	<subsystem name="radar">
 		<provides>
 			<rte name="radar" />
 		</provides>
-		<child function="RADAR" />
+        <child><function name="RADAR" /></child>
 	</subsystem>
 </system>
 </xml>

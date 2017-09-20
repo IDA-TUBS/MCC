@@ -1149,11 +1149,11 @@ class Mcc:
     def __init__(self, repo):
         self.repo  = repo
 
-    def search_config(self, subsystem_xml, args):
+    def search_config(self, subsystem_xml, xsd_file, args):
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 1) we parse the platform model (here: subsystem structure)
-        subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml))
+        subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml, xsd_file))
 
         # 2) we create a new system model
         self.model = SystemModel(self.repo, subsys_platform)
