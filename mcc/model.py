@@ -310,16 +310,6 @@ class SystemModel(Registry):
         if child.platform_component() is not None:
             fa.set_param_candidates('mapping', child, set([child.platform_component()]))
 
-        # TODO move into ComponentEngine
-        components = self.repo.find_components_by_type(child.query(), child.type())
-        if len(components) == 0:
-            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
-        else:
-            if len(components) > 1:
-                logging.info("Multiple candidates found for child %s '%s'." % (child.type(), child.identified()))
-
-            fa.set_param_candidates('component', child, set(components))
-
     def _write_dot_node(self, layer, dotfile, node, prefix="  "):
         label = "label=\"%s\"," % node.label()
         style = ','.join(self.dot_styles[layer]['node'])

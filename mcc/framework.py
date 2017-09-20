@@ -145,7 +145,7 @@ class Map(Operation):
             # TODO (?) we may need to iterate over this multiple times
 
             # update candidates for this parameter in layer object
-            layer.set_param_candidates(self.param, obj, candidates)
+            self.layer.set_param_candidates(self.param, obj, candidates)
 
         return True
 

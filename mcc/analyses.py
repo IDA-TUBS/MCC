@@ -8,10 +8,10 @@ class QueryEngine(AnalysisEngine):
 
     def assign(self, obj, candidates):
         if len(candidates) == 0:
-            logging.error("No mapping candidate for '%s'." % (obj.identifier()))
+            logging.error("No mapping candidate for '%s'." % (obj.label()))
             raise Exception("ERROR")
         elif len(candidates) > 1:
-            logging.info("Multiple mapping candidates for '%s'." % (obj.identifier()))
+            logging.info("Multiple mapping candidates for '%s'." % (obj.label()))
 
         return list(candidates)[0]
 
@@ -24,7 +24,16 @@ class ComponentEngine(AnalysisEngine):
         self.repo = repo
 
     def map(self, obj):
-        raise Exception('not implemented')
+        components = self.repo.find_components_by_type(obj.query(), obj.type())
+        if len(components) == 0:
+            logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
+        else:
+            if len(components) > 1:
+                logging.info("Multiple candidates found for child %s '%s'." % (obj.type(), obj.identifier()))
+
+            return set(components)
+
+        return set()
 
 # TODO class SpecEngine(AnalysisEngine):
 
