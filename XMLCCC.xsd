@@ -48,7 +48,7 @@
          <xs:element name="filter"   type="FilterType" />
          <xs:element name="function" type="NameType" /> 
          <xs:element name="mux"      type="MuxType" />
-         <xs:element name="protocol" type="ProtocolType" />
+         <xs:element name="protocol" type="ProtocolType" maxOccurs="unbounded" />
        </xs:choice>
        <xs:element name="provides" type="ProvidesType" minOccurs="0" />
        <xs:element name="requires" type="RequiresType" minOccurs="0" />
@@ -158,7 +158,7 @@
          <xs:element name="filter"   type="FilterType" />
          <xs:element name="mux"      type="MuxType" />
          <xs:element name="function" type="NameType" />
-         <xs:element name="protocol" type="ProtocolType" />
+         <xs:element name="protocol" type="ProtocolType" maxOccurs="unbounded" />
        </xs:choice>
        <xs:element name="provides" minOccurs="0">
          <xs:complexType>
@@ -174,7 +174,7 @@
          </xs:complexType>
        </xs:element>
        <xs:element name="requires" type="CompositeRequiresType" minOccurs="0" />
-       <xs:element name="pattern" minOccurs="1">
+       <xs:element name="pattern" minOccurs="1" maxOccurs="unbounded">
          <xs:complexType>
            <xs:choice maxOccurs="unbounded">
              <xs:element name="component" type="PatternComponentType" minOccurs="1" maxOccurs="unbounded"/>
@@ -250,6 +250,7 @@
                          </xs:choice>
                        </xs:complexType>
                      </xs:element>
+                     <xs:element name="config" minOccurs="0" maxOccurs="1" />
                    </xs:sequence>
                    <xs:attribute name="name" type="xs:string"/>
                  </xs:complexType>

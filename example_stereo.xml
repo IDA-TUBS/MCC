@@ -1,4 +1,5 @@
-<config_model>
+<xml>
+<repository>
 	<!-- list available binaries and
 		  * (optional) what component they implement (defaults to binary name)
 		  * (optional) what version they implement (defaults to 0)
@@ -329,8 +330,8 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" function="CAMERA" />
-			<service name="ROM" function="STEREO_MATCH" />
+			<service name="ROM" label="cam" function="CAMERA" />
+			<service name="ROM" label="match" function="STEREO_MATCH" />
 		</requires>
 
 		<pattern>
@@ -380,33 +381,28 @@
 			</component>
 		</pattern>
 	</composite>
+</repository>
 
 <!-- example abstract config //-->
-<system> 
+<system name="stereo"> 
     <provides>
         <spec name="zynq" />
     </provides>
 
     <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
-    <child function="Network" />
+    <child><function name="Network" /></child>
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="zynq">
-		<!-- we can decide on the component based on the rte requirements //-->
-
-		<!-- we can define some default routing rules for trivial services //-->
-		<default-routes>
-			<any-service><parent /></any-service>
-		</default-routes>
 
 		<!-- explicitly ask for CAMERA function //-->
-		<child function="CAMERA" />
+        <child><function name="CAMERA" /></child>
 		
 		<!-- requires unambiguous function CAMERA //-->
-		<child function="STEREO_MATCH" />
+        <child><function name="STEREO_MATCH" /></child>
 
 		<!-- requires unambiguous functions CAMERA and STEREO_MATCH //-->
-		<child function="DISP_TO_PC" />
+        <child name="pc-provider"><function name="DISP_TO_PC" /></child>
 
 		<!-- remark: ROM proxies are automatically instantiated //-->
 
@@ -415,9 +411,10 @@
 	<subsystem name="pc">
 
 		<!-- explicitly connect ROM service to DISP_TO_PC //-->
-		<child component="object_recog">
+        <child>
+            <component name="object_recog" />
 			<route>
-				<service name="ROM"><child name="DISP_TO_PC" /></service>
+				<service name="ROM"><child name="pc-provider" /></service>
 			</route>
 		</child>
 
@@ -426,4 +423,4 @@
 	</subsystem>
 </system>
 
-</config_model>
+</xml>

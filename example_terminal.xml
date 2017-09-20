@@ -1,4 +1,5 @@
-<config_model>
+<xml>
+<repository>
 	<!-- list available binaries and
 		  * (optional) what component they implement (defaults to binary name)
 		  * (optional) what version they implement (defaults to 0)
@@ -251,9 +252,10 @@
 			</component>
 		</pattern>
 	</composite>
+</repository>
 
 <!-- example abstract config //-->
-<system>
+<system name="terminal">
 
     <provides>
         <spec name="sdl" />
@@ -262,28 +264,22 @@
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="init1">
 
-		<!-- we can decide on the component based on the rte requirements //-->
-
-		<!-- we can define some default routing rules for trivial services //-->
-		<default-routes>
-			<any-service><parent /></any-service>
-		</default-routes>
-
 		<!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
-		<child function="FB_DRV" />
-		<child function="INPUT_DRV" />
+        <child><function name="FB_DRV" /></child>
+        <child><function name="INPUT_DRV" /></child>
 
 		<subsystem name="init1.2">
 
-            <child function="GUI" />
+            <child><function name="GUI" /></child>
 
 			<!-- we want a pointer (nitpicker requirement can be automatically resolved) //-->
-			<child component="pointer" />
+            <child><component name="pointer" /></child>
 
             <!-- manually insert graphical LOG //-->
-            <child composite="gui2log" name="foobar" />
+            <child name="foobar"><component name="gui2log" /></child>
 
-			<child component="launchpad">
+            <child>
+                <component name="launchpad" />
 				<route>
                     <!-- route LOG to gui2log //-->
 					<service name="LOG"><child name="foobar" /></service>
@@ -299,4 +295,4 @@
 	</subsystem>
 </system>
 
-</config_model>
+</xml>
