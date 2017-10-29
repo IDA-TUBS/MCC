@@ -79,10 +79,10 @@ class AnalysisEngine:
         self.layer = layer
         self.param = param
 
-    def map(self, source):
+    def map(self, source, candidates=None):
         raise Exception("not implemented")
 
-    def assign(self, source):
+    def assign(self, source, candidates):
         raise Exception("not implemented")
 
     def transform(self, source):
@@ -133,10 +133,11 @@ class Map(Operation):
             for ae in self.analysis_engines:
 
                 if first:
-                    candidates = ae.map(obj)
+                    candidates = ae.map(obj, None)
+                    first = False
                 else:
                     # build intersection of candidates for all analyses
-                    candidates &= ae.map(obj)
+                    candidates &= ae.map(obj, candidates)
 
                 for c in candidates:
                     assert(isinstance(c, ae.target_type()))

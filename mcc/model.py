@@ -1171,21 +1171,26 @@ class Mcc:
         if args.dotpath is not None:
             self.model.write_dot_layer('func_arch', args.dotpath+"func_arch.dot")
 
-        # FIXME (continue refactoring)
-
         ce   = ComponentEngine(fa, self.repo)
-#        rtee = RteEngine()
+        rtee = RteEngine(fa)
+        spe  = SpecEngine(fa)
 
+        # Map operation is the first when selecting components
         comps = Map(ce)
-        pf_compat = NodeStep(comps)                 # choose components from repo
-#        comps.register_ae(rtee)                     #   consider rte requirements
-#        comps.register_ae(spe)                      #   consider spec requirements
-#       check = pf_compat.add_operation(Check(rtee)) # check rte requirements
-#       check.register_ae(spe)                       # check spec requirements
+        comps.register_ae(rtee)                     #   consider rte requirements
+        comps.register_ae(spe)                      #   consider spec requirements
+
+        # check compatibility
+        pf_compat = NodeStep(comps)                  # get components from repo
+        assign = pf_compat.add_operation(Assign(ce)) # choose component
+        check = pf_compat.add_operation(Check(rtee)) # check rte requirements
+        check.register_ae(spe)                       # check spec requirements
         pf_compat.execute()
 
+        # FIXME (continue refactoring)
+        # solve reachability
+
         # TODO implement transformation steps:
-        # - check specs and rte requirements (assign mapping)
         # - solve reachability (assign edges to optional proxies)
         # - create comm arch
         # - assign component patterns

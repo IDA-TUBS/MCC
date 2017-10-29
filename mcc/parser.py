@@ -167,6 +167,13 @@ class Repository(XMLParser):
             else:
                 return 'native'
 
+        def requires_specs(self):
+            specs = set()
+            for spec in self.xml_node.findall('./requires/spec'):
+                specs.add(spec.get('name'))
+
+            return specs
+
         def requires_functions(self):
             functions = set()
             if self.xml_node.tag == "composite":
