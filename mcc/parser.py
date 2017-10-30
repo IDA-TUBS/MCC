@@ -3,143 +3,143 @@ from lxml import etree as ET
 from lxml.etree import XMLSyntaxError
 import logging
 
-class PatternManager:
-    def __init__(self, composite, repo):
-        self.patterns = dict()
-        self.repo = repo
-
-        self.parse_patterns(composite)
-
-    def parse_patterns(self, composite):
-        if composite in self.patterns.keys():
-            return
-
-        patterns = { "dismissed" : set(), "options" : set() }
-        for p in composite.findall("pattern"):
-            if "chosen" not in patterns.keys():
-                patterns["chosen"] = p
-
-            patterns["options"].add(p)
-
-        self.patterns[composite] = patterns
-
-    def get_alternatives(self, composite):
-        self.parse_patterns(composite)
-        return self.patterns[composite]['options'] - self.patterns[composite]['dismissed']
-
-    def find_compatible(self, composite, callback):
-        self.parse_patterns(composite)
-
-        found = False
-        for alt in self.get_alternatives(composite):
-            if self.compatible(alt, callback):
-                if not found:
-                    self.patterns[composite]['chosen'] = alt
-                    found = True
-            else:
-                self.patterns[composite]['dismissed'].add(alt)
-
-        return found
-
-    def compatible(self, pattern, callback):
-        # find components, error if not unambiguous
-        for c in pattern.findall("component"):
-            if not callback(self._get_component_from_repo(c)):
-                logging.info("Pattern incompatible")
-                return False
-
-        return True
-
-    def _get_component_from_repo(self, c):
-        matches = self.repo._find_element_by_attribute("component", { "name" : c.get("name") })
-        if len(matches) > 1:
-            logging.critical("Pattern references ambiguous component '%s'." % c.get("name"))
-
-        return matches[0]
-
-    def components(self, composite):
-        components = set()
-        for c in self.patterns[composite]['chosen'].findall("component"):
-            components.add(self._get_component_from_repo(c))
-
-        return components
-
-    def services_routed_to_function(self, composite, functionname):
-        result = set()
-        for c in self.patterns[composite]['chosen'].findall('component'):
-            if c.find('route') is not None:
-                for s in c.find('route').findall('service'):
-                    slabel = None
-                    if 'label' in s.keys():
-                        slabel = s.get('label')
-
-                    f = s.find('function')
-                    if f is not None:
-                        if functionname is None or f.get('name') == functionname:
-                            result.add((s.get('name'), slabel))
-
-        return result
-
-    def component_exposing_service(self, composite, servicename):
-        result = set()
-        for c in self.patterns[composite]['chosen'].findall('component'):
-            if c.find('expose') is not None:
-                for s in c.find('expose').findall('service'):
-                    if s.get('name') == servicename:
-                        result.add(self._get_component_from_repo(c))
-
-        if len(result) == 0:
-            logging.error("Service '%s' is not exposed by pattern." % servicename)
-
-        elif len(result) > 1:
-            logging.error("Service '%s' is exposed multiple times by pattern." % servicename)
-
-        return result.pop()
-
-    def components_requiring_external_service(self, composite, functionname, servicename, label=None):
-        result = set()
-        for c in self.patterns[composite]['chosen'].findall('component'):
-            if c.find('route') is not None:
-                for s in c.find('route').findall('service'):
-                    if s.get('name') == servicename:
-                        slabel = None
-                        if 'label' in s.keys():
-                            slabel = s.get('label')
-
-                        if label is None or slabel == label:
-                            if functionname is not None:
-                                if s.find('function') is not None and s.find('function').get('name') == functionname:
-                                    result.add((self._get_component_from_repo(c), slabel))
-                            else:
-                                if s.find('service') is not None or s.find('function') is not None:
-                                    result.add((self._get_component_from_repo(c), slabel))
-                        else:
-                            logging.info("label mismatch %s != %s" % (slabel, label))
-
-        return result
-
-    def add_to_graph(self, composite, system_graph):
-        child_lookup = dict()
-        name_lookup = dict()
-        # first, add all components and create lookup table by child name
-        for c in self.patterns[composite]['chosen'].findall("component"):
-            component = system_graph.add_component(self._get_component_from_repo(c))
-            name_lookup[c.get('name')] = component
-            child_lookup[c] = component
-
-        # second, add connections
-        for c in self.patterns[composite]['chosen'].findall("component"):
-            if c.find('route') is not None:
-                for s in c.find('route').findall('service'):
-                    if s.find('child') is not None:
-                        name = s.find('child').get('name')
-                        if name not in name_lookup:
-                            logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
-                        else:
-                            child_lookup[c].route_to(system_graph, s.get('name'), name_lookup[name], s.get('label'))
-
-        # return set of added nodes
-        return child_lookup.values()
+#class PatternManager:
+#    def __init__(self, composite, repo):
+#        self.patterns = dict()
+#        self.repo = repo
+#
+#        self.parse_patterns(composite)
+#
+#    def parse_patterns(self, composite):
+#        if composite in self.patterns.keys():
+#            return
+#
+#        patterns = { "dismissed" : set(), "options" : set() }
+#        for p in composite.findall("pattern"):
+#            if "chosen" not in patterns.keys():
+#                patterns["chosen"] = p
+#
+#            patterns["options"].add(p)
+#
+#        self.patterns[composite] = patterns
+#
+#    def get_alternatives(self, composite):
+#        self.parse_patterns(composite)
+#        return self.patterns[composite]['options'] - self.patterns[composite]['dismissed']
+#
+#    def find_compatible(self, composite, callback):
+#        self.parse_patterns(composite)
+#
+#        found = False
+#        for alt in self.get_alternatives(composite):
+#            if self.compatible(alt, callback):
+#                if not found:
+#                    self.patterns[composite]['chosen'] = alt
+#                    found = True
+#            else:
+#                self.patterns[composite]['dismissed'].add(alt)
+#
+#        return found
+#
+#    def compatible(self, pattern, callback):
+#        # find components, error if not unambiguous
+#        for c in pattern.findall("component"):
+#            if not callback(self._get_component_from_repo(c)):
+#                logging.info("Pattern incompatible")
+#                return False
+#
+#        return True
+#
+#    def _get_component_from_repo(self, c):
+#        matches = self.repo._find_element_by_attribute("component", { "name" : c.get("name") })
+#        if len(matches) > 1:
+#            logging.critical("Pattern references ambiguous component '%s'." % c.get("name"))
+#
+#        return matches[0]
+#
+#    def components(self, composite):
+#        components = set()
+#        for c in self.patterns[composite]['chosen'].findall("component"):
+#            components.add(self._get_component_from_repo(c))
+#
+#        return components
+#
+#    def services_routed_to_function(self, composite, functionname):
+#        result = set()
+#        for c in self.patterns[composite]['chosen'].findall('component'):
+#            if c.find('route') is not None:
+#                for s in c.find('route').findall('service'):
+#                    slabel = None
+#                    if 'label' in s.keys():
+#                        slabel = s.get('label')
+#
+#                    f = s.find('function')
+#                    if f is not None:
+#                        if functionname is None or f.get('name') == functionname:
+#                            result.add((s.get('name'), slabel))
+#
+#        return result
+#
+#    def component_exposing_service(self, composite, servicename):
+#        result = set()
+#        for c in self.patterns[composite]['chosen'].findall('component'):
+#            if c.find('expose') is not None:
+#                for s in c.find('expose').findall('service'):
+#                    if s.get('name') == servicename:
+#                        result.add(self._get_component_from_repo(c))
+#
+#        if len(result) == 0:
+#            logging.error("Service '%s' is not exposed by pattern." % servicename)
+#
+#        elif len(result) > 1:
+#            logging.error("Service '%s' is exposed multiple times by pattern." % servicename)
+#
+#        return result.pop()
+#
+#    def components_requiring_external_service(self, composite, functionname, servicename, label=None):
+#        result = set()
+#        for c in self.patterns[composite]['chosen'].findall('component'):
+#            if c.find('route') is not None:
+#                for s in c.find('route').findall('service'):
+#                    if s.get('name') == servicename:
+#                        slabel = None
+#                        if 'label' in s.keys():
+#                            slabel = s.get('label')
+#
+#                        if label is None or slabel == label:
+#                            if functionname is not None:
+#                                if s.find('function') is not None and s.find('function').get('name') == functionname:
+#                                    result.add((self._get_component_from_repo(c), slabel))
+#                            else:
+#                                if s.find('service') is not None or s.find('function') is not None:
+#                                    result.add((self._get_component_from_repo(c), slabel))
+#                        else:
+#                            logging.info("label mismatch %s != %s" % (slabel, label))
+#
+#        return result
+#
+#    def add_to_graph(self, composite, system_graph):
+#        child_lookup = dict()
+#        name_lookup = dict()
+#        # first, add all components and create lookup table by child name
+#        for c in self.patterns[composite]['chosen'].findall("component"):
+#            component = system_graph.add_component(self._get_component_from_repo(c))
+#            name_lookup[c.get('name')] = component
+#            child_lookup[c] = component
+#
+#        # second, add connections
+#        for c in self.patterns[composite]['chosen'].findall("component"):
+#            if c.find('route') is not None:
+#                for s in c.find('route').findall('service'):
+#                    if s.find('child') is not None:
+#                        name = s.find('child').get('name')
+#                        if name not in name_lookup:
+#                            logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
+#                        else:
+#                            child_lookup[c].route_to(system_graph, s.get('name'), name_lookup[name], s.get('label'))
+#
+#        # return set of added nodes
+#        return child_lookup.values()
 
 class XMLParser:
     def __init__(self, xml_file, xsd_file):
@@ -278,7 +278,7 @@ class Repository(XMLParser):
 
         return provisions
 
-    def _find_proxies(self, service):
+    def find_proxies(self, service):
         result = set()
         for p in self._find_component_by_class('proxy'):
             if p.find('provides').find('service').get('name') == service:

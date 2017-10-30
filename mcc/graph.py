@@ -13,10 +13,14 @@ class Graph:
         self.graph.add_node(obj)
         return obj
 
-    def add_edge(self, source, target):
+    def create_edge(self, source, target):
         e = Edge(source, target)
-        self.graph.add_edge(source, target, key=e)
-        return e
+        return self.add_edge(e)
+
+    def add_edge(self, edge):
+        assert(isinstance(edge, Edge))
+        self.graph.add_edge(edge.source, edge.target, key=edge)
+        return edge
 
     def in_edges(self, node):
         edges = set()

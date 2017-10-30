@@ -3,8 +3,8 @@ from mcc.graph import *
 
 class Registry:
     def __init__(self):
-        self.by_order = list()
-        self.by_name  = dict()
+        self.by_order  = list()
+        self.by_name   = dict()
 
     def add_layer(self, layer):
         self.by_order.append(layer)
@@ -28,6 +28,21 @@ class Layer:
 
     def clear(self):
         self.graph = Graph()
+
+    def insert_obj(self, obj):
+        inserted = set()
+        
+        if isinstance(obj, Edge):
+            inserted.add(self.graph.add_edge(obj))
+        elif isinstance(obj, Graph):
+            raise Exception('not implemented')
+        elif isinstance(obj, set) or isinstance(obj, list):
+            for o in obj:
+                inserted.update(self.insert_obj(o))
+        else:
+            inserted.add(self.graph.add_node(obj))
+
+        return inserted
 
     def _get_params(self, obj):
         if isinstance(obj, Edge):
@@ -85,7 +100,7 @@ class AnalysisEngine:
     def assign(self, source, candidates):
         raise Exception("not implemented")
 
-    def transform(self, source):
+    def transform(self, source, target_layer):
         raise Exception("not implemented")
 
     def check(self, obj):
@@ -96,6 +111,27 @@ class AnalysisEngine:
 
     def target_type(self):
         return object
+
+class DummyEngine(AnalysisEngine):
+    def __init__(self, layer):
+        AnalysisEngine.__init__(self, layer, None)
+
+    def transform(self, obj, target_layer):
+        return obj
+
+    def check(self, obj):
+        return True
+
+class CopyEngine(AnalysisEngine):
+    def __init__(self, layer, param, source_layer):
+        AnalysisEngine.__init__(self, layer, param)
+        self.source_layer = source_layer
+
+    def map(self, obj, candidates):
+        return set([self.source_layer.get_param_value(self.param, obj)])
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
 
 class Operation:
     def __init__(self, ae):
@@ -173,16 +209,24 @@ class Assign(Operation):
         return True
 
 class Transform(Operation):
-    def __init__(self, ae):
+    def __init__(self, ae, target_layer):
         Operation.__init__(self, ae)
+        self.target_layer = target_layer
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, layer):
-        # TODO implement
-        raise Exception("not implemented")
+    def execute(self, iterable):
+        param = self.target_layer.name
+
+        for obj in iterable:
+            # TODO shall we also return the existing objects (for comp_inst)?
+            new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
+            assert new_objs, "transform() did not return any object"
+            inserted = self.target_layer.insert_obj(new_objs)
+            assert len(inserted) > 0
+            self.layer.set_param_value(param, obj, inserted)
 
 class Check(Operation):
     def __init__(self, ae):
@@ -224,3 +268,23 @@ class EdgeStep(Step):
                 return False
 
         return True
+
+class CopyNodeTransform(Transform):
+    def __init__(self, layer, target_layer):
+        Transform.__init__(self, DummyEngine(layer), target_layer)
+
+class CopyNodeStep(NodeStep):
+    def __init__(self, layer, target_layer):
+        NodeStep.__init__(self, CopyNodeTransform(layer, target_layer))
+
+class CopyMappingStep(NodeStep):
+    def __init__(self, layer, target_layer):
+        ce = CopyEngine(target_layer, 'mapping', layer)
+        NodeStep.__init__(self, Map(ce))
+        self.add_operation(Assign(ce))
+
+class CopyServiceStep(EdgeStep):
+    def __init__(self, layer, target_layer):
+        ce = CopyEngine(target_layer, 'service', layer)
+        EdgeStep.__init__(self, Map(ce))
+        self.add_operation(Assign(ce))
