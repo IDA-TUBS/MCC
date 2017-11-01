@@ -304,8 +304,7 @@ class SystemModel(Registry):
         for route in query_model.routes():
             # remark: nodes in query_model and fa are the same objects
             e = fa.graph.create_edge(route.source, route.target)
-            # FIXME (continue) copy edge attributes 'service' to params
-            #fa.graph.edge_attributes(e).update(query_model.query_graph.edge_attributes(route))
+            fa.set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
 
     def _insert_query(self, child):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
@@ -326,8 +325,11 @@ class SystemModel(Registry):
 
     def _write_dot_edge(self, layer, dotfile, edge, prefix="  "):
         style = self.dot_styles[layer]['edge']
-        # FIXME consider function dependencies
-        label = "label=\"%s\"," % layer.get_param_value('service', edge)
+        name = layer.get_param_value('service', edge)
+        if name is None:
+            name = layer.get_param_value('function', edge)
+
+        label = "label=\"%s\"," % name
 
         dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
                                                 layer.graph.node_attributes(edge.source)['id'],
@@ -1202,10 +1204,10 @@ class Mcc:
         # copy nodes to comm arch
         CopyNodeStep(fa, fc).execute()
         CopyMappingStep(fa, fc).execute()
-        CopyServiceStep(fa, fc).execute()
 
         # perform arc split
         EdgeStep(Transform(re, fc)).execute()
+        CopyServiceStep(fa, fc).execute()
 
     def search_config(self, subsystem_xml, xsd_file, args):
         # check function/composite/component references, compatibility and routes in system and subsystems
@@ -1242,7 +1244,7 @@ class Mcc:
         # solve reachability and transform into comm_arch
         self._insert_proxies()
 
-        # TODO output second layer
+        # output second layer
         if args.dotpath is not None:
             self.model.write_dot_layer('comm_arch', args.dotpath+"comm_arch.dot")
 

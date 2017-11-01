@@ -138,8 +138,17 @@ class ReachabilityEngine(AnalysisEngine):
         return src_comp == dst_comp
 
     def _find_carriers(self, obj):
-        # FIXME (continue) infer carrier from platform model
-        return set(['Nic'])
+        src_comp = self.layer.get_param_value('mapping', obj.source)
+        dst_comp = self.layer.get_param_value('mapping', obj.target)
+
+        if dst_comp in src_comp.subsystems() or src_comp in dst_comp.subsystems():
+            return set(['native'])
+        else:
+            # here, we assume subsystems are connected via network
+            if self.layer.get_param_value('service', obj) != 'Nic':
+                return set(['Nic'])
+            else:
+                return set(['native'])
 
     def map(self, obj, candidates):
         assert(isinstance(obj, Edge))

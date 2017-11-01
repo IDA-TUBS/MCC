@@ -128,7 +128,8 @@ class CopyEngine(AnalysisEngine):
         self.source_layer = source_layer
 
     def map(self, obj, candidates):
-        return set([self.source_layer.get_param_value(self.param, obj)])
+        src_obj = self.layer.get_param_value(self.source_layer.name, obj)
+        return set([self.source_layer.get_param_value(self.param, src_obj)])
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -218,15 +219,15 @@ class Transform(Operation):
         assert(False)
 
     def execute(self, iterable):
-        param = self.target_layer.name
-
         for obj in iterable:
             # TODO shall we also return the existing objects (for comp_inst)?
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             assert new_objs, "transform() did not return any object"
             inserted = self.target_layer.insert_obj(new_objs)
             assert len(inserted) > 0
-            self.layer.set_param_value(param, obj, inserted)
+            self.layer.set_param_value(self.target_layer.name, obj, inserted)
+            for o in inserted:
+                self.target_layer.set_param_value(self.layer.name, o, obj)
 
 class Check(Operation):
     def __init__(self, ae):
