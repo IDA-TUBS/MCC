@@ -131,8 +131,7 @@ class PlatformModel(object):
                                'edge' : '' }
 
     def reachable(self, from_component, to_component):
-        # TODO implement
-        return
+        raise Exception('not implemented')
 
 class SubsystemModel(PlatformModel, QueryModel):
     # the subsystem graph models the (hierarchical) structure of the subsystems
@@ -265,6 +264,12 @@ class SubsystemModel(PlatformModel, QueryModel):
 
         return
 
+    def reachable(self, from_component, to_component):
+        if from_component in to_component.subsystems() or to_component in from_component.subsystems():
+            return 'native'
+        else:
+            # here, we assume subsystems are connected via network
+            return 'Nic'
 
 class SystemModel(Registry):
     def __init__(self, repo, platform):
@@ -1194,7 +1199,7 @@ class Mcc:
         fa = self.model.by_name['func_arch']
         fc = self.model.by_name['comm_arch']
 
-        re = ReachabilityEngine(fa, self.repo)
+        re = ReachabilityEngine(fa, self.model.platform)
 
         # decide on reachability
         reachability = EdgeStep(Map(re))          # map edges to carrier
@@ -1254,31 +1259,19 @@ class Mcc:
         # FIXME continue refactoring
 
         # TODO implement transformation steps:
-        # - create comm arch
+        # - map component patterns
         # - assign component patterns
-        # - create component arch
-        # - ...
+        # - transform 
+        # - map protocol stacks
+        # - assign protocol stacks
+        # - transform
+        # - map muxers
+        # - assign muxers
+        # - transform 
+
+        # TODO implement transformation/merge into component instantiation
+
+        # TODO implement backtracking
 
         logging.critical("not implemented")
         return True
-
-        if not system.filter_by_function_requirements():
-            logging.critical("abort")
-            return False
-
-        # connect functions
-        if not system.connect_functions():
-            logging.critical("abort")
-            return False
-
-        if not system.solve_dependencies():
-            logging.critical("abort")
-            return False
-
-        if args.dotpath is not None:
-            system.graph().write_component_dot(args.dotpath+"component_graph.dot")
-            system.graph().write_subsystem_dot(args.dotpath+"subsystem_graph.dot")
-
-        return True
-
-

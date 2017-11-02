@@ -126,9 +126,9 @@ class RteEngine(AnalysisEngine):
         return True
 
 class ReachabilityEngine(AnalysisEngine):
-    def __init__(self, layer, repo):
+    def __init__(self, layer, platform_model):
         AnalysisEngine.__init__(self, layer, param='proxy')
-        self.repo = repo
+        self.platform_model = platform_model
 
     def _local(self, obj):
         assert(isinstance(obj, Edge))
@@ -141,14 +141,11 @@ class ReachabilityEngine(AnalysisEngine):
         src_comp = self.layer.get_param_value('mapping', obj.source)
         dst_comp = self.layer.get_param_value('mapping', obj.target)
 
-        if dst_comp in src_comp.subsystems() or src_comp in dst_comp.subsystems():
+        carrier = self.platform_model.reachable(src_comp, dst_comp)
+        if carrier == self.layer.get_param_value('service', obj):
             return set(['native'])
         else:
-            # here, we assume subsystems are connected via network
-            if self.layer.get_param_value('service', obj) != 'Nic':
-                return set(['Nic'])
-            else:
-                return set(['native'])
+            return set([carrier])
 
     def map(self, obj, candidates):
         assert(isinstance(obj, Edge))
