@@ -41,7 +41,7 @@ class Layer:
         if isinstance(obj, Edge):
             inserted.add(self.graph.add_edge(obj))
         elif isinstance(obj, Graph):
-            raise Exception('not implemented')
+            raise NotImplementedError()
         elif isinstance(obj, set) or isinstance(obj, list):
             for o in obj:
                 inserted.update(self.insert_obj(o))
@@ -109,16 +109,16 @@ class AnalysisEngine:
         self.param = param
 
     def map(self, source, candidates=None):
-        raise Exception("not implemented")
+        raise NotImplementedError()
 
     def assign(self, source, candidates):
-        raise Exception("not implemented")
+        raise NotImplementedError()
 
     def transform(self, source, target_layer):
-        raise Exception("not implemented")
+        raise NotImplementedError()
 
     def check(self, obj):
-        raise Exception("not implemented")
+        raise NotImplementedError()
 
     def source_types(self):
         return set([object])
@@ -168,7 +168,7 @@ class Operation:
         return True
 
     def execute(self, iterable):
-        raise Exception("not implemented")
+        raise NotImplementedError()
 
 class Map(Operation):
     def __init__(self, ae):

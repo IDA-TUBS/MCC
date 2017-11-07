@@ -361,9 +361,9 @@ class Repository(XMLParser):
         elif querytype == 'proxy':
             components = self.find_proxies(query=query)
         elif querytype == 'mux':
-            raise Exception('not implemented')
+            raise NotImplementedError()
         elif querytype == 'proto':
-            raise Exception('not implemented')
+            raise NotImplementedError()
         else: # 'component' or 'composite'
             components = self._find_element_by_attribute('component', { "name" : query }) + \
                          self._find_element_by_attribute('composite', { "name" : query })

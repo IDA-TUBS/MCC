@@ -138,7 +138,7 @@ class PlatformModel(object):
                                'edge' : '' }
 
     def reachable(self, from_component, to_component):
-        raise Exception('not implemented')
+        raise NotImplementedError()
 
 class SubsystemModel(PlatformModel, QueryModel):
     # the subsystem graph models the (hierarchical) structure of the subsystems
@@ -540,7 +540,7 @@ class SystemModel(Registry):
                 if len(functions) > 0:
                     # TODO find function and add edge if there is not already one with matching attributes
                     logging.info("Child %s has function requirements to '%s'." % (child.label(), functions))
-                    raise Exception("not implemented")
+                    raise NotImplementedError()
 
 #    def query_in_edges(self, node):
 #        edges = list()
@@ -1295,5 +1295,5 @@ class Mcc:
 
         # TODO implement backtracking
 
-        logging.critical("not implemented")
+        raise NotImplementedError()
         return True
