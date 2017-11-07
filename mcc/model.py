@@ -4,11 +4,18 @@ from mcc.framework import *
 from mcc.analyses import *
 
 class Proxy:
-    def __init__(self, carrier):
+    def __init__(self, carrier, service):
         self.carrier = carrier
+        self.service = service
 
     def label(self):
         return "Proxy(%s)" % self.carrier
+
+    def query(self):
+        return { 'service' : self.service, 'carrier' : self.carrier }
+
+    def type(self):
+        return 'proxy'
 
 # wrapper class to allow multiple nodes of the same component
 class Component:
@@ -1177,23 +1184,37 @@ class Mcc:
         self.repo  = repo
 
     def _select_components(self):
-        fa = self.model.by_name['func_arch']
+        fc = self.model.by_name['comm_arch']
+        ca = self.model.by_name['comp_arch']
 
-        ce   = ComponentEngine(fa, self.repo)
-        rtee = RteEngine(fa)
-        spe  = SpecEngine(fa)
+        ce   = ComponentEngine(fc, self.repo)
+        rtee = RteEngine(fc)
+        spe  = SpecEngine(fc)
 
         # Map operation is the first when selecting components
         comps = Map(ce)
         comps.register_ae(rtee)                     #   consider rte requirements
         comps.register_ae(spe)                      #   consider spec requirements
 
-        # check compatibility
+        # check platform compatibility
         pf_compat = NodeStep(comps)                  # get components from repo
         assign = pf_compat.add_operation(Assign(ce)) # choose component
         check = pf_compat.add_operation(Check(rtee)) # check rte requirements
         check.register_ae(spe)                       # check spec requirements
         pf_compat.execute()
+
+        # select pattern (dummy step, nothing happening here)
+        pe = PatternEngine(fc)
+        pat_compat = NodeStep(Map(pe))
+        pat_compat.add_operation(Assign(pe))
+        pat_compat.execute()
+
+        # sanity check and transform
+        transform = NodeStep(Check(pe))
+        transform.add_operation(Transform(pe, ca))
+        transform.execute()
+
+        # TODO (continue) copy edges
 
     def _insert_proxies(self):
         fa = self.model.by_name['func_arch']
@@ -1253,15 +1274,16 @@ class Mcc:
         if args.dotpath is not None:
             self.model.write_dot_layer('comm_arch', args.dotpath+"comm_arch.dot")
 
-        # select components before transforming into comp_arch
+        # select components and transform into comp_arch
         self._select_components()
+
+        # output third layer
+        if args.dotpath is not None:
+            self.model.write_dot_layer('comp_arch', args.dotpath+"comp_arch.dot")
 
         # FIXME continue refactoring
 
         # TODO implement transformation steps:
-        # - map component patterns
-        # - assign component patterns
-        # - transform 
         # - map protocol stacks
         # - assign protocol stacks
         # - transform

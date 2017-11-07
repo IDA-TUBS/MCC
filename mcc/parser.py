@@ -3,6 +3,8 @@ from lxml import etree as ET
 from lxml.etree import XMLSyntaxError
 import logging
 
+from mcc.graph import GraphObj, Edge
+
 #class PatternManager:
 #    def __init__(self, composite, repo):
 #        self.patterns = dict()
@@ -182,6 +184,67 @@ class Repository(XMLParser):
 
             return functions
 
+        def label(self):
+            return self.xml_node.get('name')
+
+        def patterns(self):
+            result = set()
+            if self.xml_node.tag == 'composite':
+                for pat in self.xml_node.findall("./pattern"):
+                    result.add(Repository.ComponentPattern(self, pat))
+            else:
+                result.add(self)
+
+            return result
+
+        def flatten(self):
+            # for composites, we must select a pattern first
+            assert(self.xml_node.tag != 'composite')
+
+            return set([self])
+
+    class ComponentPattern():
+        def __init__(self, component, xml_node):
+            self.repo = component.repo
+            self.component = component
+            self.xml_node = xml_node
+
+        def label(self):
+            return self.component.label()
+
+        def requires_specs(self):
+            return self.component.requires_specs
+
+        def requires_rte(self):
+            return self.component.requires_rte
+
+        def flatten(self):
+            # fill set with atomic components and their edges as specified in the pattern
+            flattened = set()
+
+            child_lookup = dict()
+            name_lookup = dict()
+            # first, add all components and create lookup table by child name
+            for c in self.xml_node.findall("component"):
+                component = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                name_lookup[c.get('name')] = component
+                child_lookup[c] = component
+                # FIXME, we might have multiple options here
+                flattened.add(GraphObj(component[0]))
+
+            # second, add connections
+            for c in self.xml_node.findall("component"):
+                for s in c.findall('./route/service'):
+                    if s.find('child') is not None:
+                        name = s.find('child').get('name')
+                        if name not in name_lookup:
+                            logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
+                        else:
+                            params = { 'label' : s.get('label'), 'service' : s.get('name') }
+                            flattened.add(GraphObj(Edge(child_lookup[c], name_lookup[name]), params))
+
+            return flattened
+
     def __init__(self, config_model_file, xsd_file):
         XMLParser.__init__(self, config_model_file, xsd_file)
 
@@ -278,20 +341,32 @@ class Repository(XMLParser):
 
         return provisions
 
-    def find_proxies(self, service):
+    def find_proxies(self, service=None, carrier=None, query=None):
+        carrier = None
+        if query is not None:
+            service = query['service']
+            carrier = query['carrier']
+
         result = set()
         for p in self._find_component_by_class('proxy'):
-            if p.find('provides').find('service').get('name') == service:
-                result.add(p)
+            if service is None or p.find('provides').find('service').get('name') == service:
+                if carrier is None or p.find('proxy').get('carrier') == carrier:
+                    result.add(p)
 
         return result
 
-    def find_components_by_type(self, name, querytype):
+    def find_components_by_type(self, query, querytype):
         if querytype == 'function':
-            components = self._find_function_by_name(name)
+            components = self._find_function_by_name(query)
+        elif querytype == 'proxy':
+            components = self.find_proxies(query=query)
+        elif querytype == 'mux':
+            raise Exception('not implemented')
+        elif querytype == 'proto':
+            raise Exception('not implemented')
         else: # 'component' or 'composite'
-            components = self._find_element_by_attribute('component', { "name" : name }) + \
-                         self._find_element_by_attribute('composite', { "name" : name })
+            components = self._find_element_by_attribute('component', { "name" : query }) + \
+                         self._find_element_by_attribute('composite', { "name" : query })
 
         return [Repository.Component(c, self) for c in components]
 

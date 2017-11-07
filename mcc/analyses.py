@@ -47,9 +47,39 @@ class ComponentEngine(AnalysisEngine):
 
         return list(candidates)[0]
 
-class SpecEngine(AnalysisEngine):
+    def check(self, obj):
+        return self.layer.get_param_value(self.param, obj) is not None
+
+    def transform(self, obj, target_layer):
+        return set([self.layer.get_param_value(self.param, obj)])
+
+class PatternEngine(AnalysisEngine):
     def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param='component')
+        AnalysisEngine.__init__(self, layer, param='pattern')
+
+    def map(self, obj, candidates):
+        assert(not isinstance(obj, Edge))
+
+        assert(candidates is None)
+        return self.layer.get_param_value('component', obj).patterns()
+
+    def assign(self, obj, candidates):
+        assert(not isinstance(obj, Edge))
+
+        if len(candidates) == 0:
+            raise Exception("no pattern left for assignment")
+
+        return list(candidates)[0]
+
+    def check(self, obj):
+        return self.layer.get_param_value(self.param, obj) is not None
+
+    def transform(self, obj, target_layer):
+        return self.layer.get_param_value(self.param, obj).flatten()
+
+class SpecEngine(AnalysisEngine):
+    def __init__(self, layer, param='component'):
+        AnalysisEngine.__init__(self, layer, param=param)
 
     def _match_specs(self, required, provided):
         for spec in required:
@@ -60,6 +90,10 @@ class SpecEngine(AnalysisEngine):
 
     def map(self, obj, candidates): 
         assert(not isinstance(obj, Edge))
+
+        # no need to check this for proxies
+        if isinstance(obj, model.Proxy):
+            return candidates
 
         keep = set()
         for c in candidates:
@@ -73,6 +107,10 @@ class SpecEngine(AnalysisEngine):
 
     def check(self, obj):
         assert(not isinstance(obj, Edge))
+
+        # no need to check this for proxies
+        if isinstance(obj, model.Proxy):
+            return True
 
         pf_comp = self.layer.get_param_value('mapping', obj)
         assert(pf_comp is not None)
@@ -91,13 +129,19 @@ class SpecEngine(AnalysisEngine):
         return True
 
 class RteEngine(AnalysisEngine):
-    def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param='component')
+    def __init__(self, layer, param='component'):
+        AnalysisEngine.__init__(self, layer, param=param)
 
     def map(self, obj, candidates): 
         assert(not isinstance(obj, Edge))
+
+        # no need to check this for proxies
+        if isinstance(obj, model.Proxy):
+            return candidates
+
         keep = set()
         for c in candidates:
+
             pf_comp = self.layer.get_param_value('mapping', obj)
             assert(pf_comp is not None)
 
@@ -108,6 +152,10 @@ class RteEngine(AnalysisEngine):
 
     def check(self, obj):
         assert(not isinstance(obj, Edge))
+
+        # no need to check this for proxies
+        if isinstance(obj, model.Proxy):
+            return True
 
         pf_comp = self.layer.get_param_value('mapping', obj)
         assert(pf_comp is not None)
@@ -169,11 +217,11 @@ class ReachabilityEngine(AnalysisEngine):
     def transform(self, obj, target_layer):
         assert(isinstance(obj, Edge))
 
-        val = self.layer.get_param_value(self.param, obj)
-        if val == 'native':
+        carrier = self.layer.get_param_value(self.param, obj)
+        if carrier == 'native':
             return obj
         else:
-            proxy = model.Proxy(val)
+            proxy = model.Proxy(carrier=carrier, service=self.layer.get_param_value('service', obj))
             src_map = self.layer.get_param_value(target_layer.name, obj.source)
             dst_map = self.layer.get_param_value(target_layer.name, obj.target)
             assert(len(src_map) == 1)

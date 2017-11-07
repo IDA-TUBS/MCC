@@ -29,8 +29,14 @@ class Layer:
     def clear(self):
         self.graph = Graph()
 
+    def _set_params(self, obj, params):
+        for name, value in params.items():
+            self.set_param_value(name, obj, value)
+
     def insert_obj(self, obj):
         inserted = set()
+
+        # FIXME (continue) define GraphObj to capture node/edge with attributes
         
         if isinstance(obj, Edge):
             inserted.add(self.graph.add_edge(obj))
@@ -39,6 +45,14 @@ class Layer:
         elif isinstance(obj, set) or isinstance(obj, list):
             for o in obj:
                 inserted.update(self.insert_obj(o))
+        elif isinstance(obj, GraphObj):
+            if obj.is_edge():
+                o = self.graph.add_edge(obj.obj)
+            else:
+                o = self.graph.add_node(obj.obj)
+
+            self._set_params(o, obj.params())
+            inserted.add(o)
         else:
             inserted.add(self.graph.add_node(obj))
 

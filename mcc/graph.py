@@ -1,5 +1,24 @@
 import networkx as nx
 
+class GraphObj:
+    # captures dangling graph objects, i.e. Edge or Node, and its parameters
+
+    def __init__(self, obj, params=None):
+        self.obj = obj
+        self._params = params
+
+    def is_edge(self):
+        if isinstance(self.obj, Edge):
+            return True
+
+        return False
+
+    def params(self):
+        if self._params is None:
+            return dict()
+
+        return self._params
+
 class Edge:
     def __init__(self, source, target):
         self.source = source
@@ -47,7 +66,7 @@ class Graph:
         return self.graph.node[node]
 
     def edge_attributes(self, edge):
-        return self.graph.edge[edge.source][edge.target][edge]
+        return self.graph.edges[edge.source,edge.target,edge]
 
     def nodes(self):
         return self.graph.node.keys()
