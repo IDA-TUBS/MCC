@@ -184,6 +184,31 @@ class Repository(XMLParser):
 
             return functions
 
+        def requires_services(self):
+            services = set()
+            for s in self.xml_node.findall("./requires/service"):
+                services.add(s.get("name"))
+
+            return services
+
+        def provides_services(self):
+            services = set()
+            for s in self.xml_node.findall("./provides/service"):
+                services.add(s.get("name"))
+
+            return services
+
+        def function(self):
+            if self.xml_node.find('function') is not None:
+                return self.xml_node.find('function').get('name')
+
+            return None
+
+        def service_for_function(self, function):
+            for s in self.xml_node.findall("./requires/service[@function]"):
+                if s.get('function') == function:
+                    return s.get('name')
+
         def label(self):
             return self.xml_node.get('name')
 
@@ -196,6 +221,14 @@ class Repository(XMLParser):
                 result.add(self)
 
             return result
+
+        def providing_component(self, service):
+            assert(service in self.provides_services())
+            return self
+
+        def requiring_components(self, service):
+            assert(service in self.requires_services())
+            return set([self])
 
         def flatten(self):
             # for composites, we must select a pattern first
@@ -217,6 +250,30 @@ class Repository(XMLParser):
 
         def requires_rte(self):
             return self.component.requires_rte
+
+        def providing_component(self, service):
+            for c in self.xml_node.findall("component"):
+                for s in c.findall('./expose/service'):
+                    if s.get('name') == service:
+                        component = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                        # FIXME we might have multiple options here
+                        return component[0]
+
+            logging.error("Service '%s' is not exposed." % service)
+            return None
+
+        def requiring_components(self, service, function=None):
+            result = set()
+            for c in self.xml_node.findall("component"):
+                for s in c.findall('./route/service'):
+                    if s.get('name') == service and s.find('external') is not None:
+                        component = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                        # FIXME we might have multiple options here
+                        result.add(component[0])
+
+            if len(result) == 0:
+                logging.error("Service '%s' is not required by component pattern for '%s'." % (service, self.component.label()))
+            return result
 
         def flatten(self):
             # fill set with atomic components and their edges as specified in the pattern

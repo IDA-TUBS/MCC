@@ -35,8 +35,6 @@ class Layer:
 
     def insert_obj(self, obj):
         inserted = set()
-
-        # FIXME (continue) define GraphObj to capture node/edge with attributes
         
         if isinstance(obj, Edge):
             inserted.add(self.graph.add_edge(obj))
@@ -243,6 +241,8 @@ class Transform(Operation):
             for o in inserted:
                 self.target_layer.set_param_value(self.layer.name, o, obj)
 
+        return True
+
 class Check(Operation):
     def __init__(self, ae):
         Operation.__init__(self, ae)
@@ -272,6 +272,7 @@ class NodeStep(Step):
     def execute(self):
         for op in self.operations:
             if not op.execute(self.layer.graph.nodes()):
+                raise Exception("NodeStep failed during %s on layer '%s'" % (op, self.layer.name))
                 return False
 
         return True
@@ -280,6 +281,7 @@ class EdgeStep(Step):
     def execute(self):
         for op in self.operations:
             if not op.execute(self.layer.graph.edges()):
+                raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.layer.name))
                 return False
 
         return True

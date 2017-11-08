@@ -218,6 +218,9 @@
 				<expose>
 					<service name="ROM" />
 				</expose>
+				<route>
+					<service name="Nic"><external /></service>
+				</route>
 			</component>
 			<component name="LET_tx">
 				<route>
@@ -254,6 +257,7 @@
 				<service name="ROM" label="trajectory"><child name="tc" /></service>
 			</route>
 		</child>
+        <child> <function name="Network" /> </child>
 
 		<subsystem name="imu">
 			<provides>
@@ -281,6 +285,7 @@
 				<service name="Nic"><child name="radar" /></service>
 			</route>
 		</child>
+        <child> <function name="Network" /> </child>
 	</subsystem>
 
 	<subsystem name="camera">

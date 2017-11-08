@@ -272,11 +272,11 @@ class SubsystemModel(PlatformModel, QueryModel):
         return
 
     def reachable(self, from_component, to_component):
-        if from_component in to_component.subsystems() or to_component in from_component.subsystems():
-            return 'native'
+        if from_component == to_component or from_component in to_component.subsystems() or to_component in from_component.subsystems():
+            return True, 'native', from_component
         else:
             # here, we assume subsystems are connected via network
-            return 'Nic'
+            return False, 'Nic', 'Network'
 
 class SystemModel(Registry):
     def __init__(self, repo, platform):
@@ -1209,12 +1209,21 @@ class Mcc:
         pat_compat.add_operation(Assign(pe))
         pat_compat.execute()
 
+        # check dependencies
+        NodeStep(Check(DependencyEngine(fc))).execute()
+
         # sanity check and transform
         transform = NodeStep(Check(pe))
         transform.add_operation(Transform(pe, ca))
         transform.execute()
 
         # TODO (continue) copy edges
+        se = ServiceEngine(fc)
+
+        compat = EdgeStep(Map(se))
+        compat.add_operation(Assign(se))
+        compat.add_operation(Transform(se, ca))
+        compat.execute()
 
     def _insert_proxies(self):
         fa = self.model.by_name['func_arch']
@@ -1233,7 +1242,6 @@ class Mcc:
 
         # perform arc split
         EdgeStep(Transform(re, fc)).execute()
-        CopyServiceStep(fa, fc).execute()
 
     def search_config(self, subsystem_xml, xsd_file, args):
         # check function/composite/component references, compatibility and routes in system and subsystems
