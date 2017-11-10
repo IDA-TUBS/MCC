@@ -52,8 +52,9 @@ class ServiceEngine(AnalysisEngine):
 
             return result
 
-    def __init__(self, layer):
+    def __init__(self, layer, target_layer):
         AnalysisEngine.__init__(self, layer, param='connection')
+        self.target_layer = target_layer
 
     def map(self, obj, candidates):
         """ Select candidates for to-be-connected source and target nodes between components
@@ -93,8 +94,29 @@ class ServiceEngine(AnalysisEngine):
         src_pattern = self.layer.get_param_value('pattern', obj.source)
         dst_pattern = self.layer.get_param_value('pattern', obj.target)
 
-        src_comps = src_pattern.requiring_components(src_service)
-        dst_comp  = dst_pattern.providing_component(dst_service)
+        src_mapping = self.layer.get_param_value(self.target_layer.name, obj.source)
+        dst_mapping = self.layer.get_param_value(self.target_layer.name, obj.target)
+
+        # find source components in target layer
+        src_comps = set()
+        for c in src_pattern.requiring_components(src_service):
+            found = False
+            for x in src_mapping:
+                if hasattr(x, 'uid'):
+                    if x.uid() == c.uid():
+                        src_comps.add(x)
+                        found = True
+            assert(found)
+
+        # find dst component in target layer
+        c = dst_pattern.providing_component(dst_service)
+        found = False
+        for x in dst_mapping:
+            if hasattr(x, 'uid'):
+                if x.uid() == c.uid():
+                    dst_comp = x
+                    found = True
+        assert(found)
         
         candidates = set()
         for src_comp in src_comps:

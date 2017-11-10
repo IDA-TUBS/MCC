@@ -1218,7 +1218,7 @@ class Mcc:
         transform.execute()
 
         # TODO (continue) copy edges
-        se = ServiceEngine(fc)
+        se = ServiceEngine(fc, ca)
 
         compat = EdgeStep(Map(se))
         compat.add_operation(Assign(se))

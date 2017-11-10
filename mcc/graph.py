@@ -1,4 +1,5 @@
 import networkx as nx
+import logging
 
 class GraphObj:
     # captures dangling graph objects, i.e. Edge or Node, and its parameters
@@ -38,6 +39,12 @@ class Graph:
 
     def add_edge(self, edge):
         assert(isinstance(edge, Edge))
+        if edge.source not in self.graph.nodes():
+            logging.error("source node '%s' does not exist" % edge.source)
+
+        if edge.target not in self.graph.nodes():
+            logging.error("target node '%s' does not exist" % edge.target)
+
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge
 

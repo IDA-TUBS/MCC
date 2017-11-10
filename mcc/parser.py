@@ -162,6 +162,9 @@ class Repository(XMLParser):
             self.repo = repo
             self.xml_node = xml_node
 
+        def uid(self):
+            return self.xml_node
+
         def requires_rte(self):
             rte = self.xml_node.find('./requires/rte')
             if rte is not None:
