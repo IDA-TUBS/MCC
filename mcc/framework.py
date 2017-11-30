@@ -33,24 +33,40 @@ class Layer:
         for name, value in params.items():
             self.set_param_value(name, obj, value)
 
-    def insert_obj(self, obj):
+    def insert_obj(self, obj, nodes_only=False):
         inserted = set()
-        
+
         if isinstance(obj, Edge):
-            inserted.add(self.graph.add_edge(obj))
+            if not nodes_only:
+                inserted.add(self.graph.add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
         elif isinstance(obj, set) or isinstance(obj, list):
+
+            # first add all nodes and remember edges
+            edges = set()
             for o in obj:
-                inserted.update(self.insert_obj(o))
+                tmp = self.insert_obj(o, nodes_only=True)
+                if len(tmp) == 0:
+                    edges.add(o)
+                else:
+                    inserted.update(tmp)
+
+            # now we add the remaining edges
+            for o in edges:
+                inserted.update(self.insert_obj(o, nodes_only=False))
+
+            assert(len(obj) == len(inserted))
         elif isinstance(obj, GraphObj):
             if obj.is_edge():
-                o = self.graph.add_edge(obj.obj)
+                if not nodes_only:
+                    o = self.graph.add_edge(obj.obj)
+                    self._set_params(o, obj.params())
+                    inserted.add(o)
             else:
                 o = self.graph.add_node(obj.obj)
-
-            self._set_params(o, obj.params())
-            inserted.add(o)
+                self._set_params(o, obj.params())
+                inserted.add(o)
         else:
             inserted.add(self.graph.add_node(obj))
 
@@ -147,10 +163,11 @@ class CopyEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class Operation:
-    def __init__(self, ae):
+    def __init__(self, ae, name='undef'):
         self.analysis_engines = [ae]
         self.param = ae.param
         self.layer = ae.layer
+        self.name = name
 
     def register_ae(self, ae):
         assert(ae.param == self.param)
@@ -168,9 +185,12 @@ class Operation:
     def execute(self, iterable):
         raise NotImplementedError()
 
+    def __repr__(self):
+        return self.name
+
 class Map(Operation):
-    def __init__(self, ae):
-        Operation.__init__(self, ae)
+    def __init__(self, ae, name='undef'):
+        Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
 
@@ -200,8 +220,8 @@ class Map(Operation):
         return True
 
 class Assign(Operation):
-    def __init__(self, ae):
-        Operation.__init__(self, ae)
+    def __init__(self, ae, name='undef'):
+        Operation.__init__(self, ae, name)
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
@@ -222,8 +242,8 @@ class Assign(Operation):
         return True
 
 class Transform(Operation):
-    def __init__(self, ae, target_layer):
-        Operation.__init__(self, ae)
+    def __init__(self, ae, target_layer, name='undef'):
+        Operation.__init__(self, ae, name)
         self.target_layer = target_layer
 
     def register_ae(self, ae):
@@ -244,8 +264,8 @@ class Transform(Operation):
         return True
 
 class Check(Operation):
-    def __init__(self, ae):
-        Operation.__init__(self, ae)
+    def __init__(self, ae, name='undef'):
+        Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
         for ae in self.analysis_engines:
@@ -272,7 +292,7 @@ class NodeStep(Step):
     def execute(self):
         for op in self.operations:
             if not op.execute(self.layer.graph.nodes()):
-                raise Exception("NodeStep failed during %s on layer '%s'" % (op, self.layer.name))
+                raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.layer.name))
                 return False
 
         return True

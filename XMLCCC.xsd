@@ -235,6 +235,17 @@
                          <xs:element name="function" type="NameType" />
                          <xs:element name="component" type="NameType" />
                        </xs:choice>
+                     <xs:element name="dependency" minOccurs="0" maxOccurs="1">
+                         <xs:complexType>
+                             <xs:choice maxOccurs="unbounded">
+                                <xs:element name="child">
+                                    <xs:complexType>
+                                        <xs:attribute name="name" type="xs:string" use="required"/>
+                                    </xs:complexType>
+                                </xs:element>
+                             </xs:choice>
+                         </xs:complexType>
+                     </xs:element>
                      <xs:element name="route" minOccurs="0" maxOccurs="1">
                        <xs:complexType>
                          <xs:choice maxOccurs="unbounded">

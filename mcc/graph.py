@@ -24,6 +24,8 @@ class Edge:
     def __init__(self, source, target):
         self.source = source
         self.target = target
+        assert(not isinstance(self.source, list))
+        assert(not isinstance(self.target, list))
 
 class Graph:
     def __init__(self):

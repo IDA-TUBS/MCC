@@ -25,6 +25,37 @@ class DependencyEngine(AnalysisEngine):
                     break
 
             if not found:
+                logging.error("Cannot satisfy function dependency '%s' from component '%s'." % (f, comp))
+                return False
+
+        return True
+
+class ComponentDependencyEngine(AnalysisEngine):
+    def __init__(self, layer):
+        AnalysisEngine.__init__(self, layer, param=None)
+
+    def check(self, obj):
+        """ Check that a) all service requirements are satisfied and b) that service connections are local
+        """
+        assert(not isinstance(obj, Edge))
+
+        # iterate function dependencies
+        for s in obj.requires_services():
+            # find provider among connected nodes
+            found = False
+            for con in self.layer.graph.out_edges(obj):
+                comp2 = con.target
+                if s in comp2.provides_services():
+                    found = True
+                    source_mapping = self.layer.get_param_value('mapping', obj)
+                    target_mapping = self.layer.get_param_value('mapping', comp2)
+                    if source_mapping != target_mapping:
+                        logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
+                        return False
+                    break
+
+            if not found:
+                logging.error("Service dependency '%s' from component '%s' is not satisfied." % (s, obj))
                 return False
 
         return True

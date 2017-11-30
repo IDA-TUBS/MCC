@@ -213,7 +213,11 @@ class Repository(XMLParser):
                     return s.get('name')
 
         def label(self):
-            return self.xml_node.get('name')
+            name = self.xml_node.get('name')
+            if name is not None:
+                return name
+            else:
+                return 'anonymous'
 
         def patterns(self):
             result = set()
@@ -238,6 +242,9 @@ class Repository(XMLParser):
             assert(self.xml_node.tag != 'composite')
 
             return set([self])
+        
+        def __repr__(self):
+            return self.label()
 
     class ComponentPattern():
         def __init__(self, component, xml_node):
@@ -286,11 +293,11 @@ class Repository(XMLParser):
             name_lookup = dict()
             # first, add all components and create lookup table by child name
             for c in self.xml_node.findall("component"):
-                component = self.repo.find_components_by_type(c.get('name'), querytype='component')
-                name_lookup[c.get('name')] = component
-                child_lookup[c] = component
+                components = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                name_lookup[c.get('name')] = components[0]
+                child_lookup[c] = components[0]
                 # FIXME, we might have multiple options here
-                flattened.add(GraphObj(component[0]))
+                flattened.add(GraphObj(components[0]))
 
             # second, add connections
             for c in self.xml_node.findall("component"):
@@ -880,6 +887,7 @@ class Subsystem:
             return self._type
 
         def routes(self):
+            # FIXME remove if we do not require explicit routing anymore
             routes = list()
             route = self._root.find("route")
             if route is not None:
@@ -896,7 +904,16 @@ class Subsystem:
 
                     routes.append(attribs)
 
+            dependency = self._root.find("dependency")
+            if dependency is not None:
+                for c in self._root.find("dependency").findall("child"):
+                    attribs = { "child" : c.get("name") }
+                    routes.append(attribs)
+
             return routes
+
+        def __repr__(self):
+            return self.label()
 
     def __init__(self, xml_node, parent=None):
         self._root   = xml_node

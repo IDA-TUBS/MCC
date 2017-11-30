@@ -118,9 +118,12 @@ class QueryModel(object):
         if 'function' in attr:
             style = ','.join(self.dot_styles['edge']['function'])
             label = "label=\"%s\"," % attr['function']
-        else:
+        elif 'service' in attr:
             style = ','.join(self.dot_styles['edge']['service'])
             label = "label=\"%s\"," % attr['service']
+        else:
+            style = ','.join(self.dot_styles['edge']['function'])
+            label = ""
 
         dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
                                                 self.query_graph.node_attributes(edge.source)['id'],
@@ -316,7 +319,8 @@ class SystemModel(Registry):
         for route in query_model.routes():
             # remark: nodes in query_model and fa are the same objects
             e = fa.graph.create_edge(route.source, route.target)
-            fa.set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
+            if 'service' in query_model.query_graph.edge_attributes(route):
+                fa.set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
 
     def _insert_query(self, child):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
@@ -341,7 +345,10 @@ class SystemModel(Registry):
         if name is None:
             name = layer.get_param_value('function', edge)
 
-        label = "label=\"%s\"," % name
+        if name is not None:
+            label = "label=\"%s\"," % name
+        else:
+            label = ""
 
         dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
                                                 layer.graph.node_attributes(edge.source)['id'],
@@ -529,18 +536,20 @@ class SystemModel(Registry):
 #
 #        return True
 
-    def connect_functions(self):
-        fa = self.by_name['func_arch']
-
-        for child in fa.graph.nodes():
-            component = fa.get_param_value('component', child)
-            if component is not None:
-                functions = component.requires_functions()
-
-                if len(functions) > 0:
-                    # TODO find function and add edge if there is not already one with matching attributes
-                    logging.info("Child %s has function requirements to '%s'." % (child.label(), functions))
-                    raise NotImplementedError()
+#    def connect_functions(self):
+#        fa = self.by_name['func_arch']
+#
+#        for child in fa.graph.nodes():
+#            component = fa.get_param_value('component', child)
+#            if component is not None:
+#                functions = component.requires_functions()
+#
+#                if len(functions) > 0:
+#                    # TODO find function and add edge if there is not already one with matching attributes
+#                    logging.info("Child %s has function requirements to '%s'." % (child.label(), functions))
+#                    raise NotImplementedError()
+#            else:
+#                logging.info("Skipping function dependencies of child '%s' as component has not been assigned yet." % (child))
 
 #    def query_in_edges(self, node):
 #        edges = list()
@@ -1199,7 +1208,7 @@ class Mcc:
         # check platform compatibility
         pf_compat = NodeStep(comps)                  # get components from repo
         assign = pf_compat.add_operation(Assign(ce)) # choose component
-        check = pf_compat.add_operation(Check(rtee)) # check rte requirements
+        check = pf_compat.add_operation(Check(rtee, name='check RTE requirements')) # check rte requirements
         check.register_ae(spe)                       # check spec requirements
         pf_compat.execute()
 
@@ -1210,10 +1219,10 @@ class Mcc:
         pat_compat.execute()
 
         # check dependencies
-        NodeStep(Check(DependencyEngine(fc))).execute()
+        NodeStep(Check(DependencyEngine(fc), name='check dependencies')).execute()
 
         # sanity check and transform
-        transform = NodeStep(Check(pe))
+        transform = NodeStep(Check(pe, name='check pattern'))
         transform.add_operation(Transform(pe, ca))
         transform.execute()
 
@@ -1224,6 +1233,10 @@ class Mcc:
         compat.add_operation(Assign(se))
         compat.add_operation(Transform(se, ca))
         compat.execute()
+
+        # check that service dependencies are satisfied and connections are local
+        NodeStep(Check(ComponentDependencyEngine(ca), name='check service dependencies')).execute()
+        # TODO (?) check that connections satisfy functional dependencies
 
     def _insert_proxies(self):
         fa = self.model.by_name['func_arch']
@@ -1262,8 +1275,8 @@ class Mcc:
         # 4a) create system model from query model
         self.model.from_query(query_model)
 
-        # 4b) solve function dependencies (if already known)
-        self.model.connect_functions()
+#        # 4b) solve function dependencies (if already known)
+#        self.model.connect_functions()
 
         # remark: 'mapping' is already fixed in func_arch
         #  we thus assign just assign nodes to platform components as queried

@@ -389,22 +389,32 @@
         <spec name="zynq" />
     </provides>
 
-    <!-- explicitly place drivers here but in a platform-independent way (i.e. as functions) //-->
-    <child><function name="Network" /></child>
 
 	<!-- first level are (unconnected) subsystems //-->
 	<subsystem name="zynq">
 
 		<!-- explicitly ask for CAMERA function //-->
-        <child><function name="CAMERA" /></child>
+        <child name="CAM"><function name="CAMERA" /></child>
 		
 		<!-- requires unambiguous function CAMERA //-->
-        <child><function name="STEREO_MATCH" /></child>
+        <child name="STEREO">
+            <function name="STEREO_MATCH" />
+            <dependency>
+                <child name="CAM" />
+            </dependency>
+        </child>
 
 		<!-- requires unambiguous functions CAMERA and STEREO_MATCH //-->
-        <child name="pc-provider"><function name="DISP_TO_PC" /></child>
+        <child name="PC">
+            <function name="DISP_TO_PC" />
+            <dependency>
+                <child name="CAM" />
+                <child name="STEREO" />
+            </dependency>
+        </child>
 
 		<!-- remark: ROM proxies are automatically instantiated //-->
+        <child name="NIC"><function name="Network" /></child>
 
 	</subsystem>
 
@@ -413,12 +423,14 @@
 		<!-- explicitly connect ROM service to DISP_TO_PC //-->
         <child>
             <component name="object_recog" />
+            <!-- TODO can we also deal with just a dependency to pc-provider? //-->
 			<route>
-				<service name="ROM"><child name="pc-provider" /></service>
+				<service name="ROM"><child name="PC" /></service>
 			</route>
 		</child>
 
 		<!-- remark: ROM proxies are automatically instantiated //-->
+        <child name="NIC"><function name="Network" /></child>
 
 	</subsystem>
 </system>
