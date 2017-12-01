@@ -252,6 +252,9 @@
                 <expose>
                     <service name="ROM" />
                 </expose>
+                <route>
+                    <service name="Nic"><external /></service>
+                </route>
             </component>
             <component name="remote_rom_server">
                 <route>
@@ -278,11 +281,11 @@
 		<pattern>
 			<component name="debay_left">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><external/></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 			<component name="debay_right">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><external/></service></route>
+				<route><service name="ROM"><external /></service></route>
 			</component>
 			<component name="rect_left">
 				<!-- route ROM requirement internally //-->

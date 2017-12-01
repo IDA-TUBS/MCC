@@ -188,16 +188,16 @@ class Repository(XMLParser):
             return functions
 
         def requires_services(self):
-            services = set()
+            services = list()
             for s in self.xml_node.findall("./requires/service"):
-                services.add(s.get("name"))
+                services.append(s.get("name"))
 
             return services
 
         def provides_services(self):
-            services = set()
+            services = list()
             for s in self.xml_node.findall("./provides/service"):
-                services.add(s.get("name"))
+                services.append(s.get("name"))
 
             return services
 
@@ -233,7 +233,7 @@ class Repository(XMLParser):
             assert(service in self.provides_services())
             return self
 
-        def requiring_components(self, service):
+        def requiring_components(self, service, function=None):
             assert(service in self.requires_services())
             return set([self])
 
@@ -277,9 +277,9 @@ class Repository(XMLParser):
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./route/service'):
                     if s.get('name') == service and s.find('external') is not None:
-                        component = self.repo.find_components_by_type(c.get('name'), querytype='component')
-                        # FIXME we might have multiple options here
-                        result.add(component[0])
+                        if s.find('external').get('function') is None or function is None or s.find('external').get('function') == function:
+                            components = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                            result.update(components)
 
             if len(result) == 0:
                 logging.error("Service '%s' is not required by component pattern for '%s'." % (service, self.component.label()))

@@ -3,6 +3,28 @@ from mcc.framework import *
 from mcc.graph import *
 from mcc import model
 
+class MappingEngine(AnalysisEngine):
+    def __init__(self, layer):
+        AnalysisEngine.__init__(self, layer, param='mapping')
+
+    def map(self, obj, candidates):
+        if candidates is None or len(candidates) == 0 or None in candidates:
+            # TODO derive from connections
+            return candidates
+
+        return candidates
+
+    def check(self, obj):
+        """ check whether a platform mapping is assigned to all nodes
+        """
+        assert(not isinstance(obj, Edge))
+
+        okay = self.layer.get_param_value(self.param, obj) is not None
+        if not okay:
+            logging.info("Node '%s' is not mapped to anything.", obj)
+
+        return okay
+
 class DependencyEngine(AnalysisEngine):
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, param=None)
@@ -42,20 +64,22 @@ class ComponentDependencyEngine(AnalysisEngine):
         # iterate function dependencies
         for s in obj.requires_services():
             # find provider among connected nodes
-            found = False
+            found = 0
             for con in self.layer.graph.out_edges(obj):
                 comp2 = con.target
                 if s in comp2.provides_services():
-                    found = True
+                    found += 1
                     source_mapping = self.layer.get_param_value('mapping', obj)
                     target_mapping = self.layer.get_param_value('mapping', comp2)
                     if source_mapping != target_mapping:
                         logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                         return False
-                    break
 
-            if not found:
+            if found == 0:
                 logging.error("Service dependency '%s' from component '%s' is not satisfied." % (s, obj))
+                return False
+            if found != len([x for x in obj.requires_services() if x == s]):
+                logging.error("Service dependency '%s' from component '%s' is ambiguously satisfied." % (s, obj))
                 return False
 
         return True
@@ -90,30 +114,34 @@ class ServiceEngine(AnalysisEngine):
     def map(self, obj, candidates):
         """ Select candidates for to-be-connected source and target nodes between components
         """
+        # FIXME: make this more systematically by adding a side layer with service requirements as nodes
+        #        in order to decide on each service requirement (of a component) separately
+
         assert(isinstance(obj, Edge))
 
         service  = self.layer.get_param_value('service', obj)
         function = self.layer.get_param_value('function', obj)
 
-        # get dangling requirements
-        src = self.layer.get_param_value('component', obj.source)
-        if function is not None:
-            requirements = set(src.service_for_function(function))
-        else:
-            requirements = src.requires_services()
-        # FIXME exclude already connected services
-
         # get dangling provisions
         dst = self.layer.get_param_value('component', obj.target)
         provisions = dst.provides_services()
-        # (FIXME exclude already connected services)
+
+        assert function is None or function == dst.function()
+        function = dst.function()
+
+        # get dangling requirements
+        src = self.layer.get_param_value('component', obj.source)
+        if function is not None and src.service_for_function(function) is not None:
+            requirements = set([src.service_for_function(function)])
+        else:
+            requirements = src.requires_services()
 
         # if multiple dangling services, try to match by service or function
         if len(requirements) == 1:
             src_service = requirements.pop()
         else:
             src_service = service
-            assert service in requirements, "Cannot choose from multiple dangling service requirements."
+            assert service in requirements, "Cannot choose from multiple dangling service requirements '%s'." % service
 
         if len(provisions) == 1:
             dst_service = provisions.pop()
@@ -130,7 +158,7 @@ class ServiceEngine(AnalysisEngine):
 
         # find source components in target layer
         src_comps = set()
-        for c in src_pattern.requiring_components(src_service):
+        for c in src_pattern.requiring_components(src_service, function=function):
             found = False
             for x in src_mapping:
                 if hasattr(x, 'uid'):
@@ -163,16 +191,18 @@ class ServiceEngine(AnalysisEngine):
         """
         assert(isinstance(obj, Edge))
 
-        return list(candidates)[0]
+        return list(candidates)
 
     def transform(self, obj, target_layer):
         """ Transform comm_arch edges into comp_arch edges
         """
         assert(isinstance(obj, Edge))
 
-        connection = self.layer.get_param_value(self.param, obj)
+        graph_objs = set()
+        for con in self.layer.get_param_value(self.param, obj):
+            graph_objs.update(con.get_graph_objs())
 
-        return connection.get_graph_objs()
+        return graph_objs
 
 class QueryEngine(AnalysisEngine):
     def __init__(self, layer):

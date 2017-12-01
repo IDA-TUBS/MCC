@@ -20,6 +20,10 @@ class Registry:
         for i in range(start, len(self.by_order)):
             self.by_order[i].clear()
 
+    def add_step(self, step):
+        # TODO implement central registry and control of transformation steps (incl. visualisation)
+        raise NotImplementedError()
+
 class Layer:
     def __init__(self, name, nodetype=object):
         self.graph = Graph()
@@ -118,6 +122,8 @@ class Layer:
         params[param]['value'] = value
 
 class AnalysisEngine:
+    # TODO implement check of supported layers, node types, edge types, etc.
+
     def __init__(self, layer, param):
         self.layer = layer
         self.param = param
@@ -234,8 +240,13 @@ class Assign(Operation):
 
             candidates = self.layer.get_param_candidates(self.param, obj)
             result = self.analysis_engines[0].assign(obj, candidates)
-            assert(result in candidates)
-            assert(isinstance(result, self.analysis_engines[0].target_type()))
+            if isinstance(result, list) or isinstance(result, set):
+                for r in result:
+                    assert(r in candidates)
+                    assert(isinstance(r, self.analysis_engines[0].target_type()))
+            else:
+                assert(result in candidates)
+                assert(isinstance(result, self.analysis_engines[0].target_type()))
 
             self.layer.set_param_value(self.param, obj, result)
 

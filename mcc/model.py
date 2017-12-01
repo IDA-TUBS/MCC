@@ -1226,16 +1226,28 @@ class Mcc:
         transform.add_operation(Transform(pe, ca))
         transform.execute()
 
-        # TODO (continue) copy edges
-        se = ServiceEngine(fc, ca)
+        # TODO copy mapping and map unmapped components to platform 
+        cpe = CopyEngine(ca, 'mapping', fc)
+        op = Map(cpe)
+        op.register_ae(MappingEngine(ca))
+        mapping = NodeStep(op)
+        mapping.add_operation(Assign(cpe))
+        mapping.execute()
 
+        # FIXME: make this more systematically (see ServiceEngine)
+        se = ServiceEngine(fc, ca)
         compat = EdgeStep(Map(se))
+        # TODO reduce candidates by platform mapping
         compat.add_operation(Assign(se))
         compat.add_operation(Transform(se, ca))
         compat.execute()
 
+        # check mapping
+        NodeStep(Check(MappingEngine(ca), name='check platform mapping is complete')).execute()
+
         # check that service dependencies are satisfied and connections are local
         NodeStep(Check(ComponentDependencyEngine(ca), name='check service dependencies')).execute()
+
         # TODO (?) check that connections satisfy functional dependencies
 
     def _insert_proxies(self):
