@@ -5,10 +5,32 @@ class Registry:
     def __init__(self):
         self.by_order  = list()
         self.by_name   = dict()
+        self.steps     = list()
+
+    @staticmethod
+    def same_layers(step1, step2):
+        if step1 == None or step2 == None:
+            return False
+        return step1.target_layer == step2.target_layer
+
+    def previous_step(self, step):
+        idx = self.steps.index(step)
+        if idx == 0:
+            return None
+        else:
+            return self.steps[idx-1]
 
     def add_layer(self, layer):
         self.by_order.append(layer)
         self.by_name[layer.name] = layer
+
+    def next_layer(self, layer):
+        current_layer = self.by_name[layer.name]
+        idx = self.by_order.index(current_layer)
+        if len(self.by_order) > idx+1:
+            return self.by_order[idx+1]
+        else:
+            return None
 
     def reset(self, layer=None):
         # clear all layers from 'layer' and below
@@ -21,7 +43,44 @@ class Registry:
             self.by_order[i].clear()
 
     def add_step(self, step):
-        # TODO implement central registry and control of transformation steps (incl. visualisation)
+        # perform sanity checks (step's layers are correct, etc.)
+        if len(self.steps) > 0:
+            if not Registry.same_layers(self.steps[-1], step):
+                assert(step.target_layer == self.next_layer(self.steps[-1].target_layer))
+        else:
+            assert(step.target_layer == self.by_order[0])
+
+        self.steps.append(step)
+
+    def write_dot(self):
+        # TODO visualise steps as dot graph
+        raise NotImplementedError()
+
+    def print_steps(self):
+        print()
+        for step in self.steps:
+            if not Registry.same_layers(self.previous_step(step), step):
+                print("[%s]" % step.target_layer)
+            print("  %s" % step)
+
+    def execute(self):
+        print()
+        for step in self.steps:
+            previous_step = self.previous_step(step)
+            if not Registry.same_layers(previous_step, step):
+                logging.info("Creating layer %s" % step.target_layer)
+                if previous_step is not None:
+                    self._output_layer(previous_step.target_layer)
+
+            try:
+                step.execute()
+            except Exception as ex:
+                self._output_layer(step.source_layer, suffix='-error')
+                raise(ex)
+
+        self._output_layer(self.steps[-1].target_layer)
+
+    def _output_layer(self, layer, suffix):
         raise NotImplementedError()
 
 class Layer:
@@ -29,6 +88,9 @@ class Layer:
         self.graph = Graph()
         self.name = name
         self.nodetype = nodetype
+
+    def __str__(self):
+        return self.name
 
     def clear(self):
         self.graph = Graph()
@@ -124,9 +186,15 @@ class Layer:
 class AnalysisEngine:
     # TODO implement check of supported layers, node types, edge types, etc.
 
-    def __init__(self, layer, param):
+    def __init__(self, layer, param, name=None):
         self.layer = layer
         self.param = param
+        self.name = name
+        if self.name is None:
+            self.name = type(self).__name__
+
+    def __str__(self):
+        return '%s(%s.%s)' % (self.name, self.layer, self.param)
 
     def map(self, source, candidates=None):
         raise NotImplementedError()
@@ -169,14 +237,16 @@ class CopyEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class Operation:
-    def __init__(self, ae, name='undef'):
+    def __init__(self, ae, name=''):
         self.analysis_engines = [ae]
         self.param = ae.param
-        self.layer = ae.layer
+        self.source_layer = ae.layer
+        self.target_layer = ae.layer
         self.name = name
 
     def register_ae(self, ae):
         assert(ae.param == self.param)
+        assert(ae.layer == self.source_layer)
         self.analysis_engines.append(ae)
         return ae
 
@@ -192,10 +262,10 @@ class Operation:
         raise NotImplementedError()
 
     def __repr__(self):
-        return self.name
+        return "%s(%s) [%s]" % (type(self).__name__, self.name, ','.join([str(ae) for ae in self.analysis_engines]))
 
 class Map(Operation):
-    def __init__(self, ae, name='undef'):
+    def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
@@ -221,12 +291,12 @@ class Map(Operation):
             # TODO (?) we may need to iterate over this multiple times
 
             # update candidates for this parameter in layer object
-            self.layer.set_param_candidates(self.param, obj, candidates)
+            self.source_layer.set_param_candidates(self.param, obj, candidates)
 
         return True
 
 class Assign(Operation):
-    def __init__(self, ae, name='undef'):
+    def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
     def register_ae(self, ae):
@@ -238,7 +308,7 @@ class Assign(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            candidates = self.layer.get_param_candidates(self.param, obj)
+            candidates = self.source_layer.get_param_candidates(self.param, obj)
             result = self.analysis_engines[0].assign(obj, candidates)
             if isinstance(result, list) or isinstance(result, set):
                 for r in result:
@@ -248,14 +318,15 @@ class Assign(Operation):
                 assert(result in candidates)
                 assert(isinstance(result, self.analysis_engines[0].target_type()))
 
-            self.layer.set_param_value(self.param, obj, result)
+            self.source_layer.set_param_value(self.param, obj, result)
 
         return True
 
 class Transform(Operation):
-    def __init__(self, ae, target_layer, name='undef'):
+    def __init__(self, ae, target_layer, name=''):
         Operation.__init__(self, ae, name)
         self.target_layer = target_layer
+        self.source_layer = ae.layer
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
@@ -268,14 +339,14 @@ class Transform(Operation):
             assert new_objs, "transform() did not return any object"
             inserted = self.target_layer.insert_obj(new_objs)
             assert len(inserted) > 0
-            self.layer.set_param_value(self.target_layer.name, obj, inserted)
+            self.source_layer.set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
-                self.target_layer.set_param_value(self.layer.name, o, obj)
+                self.target_layer.set_param_value(self.source_layer.name, o, obj)
 
         return True
 
 class Check(Operation):
-    def __init__(self, ae, name='undef'):
+    def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
@@ -292,18 +363,27 @@ class Step:
     def __init__(self, op):
         assert(isinstance(op, Operation))
         self.operations = [op]
-        self.layer = op.layer
+        self.source_layer = op.source_layer
+        self.target_layer = op.target_layer
 
     def add_operation(self, op):
         assert(isinstance(op, Operation))
+        assert(op.source_layer == self.source_layer)
+        if self.source_layer == self.target_layer:
+            self.target_layer = op.target_layer
+        else:
+            assert(op.source_layer == self.target_layer)
         self.operations.append(op)
         return op
+
+    def __repr__(self):
+        return type(self).__name__ + ': \n    ' + '\n    '.join([str(op) for op in self.operations])
 
 class NodeStep(Step):
     def execute(self):
         for op in self.operations:
-            if not op.execute(self.layer.graph.nodes()):
-                raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.layer.name))
+            if not op.execute(self.source_layer.graph.nodes()):
+                raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                 return False
 
         return True
@@ -311,8 +391,8 @@ class NodeStep(Step):
 class EdgeStep(Step):
     def execute(self):
         for op in self.operations:
-            if not op.execute(self.layer.graph.edges()):
-                raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.layer.name))
+            if not op.execute(self.source_layer.graph.edges()):
+                raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                 return False
 
         return True

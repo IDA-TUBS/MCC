@@ -282,7 +282,7 @@ class SubsystemModel(PlatformModel, QueryModel):
             return False, 'Nic', 'Network'
 
 class SystemModel(Registry):
-    def __init__(self, repo, platform):
+    def __init__(self, repo, platform, dotpath=None):
         Registry.__init__(self)
         self.add_layer(Layer('func_arch', nodetype=Subsystem.Child))
         self.add_layer(Layer('comm_arch', nodetype=Subsystem.Child))
@@ -291,6 +291,7 @@ class SystemModel(Registry):
 
         self.platform = platform
         self.repo = repo
+        self.dotpath = dotpath
 
         self.dot_styles = { 
                 self.by_name['func_arch'] : 
@@ -306,6 +307,10 @@ class SystemModel(Registry):
 
         self.dot_styles[self.by_name['comm_arch']] = self.dot_styles[self.by_name['func_arch']]
         self.dot_styles[self.by_name['comp_inst']] = self.dot_styles[self.by_name['comp_arch']]
+
+    def _output_layer(self, layer, suffix=''):
+        if self.dotpath is not None:
+            self.write_dot_layer(layer.name, self.dotpath+layer.name+suffix+".dot")
 
     def from_query(self, query_model):
         fa = self.by_name['func_arch']
@@ -1201,38 +1206,38 @@ class Mcc:
         spe  = SpecEngine(fc)
 
         # Map operation is the first when selecting components
-        comps = Map(ce)
+        comps = Map(ce, 'component')
         comps.register_ae(rtee)                     #   consider rte requirements
         comps.register_ae(spe)                      #   consider spec requirements
 
         # check platform compatibility
         pf_compat = NodeStep(comps)                  # get components from repo
-        assign = pf_compat.add_operation(Assign(ce)) # choose component
-        check = pf_compat.add_operation(Check(rtee, name='check RTE requirements')) # check rte requirements
+        assign = pf_compat.add_operation(Assign(ce, 'component')) # choose component
+        check = pf_compat.add_operation(Check(rtee, name='RTE requirements')) # check rte requirements
         check.register_ae(spe)                       # check spec requirements
-        pf_compat.execute()
+        self.model.add_step(pf_compat)
 
         # select pattern (dummy step, nothing happening here)
         pe = PatternEngine(fc)
-        pat_compat = NodeStep(Map(pe))
-        pat_compat.add_operation(Assign(pe))
-        pat_compat.execute()
+        pat_compat = NodeStep(Map(pe, 'pattern'))
+        pat_compat.add_operation(Assign(pe, 'pattern'))
+        self.model.add_step(pat_compat)
 
         # check dependencies
-        NodeStep(Check(DependencyEngine(fc), name='check dependencies')).execute()
+        self.model.add_step(NodeStep(Check(DependencyEngine(fc), name='dependencies')))
 
         # sanity check and transform
-        transform = NodeStep(Check(pe, name='check pattern'))
-        transform.add_operation(Transform(pe, ca))
-        transform.execute()
+        transform = NodeStep(Check(pe, name='pattern'))
+        transform.add_operation(Transform(pe, ca, 'pattern'))
+        self.model.add_step(transform)
 
         # TODO copy mapping and map unmapped components to platform 
         cpe = CopyEngine(ca, 'mapping', fc)
-        op = Map(cpe)
+        op = Map(cpe, 'mapping')
         op.register_ae(MappingEngine(ca))
         mapping = NodeStep(op)
         mapping.add_operation(Assign(cpe))
-        mapping.execute()
+        self.model.add_step(mapping)
 
         # FIXME: make this more systematically (see ServiceEngine)
         se = ServiceEngine(fc, ca)
@@ -1240,13 +1245,13 @@ class Mcc:
         # TODO reduce candidates by platform mapping
         compat.add_operation(Assign(se))
         compat.add_operation(Transform(se, ca))
-        compat.execute()
+        self.model.add_step(compat)
 
         # check mapping
-        NodeStep(Check(MappingEngine(ca), name='check platform mapping is complete')).execute()
+        self.model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
 
         # check that service dependencies are satisfied and connections are local
-        NodeStep(Check(ComponentDependencyEngine(ca), name='check service dependencies')).execute()
+        self.model.add_step(NodeStep(Check(ComponentDependencyEngine(ca), name='service dependencies')))
 
         # TODO (?) check that connections satisfy functional dependencies
 
@@ -1257,16 +1262,16 @@ class Mcc:
         re = ReachabilityEngine(fa, self.model.platform)
 
         # decide on reachability
-        reachability = EdgeStep(Map(re))          # map edges to carrier
-        reachability.add_operation(Assign(re))    # choose communication carrier
-        reachability.execute()
+        reachability = EdgeStep(Map(re, 'carrier'))         # map edges to carrier
+        reachability.add_operation(Assign(re, 'carrier'))   # choose communication carrier
+        self.model.add_step(reachability)
 
         # copy nodes to comm arch
-        CopyNodeStep(fa, fc).execute()
-        CopyMappingStep(fa, fc).execute()
+        self.model.add_step(CopyNodeStep(fa, fc))
+        self.model.add_step(CopyMappingStep(fa, fc))
 
         # perform arc split
-        EdgeStep(Transform(re, fc)).execute()
+        self.model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
     def search_config(self, subsystem_xml, xsd_file, args):
         # check function/composite/component references, compatibility and routes in system and subsystems
@@ -1275,7 +1280,7 @@ class Mcc:
         subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml, xsd_file))
 
         # 2) we create a new system model
-        self.model = SystemModel(self.repo, subsys_platform)
+        self.model = SystemModel(self.repo, subsys_platform, dotpath=args.dotpath)
 
         # 3) create query model (in SubsystemModel)
         query_model = subsys_platform
@@ -1294,25 +1299,13 @@ class Mcc:
         #  we thus assign just assign nodes to platform components as queried
         fa = self.model.by_name['func_arch']
         qe = QueryEngine(fa)
-        NodeStep(Assign(qe)).execute()
-
-        # output first layer containing the query
-        if args.dotpath is not None:
-            self.model.write_dot_layer('func_arch', args.dotpath+"func_arch.dot")
+        self.model.add_step(NodeStep(Assign(qe, 'query')))
 
         # solve reachability and transform into comm_arch
         self._insert_proxies()
 
-        # output second layer
-        if args.dotpath is not None:
-            self.model.write_dot_layer('comm_arch', args.dotpath+"comm_arch.dot")
-
         # select components and transform into comp_arch
         self._select_components()
-
-        # output third layer
-        if args.dotpath is not None:
-            self.model.write_dot_layer('comp_arch', args.dotpath+"comp_arch.dot")
 
         # FIXME continue refactoring
 
@@ -1327,6 +1320,9 @@ class Mcc:
         # TODO implement transformation/merge into component instantiation
 
         # TODO implement backtracking
+
+        self.model.print_steps()
+        self.model.execute()
 
         raise NotImplementedError()
         return True
