@@ -1322,6 +1322,7 @@ class Mcc:
         # TODO implement backtracking
 
         self.model.print_steps()
+        self.model.write_dot('mcc.dot')
         self.model.execute()
 
         raise NotImplementedError()

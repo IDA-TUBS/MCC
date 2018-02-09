@@ -52,9 +52,106 @@ class Registry:
 
         self.steps.append(step)
 
-    def write_dot(self):
-        # TODO visualise steps as dot graph
-        raise NotImplementedError()
+    def write_dot(self, filename):
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+            dotfile.write("  compound=true;\n")
+
+            # create a node for each layer
+            i = 1
+            layer_node_names = dict()
+            dotfile.write('subgraph layers {\n')
+            for layer in self.by_order:
+                layer_node_names[layer] = 'l%d' % i
+                dotfile.write('%s [label="%s",shape=parallelogram,colorscheme=set39,fillcolor=5,style=filled];\n' % 
+                        (layer_node_names[layer],layer.name))
+
+                # connect to previous layer
+                if i > 1:
+                    dotfile.write('%s -> %s [arrowhead=normal,style=solid,colorscheme=set39,color=5];\n' %
+                            (layer_node_names[self.by_order[i-2]],layer_node_names[layer]))
+                i += 1
+            dotfile.write('}\n')
+
+            # aggregate analysis engines
+            aengines = set()
+            for step in self.steps:
+                for op in step.operations:
+                    aengines.update(op.analysis_engines)
+
+            # create a node for each analysis engine
+            i = 1
+            ae_node_names = dict()
+            for ae in aengines:
+                ae_node_names[ae] = 'ae%d' % i
+                dotfile.write('%s [label="%s",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n' % 
+                        (ae_node_names[ae],ae))
+                i += 1
+
+            # create subgraph for each step
+            i = 1
+            j = 1
+            step_node_names = dict()
+            op_node_names = dict()
+            for step in self.steps:
+                step_node_names[step] = 'cluster%d' % i
+                dotfile.write('subgraph %s {\n' % step_node_names[step])
+                dotfile.write('label="%d. %s";\n' % (i, type(step).__name__))
+                dotfile.write('shape=rectangle;\n')
+                dotfile.write('colorscheme=set39;\n')
+                dotfile.write('fillcolor=2;\n')
+                dotfile.write('style=filled;\n')
+
+                prevop = None
+                for op in step.operations:
+                    op_node_names[op] = 'op%d' % j
+                    dotfile.write('%s [label="%s(%s)",shape=trapezium,colorscheme=set39,fillcolor=6,style=filled];\n' %
+                            (op_node_names[op], type(op).__name__, op.name))
+
+                    # connect to previous operation
+                    if prevop is not None:
+                        dotfile.write('%s -> %s [arrowhead=normal,style=solid,colorscheme=set39,color=6];\n' % 
+                                (op_node_names[prevop], op_node_names[op]))
+                    prevop = op
+                    j += 1
+
+                dotfile.write('}\n')
+
+                # connect to previous step
+                if i > 1:
+                    prevstep = self.steps[i-2]
+                    dotfile.write('%s -> %s [minlen=2,ltail=%s,lhead=%s,arrowhead=normal,style=solid,colorscheme=set39,color=1];\n' % 
+                            (op_node_names[prevstep.operations[-1]],
+                             op_node_names[step.operations[0]],
+                             step_node_names[prevstep],
+                             step_node_names[step]))
+
+                # connect to layers
+                dotfile.write('%s -> %s [lhead=%s,arrowhead=normal,style=dashed,colorscheme=set39,color=1];\n' %
+                        (layer_node_names[step.source_layer],
+                         op_node_names[step.operations[0]],
+                         step_node_names[step]))
+                dotfile.write('%s -> %s [ltail=%s,arrowhead=normal,style=dashed,colorscheme=set39,color=1];\n' %
+                        (op_node_names[step.operations[-1]],
+                         layer_node_names[step.target_layer],
+                         step_node_names[step]))
+
+                i += 1
+
+            for step in self.steps:
+                for op in step.operations:
+                    # connect to analysis engines
+                    k = 1
+                    for ae in op.analysis_engines:
+                        label = ''
+                        if len(op.analysis_engines) > 1:
+                            label = 'label="%d",' % k
+
+                        dotfile.write('%s -> %s [%sarrowhead=none,style=dashed,colorscheme=set39,color=4];\n' %
+                                (ae_node_names[ae], op_node_names[op], label))
+                        k += 1
+
+            dotfile.write("}\n")
 
     def print_steps(self):
         print()

@@ -181,6 +181,7 @@ class ServiceEngine(AnalysisEngine):
         for src_comp in src_comps:
             candidates.add(ServiceEngine.Connection(src_comp, dst_comp, src_service, dst_service))
 
+        # FIXME continue here
         # TODO if services differ, insert protocol stack (separate AE?)
         # TODO add separate AE which removes candidates that do not reside on the same resource
 
