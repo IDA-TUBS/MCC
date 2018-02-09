@@ -84,8 +84,9 @@ class Registry:
             ae_node_names = dict()
             for ae in aengines:
                 ae_node_names[ae] = 'ae%d' % i
-                dotfile.write('%s [label="%s",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n' % 
-                        (ae_node_names[ae],ae))
+                htmllabel = '<%s <br />%s>' % (ae, ae.acl_string(newline='<br />'))
+                dotfile.write('%s [label=%s,shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n' % 
+                        (ae_node_names[ae],htmllabel))
                 i += 1
 
             # create subgraph for each step
@@ -160,6 +161,17 @@ class Registry:
                 print("[%s]" % step.target_layer)
             print("  %s" % step)
 
+    def print_engines(self):
+        aengines = set()
+        for step in self.steps:
+            for op in step.operations:
+                aengines.update(op.analysis_engines)
+
+        print()
+        for ae in aengines:
+            print('[%s]' % type(ae).__name__)
+            print(ae.acl_string())
+
     def execute(self):
         print()
         for step in self.steps:
@@ -194,7 +206,7 @@ class Layer:
 
     def _set_params(self, obj, params):
         for name, value in params.items():
-            self.set_param_value(name, obj, value)
+            self._set_param_value(name, obj, value)
 
     def insert_obj(self, obj, nodes_only=False):
         inserted = set()
@@ -248,7 +260,9 @@ class Layer:
 
         return attributes['params']
 
-    def get_param_candidates(self, param, obj):
+    def get_param_candidates(self, ae, param, obj):
+        assert(ae.check_acl(self, param, 'reads'))
+
         params = self._get_params(obj)
 
         if param in params:
@@ -256,7 +270,11 @@ class Layer:
         else:
             return set()
 
-    def set_param_candidates(self, param, obj, candidates):
+    def set_param_candidates(self, ae, param, obj, candidates):
+        assert(ae.check_acl(self, param, 'writes'))
+        self._set_param_candidates(param, obj, candidates)
+
+    def _set_param_candidates(self, param, obj, candidates):
         params = self._get_params(obj)
 
         if param not in params:
@@ -264,7 +282,11 @@ class Layer:
 
         params[param]['candidates'] = candidates
 
-    def get_param_value(self, param, obj):
+    def get_param_value(self, ae, param, obj):
+        assert(ae.check_acl(self, param, 'reads'))
+        return self._get_param_value(param, obj)
+
+    def _get_param_value(self, param, obj):
         params = self._get_params(obj)
 
         if param in params:
@@ -272,7 +294,11 @@ class Layer:
         else:
             return None
 
-    def set_param_value(self, param, obj, value):
+    def set_param_value(self, ae, param, obj, value):
+        assert(ae.check_acl(self, param, 'writes'))
+        self._set_param_value(param, obj, value)
+
+    def _set_param_value(self, param, obj, value):
         params = self._get_params(obj)
 
         if param not in params:
@@ -283,15 +309,60 @@ class Layer:
 class AnalysisEngine:
     # TODO implement check of supported layers, node types, edge types, etc.
 
-    def __init__(self, layer, param, name=None):
+    def __init__(self, layer, param, name=None, acl=None):
         self.layer = layer
         self.param = param
         self.name = name
         if self.name is None:
             self.name = type(self).__name__
 
+        if acl is None:
+            acl = dict()
+
+        if layer not in acl:
+            acl[layer] = dict()
+
+        if 'writes' not in acl[layer]:
+            acl[layer]['writes'] = set()
+
+        if 'reads' not in acl[layer]:
+            acl[layer]['reads'] = set()
+
+        acl[layer]['writes'].add(param)
+        acl[layer]['reads'].add(param)
+
+        self.acl = acl
+
     def __str__(self):
         return '%s(%s.%s)' % (self.name, self.layer, self.param)
+
+    def acl_string(self, newline='\n'):
+        result = ''
+        for layer in self.acl:
+            result += '%s: %s' % (layer, newline)
+            for access, params in self.acl[layer].items():
+                result += '  %s: %s%s' % (access, ','.join([str(p) for p in params]), newline)
+        return result
+
+    def check_acl(self, layer, param, access):
+        if layer not in self.acl:
+            logging.critical('%s has no access to layer "%s".' % (type(self).__name__, layer))
+            logging.info('Requested: %s(%s.%s)' % (access, layer, param))
+            logging.info('ACL is:\n%s' % self.acl_string())
+            return False
+
+        if access not in self.acl[layer]:
+            logging.critical('%s has no read access to layer "%s".' % (type(self).__name__, layer))
+            logging.info('Requested: %s(%s.%s)' % (access, layer, param))
+            logging.info('ACL is:\n%s' % self.acl_string())
+            return False
+
+        if param in self.acl[layer][access]:
+            return True
+
+        logging.critical('%s has no read access to "%s" of layer "%s".' % (type(self).__name__, param, layer))
+        logging.info('ACL is:\n%s' % self.acl_string())
+        return False
 
     def map(self, source, candidates=None):
         raise NotImplementedError()
@@ -323,12 +394,15 @@ class DummyEngine(AnalysisEngine):
 
 class CopyEngine(AnalysisEngine):
     def __init__(self, layer, param, source_layer):
-        AnalysisEngine.__init__(self, layer, param)
+        acl = { layer : { 'reads' : set([source_layer.name])},
+                source_layer : {'reads' : set([layer.name, 'mapping'])}}
+
+        AnalysisEngine.__init__(self, layer, param, acl=acl)
         self.source_layer = source_layer
 
     def map(self, obj, candidates):
-        src_obj = self.layer.get_param_value(self.source_layer.name, obj)
-        return set([self.source_layer.get_param_value(self.param, src_obj)])
+        src_obj = self.layer.get_param_value(self, self.source_layer.name, obj)
+        return set([self.source_layer.get_param_value(self, self.param, src_obj)])
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -388,7 +462,7 @@ class Map(Operation):
             # TODO (?) we may need to iterate over this multiple times
 
             # update candidates for this parameter in layer object
-            self.source_layer.set_param_candidates(self.param, obj, candidates)
+            self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
         return True
 
@@ -405,7 +479,7 @@ class Assign(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            candidates = self.source_layer.get_param_candidates(self.param, obj)
+            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
             result = self.analysis_engines[0].assign(obj, candidates)
             if isinstance(result, list) or isinstance(result, set):
                 for r in result:
@@ -415,7 +489,7 @@ class Assign(Operation):
                 assert(result in candidates)
                 assert(isinstance(result, self.analysis_engines[0].target_type()))
 
-            self.source_layer.set_param_value(self.param, obj, result)
+            self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
         return True
 
@@ -436,9 +510,9 @@ class Transform(Operation):
             assert new_objs, "transform() did not return any object"
             inserted = self.target_layer.insert_obj(new_objs)
             assert len(inserted) > 0
-            self.source_layer.set_param_value(self.target_layer.name, obj, inserted)
+            self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
-                self.target_layer.set_param_value(self.source_layer.name, o, obj)
+                self.target_layer._set_param_value(self.source_layer.name, o, obj)
 
         return True
 

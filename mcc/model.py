@@ -325,7 +325,7 @@ class SystemModel(Registry):
             # remark: nodes in query_model and fa are the same objects
             e = fa.graph.create_edge(route.source, route.target)
             if 'service' in query_model.query_graph.edge_attributes(route):
-                fa.set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
+                fa._set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
 
     def _insert_query(self, child):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
@@ -336,7 +336,7 @@ class SystemModel(Registry):
 
         # set pre-defined mapping
         if child.platform_component() is not None:
-            fa.set_param_candidates('mapping', child, set([child.platform_component()]))
+            fa._set_param_candidates('mapping', child, set([child.platform_component()]))
 
     def _write_dot_node(self, layer, dotfile, node, prefix="  "):
         label = "label=\"%s\"," % node.label()
@@ -346,9 +346,9 @@ class SystemModel(Registry):
 
     def _write_dot_edge(self, layer, dotfile, edge, prefix="  "):
         style = self.dot_styles[layer]['edge']
-        name = layer.get_param_value('service', edge)
+        name = layer._get_param_value('service', edge)
         if name is None:
-            name = layer.get_param_value('function', edge)
+            name = layer._get_param_value('function', edge)
 
         if name is not None:
             label = "label=\"%s\"," % name
@@ -392,7 +392,7 @@ class SystemModel(Registry):
                 # add components of this subsystem
                 for comp in layer.graph.nodes():
                     # only process children in this subsystem
-                    if sub is not layer.get_param_value('mapping', comp):
+                    if sub is not layer._get_param_value('mapping', comp):
                         continue
 
                     layer.graph.node_attributes(comp)['id'] = "c%d" % n
@@ -406,8 +406,8 @@ class SystemModel(Registry):
 
                 # add internal dependencies
                 for edge in layer.graph.edges():
-                    sub1 = layer.get_param_value('mapping', edge.source)
-                    sub2 = layer.get_param_value('mapping', edge.target)
+                    sub1 = layer._get_param_value('mapping', edge.source)
+                    sub2 = layer._get_param_value('mapping', edge.target)
                     if sub1 == sub and sub2 == sub:
                         self._write_dot_edge(layer, dotfile, edge, prefix="    ")
 
@@ -416,7 +416,7 @@ class SystemModel(Registry):
             # add components with no subsystem
             for comp in layer.graph.nodes():
                 # only process children in this subsystem
-                if layer.get_param_value('mapping', comp) is not None:
+                if layer._get_param_value('mapping', comp) is not None:
                     continue
 
                 layer.graph.node_attributes(comp)['id'] = "c%d" % n
@@ -430,8 +430,8 @@ class SystemModel(Registry):
 
             # add internal dependencies
             for edge in layer.graph.edges():
-                sub1 = layer.get_param_value('mapping', edge.source)
-                sub2 = layer.get_param_value('mapping', edge.target)
+                sub1 = layer._get_param_value('mapping', edge.source)
+                sub2 = layer._get_param_value('mapping', edge.target)
                 if sub1 == None and sub2 == None:
                     self._write_dot_edge(layer, dotfile, edge, prefix="    ")
 
@@ -449,8 +449,8 @@ class SystemModel(Registry):
 
             # add child dependencies between subsystems
             for edge in layer.graph.edges():
-                sub1 = layer.get_param_value('mapping', edge.source)
-                sub2 = layer.get_param_value('mapping', edge.target)
+                sub1 = layer._get_param_value('mapping', edge.source)
+                sub2 = layer._get_param_value('mapping', edge.target)
                 if sub1 != sub2:
                     self._write_dot_edge(layer, dotfile, edge)
 
@@ -1259,7 +1259,7 @@ class Mcc:
         fa = self.model.by_name['func_arch']
         fc = self.model.by_name['comm_arch']
 
-        re = ReachabilityEngine(fa, self.model.platform)
+        re = ReachabilityEngine(fa, fc, self.model.platform)
 
         # decide on reachability
         reachability = EdgeStep(Map(re, 'carrier'))         # map edges to carrier

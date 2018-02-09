@@ -19,7 +19,7 @@ class MappingEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
-        okay = self.layer.get_param_value(self.param, obj) is not None
+        okay = self.layer.get_param_value(self, self.param, obj) is not None
         if not okay:
             logging.info("Node '%s' is not mapped to anything.", obj)
 
@@ -27,21 +27,22 @@ class MappingEngine(AnalysisEngine):
 
 class DependencyEngine(AnalysisEngine):
     def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param=None)
+        acl = { layer : { 'reads' : set(['component']) } }
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
         """ Check whether all dependencies are satisfied
         """
         assert(not isinstance(obj, Edge))
 
-        comp = self.layer.get_param_value('component', obj)
+        comp = self.layer.get_param_value(self, 'component', obj)
 
         # iterate function dependencies
         for f in comp.requires_functions():
             # find function among connected nodes
             found = False
             for con in self.layer.graph.out_edges(obj):
-                comp2 = self.layer.get_param_value('component', con.target)
+                comp2 = self.layer.get_param_value(self, 'component', con.target)
                 if comp2.function() == f:
                     found = True
                     break
@@ -69,8 +70,8 @@ class ComponentDependencyEngine(AnalysisEngine):
                 comp2 = con.target
                 if s in comp2.provides_services():
                     found += 1
-                    source_mapping = self.layer.get_param_value('mapping', obj)
-                    target_mapping = self.layer.get_param_value('mapping', comp2)
+                    source_mapping = self.layer.get_param_value(self, 'mapping', obj)
+                    target_mapping = self.layer.get_param_value(self, 'mapping', comp2)
                     if source_mapping != target_mapping:
                         logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                         return False
@@ -108,7 +109,8 @@ class ServiceEngine(AnalysisEngine):
             return result
 
     def __init__(self, layer, target_layer):
-        AnalysisEngine.__init__(self, layer, param='connection')
+        acl = { layer : { 'reads' : set(['service', 'function', 'component', 'pattern', target_layer.name]) } }
+        AnalysisEngine.__init__(self, layer, param='connection', acl=acl)
         self.target_layer = target_layer
 
     def map(self, obj, candidates):
@@ -119,18 +121,18 @@ class ServiceEngine(AnalysisEngine):
 
         assert(isinstance(obj, Edge))
 
-        service  = self.layer.get_param_value('service', obj)
-        function = self.layer.get_param_value('function', obj)
+        service  = self.layer.get_param_value(self, 'service', obj)
+        function = self.layer.get_param_value(self, 'function', obj)
 
         # get dangling provisions
-        dst = self.layer.get_param_value('component', obj.target)
+        dst = self.layer.get_param_value(self, 'component', obj.target)
         provisions = dst.provides_services()
 
         assert function is None or function == dst.function()
         function = dst.function()
 
         # get dangling requirements
-        src = self.layer.get_param_value('component', obj.source)
+        src = self.layer.get_param_value(self, 'component', obj.source)
         if function is not None and src.service_for_function(function) is not None:
             requirements = set([src.service_for_function(function)])
         else:
@@ -150,11 +152,11 @@ class ServiceEngine(AnalysisEngine):
             assert service in provisions, "Cannot choose from multiple dangling service provisions."
 
         # match selected services to src_candidates/dst_candidates
-        src_pattern = self.layer.get_param_value('pattern', obj.source)
-        dst_pattern = self.layer.get_param_value('pattern', obj.target)
+        src_pattern = self.layer.get_param_value(self, 'pattern', obj.source)
+        dst_pattern = self.layer.get_param_value(self, 'pattern', obj.target)
 
-        src_mapping = self.layer.get_param_value(self.target_layer.name, obj.source)
-        dst_mapping = self.layer.get_param_value(self.target_layer.name, obj.target)
+        src_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.source)
+        dst_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.target)
 
         # find source components in target layer
         src_comps = set()
@@ -200,7 +202,7 @@ class ServiceEngine(AnalysisEngine):
         assert(isinstance(obj, Edge))
 
         graph_objs = set()
-        for con in self.layer.get_param_value(self.param, obj):
+        for con in self.layer.get_param_value(self, self.param, obj):
             graph_objs.update(con.get_graph_objs())
 
         return graph_objs
@@ -250,20 +252,21 @@ class ComponentEngine(AnalysisEngine):
         return list(candidates)[0]
 
     def check(self, obj):
-        return self.layer.get_param_value(self.param, obj) is not None
+        return self.layer.get_param_value(self, self.param, obj) is not None
 
     def transform(self, obj, target_layer):
-        return set([self.layer.get_param_value(self.param, obj)])
+        return set([self.layer.get_param_value(self, self.param, obj)])
 
 class PatternEngine(AnalysisEngine):
     def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param='pattern')
+        acl = { layer : { 'reads' : set(['component']) } }
+        AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
 
     def map(self, obj, candidates):
         assert(not isinstance(obj, Edge))
 
         assert(candidates is None)
-        return self.layer.get_param_value('component', obj).patterns()
+        return self.layer.get_param_value(self, 'component', obj).patterns()
 
     def assign(self, obj, candidates):
         assert(not isinstance(obj, Edge))
@@ -274,14 +277,15 @@ class PatternEngine(AnalysisEngine):
         return list(candidates)[0]
 
     def check(self, obj):
-        return self.layer.get_param_value(self.param, obj) is not None
+        return self.layer.get_param_value(self, self.param, obj) is not None
 
     def transform(self, obj, target_layer):
-        return self.layer.get_param_value(self.param, obj).flatten()
+        return self.layer.get_param_value(self, self.param, obj).flatten()
 
 class SpecEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):
-        AnalysisEngine.__init__(self, layer, param=param)
+        acl = { layer : { 'reads' : set(['mapping']) } }
+        AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
     def _match_specs(self, required, provided):
         for spec in required:
@@ -299,7 +303,7 @@ class SpecEngine(AnalysisEngine):
 
         keep = set()
         for c in candidates:
-            pf_comp = self.layer.get_param_value('mapping', obj)
+            pf_comp = self.layer.get_param_value(self, 'mapping', obj)
             assert(pf_comp is not None)
 
             if self._match_specs(c.requires_specs(), pf_comp.specs()):
@@ -314,13 +318,13 @@ class SpecEngine(AnalysisEngine):
         if isinstance(obj, model.Proxy):
             return True
 
-        pf_comp = self.layer.get_param_value('mapping', obj)
+        pf_comp = self.layer.get_param_value(self, 'mapping', obj)
         assert(pf_comp is not None)
 
         if self.layer.name == 'func_arch' or self.layer.name == 'comm_arch':
-            comp = self.layer.get_param_value('component', obj)
+            comp = self.layer.get_param_value(self, 'component', obj)
             if comp is None:
-                print(self.layer.get_param_candidates('component', obj))
+                print(self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
             comp = obj
@@ -332,7 +336,8 @@ class SpecEngine(AnalysisEngine):
 
 class RteEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):
-        AnalysisEngine.__init__(self, layer, param=param)
+        acl = { layer : { 'reads' : set(['mapping']) } }
+        AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
     def map(self, obj, candidates): 
         assert(not isinstance(obj, Edge))
@@ -344,7 +349,7 @@ class RteEngine(AnalysisEngine):
         keep = set()
         for c in candidates:
 
-            pf_comp = self.layer.get_param_value('mapping', obj)
+            pf_comp = self.layer.get_param_value(self, 'mapping', obj)
             assert(pf_comp is not None)
 
             if c.requires_rte() == pf_comp.rte():
@@ -359,13 +364,13 @@ class RteEngine(AnalysisEngine):
         if isinstance(obj, model.Proxy):
             return True
 
-        pf_comp = self.layer.get_param_value('mapping', obj)
+        pf_comp = self.layer.get_param_value(self, 'mapping', obj)
         assert(pf_comp is not None)
 
         if self.layer.name == 'func_arch' or self.layer.name == 'comm_arch':
-            comp = self.layer.get_param_value('component', obj)
+            comp = self.layer.get_param_value(self, 'component', obj)
             if comp is None:
-                print(self.layer.get_param_candidates('component', obj))
+                print(self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
             comp = obj
@@ -376,16 +381,18 @@ class RteEngine(AnalysisEngine):
         return True
 
 class ReachabilityEngine(AnalysisEngine):
-    def __init__(self, layer, platform_model):
-        AnalysisEngine.__init__(self, layer, param='proxy')
+    def __init__(self, layer, target_layer, platform_model):
+        acl = { layer : { 'reads' : set(['mapping', 'service', target_layer.name]) }}
+        AnalysisEngine.__init__(self, layer, param='proxy', acl=acl)
         self.platform_model = platform_model
+        self.target_layer = target_layer
 
     def _find_carriers(self, obj):
-        src_comp = self.layer.get_param_value('mapping', obj.source)
-        dst_comp = self.layer.get_param_value('mapping', obj.target)
+        src_comp = self.layer.get_param_value(self, 'mapping', obj.source)
+        dst_comp = self.layer.get_param_value(self, 'mapping', obj.target)
 
         result, carrier, pcomp = self.platform_model.reachable(src_comp, dst_comp)
-        if result or carrier == self.layer.get_param_value('service', obj):
+        if result or carrier == self.layer.get_param_value(self, 'service', obj):
             return set([('native', pcomp)])
         else:
             return set([(carrier, pcomp)])
@@ -406,16 +413,17 @@ class ReachabilityEngine(AnalysisEngine):
 
     def transform(self, obj, target_layer):
         assert(isinstance(obj, Edge))
+        assert(target_layer == self.target_layer)
 
-        carrier, pcomp = self.layer.get_param_value(self.param, obj)
+        carrier, pcomp = self.layer.get_param_value(self, self.param, obj)
         if carrier == 'native':
-            return GraphObj(obj, params={ 'service' : self.layer.get_param_value('service', obj) })
+            return GraphObj(obj, params={ 'service' : self.layer.get_param_value(self, 'service', obj) })
         else:
-            proxy = model.Proxy(carrier=carrier, service=self.layer.get_param_value('service', obj))
+            proxy = model.Proxy(carrier=carrier, service=self.layer.get_param_value(self, 'service', obj))
             result = [proxy]
 
-            src_map = self.layer.get_param_value(target_layer.name, obj.source)
-            dst_map = self.layer.get_param_value(target_layer.name, obj.target)
+            src_map = self.layer.get_param_value(self, target_layer.name, obj.source)
+            dst_map = self.layer.get_param_value(self, target_layer.name, obj.target)
             assert(len(src_map) == 1)
             assert(len(dst_map) == 1)
             src = list(src_map)[0]
@@ -427,8 +435,8 @@ class ReachabilityEngine(AnalysisEngine):
             # add dependencies to pcomp
             for n in self.layer.graph.nodes():
                 if n.type() == 'function' and n.query() == pcomp:
-                    if self.layer.get_param_value('mapping', n) == self.layer.get_param_value('mapping', obj.source) \
-                       or self.layer.get_param_value('mapping', n) == self.layer.get_param_value('mapping', obj.target):
+                    if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source) \
+                       or self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.target):
                            result.append(GraphObj(Edge(proxy, n), params={ 'service' : carrier }))
 
             return result
