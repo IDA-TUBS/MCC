@@ -184,7 +184,7 @@ class Registry:
             try:
                 step.execute()
             except Exception as ex:
-                self._output_layer(step.source_layer, suffix='-error')
+                self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
 
         self._output_layer(self.steps[-1].target_layer)
@@ -413,6 +413,8 @@ class Operation:
         self.param = ae.param
         self.source_layer = ae.layer
         self.target_layer = ae.layer
+        if hasattr(ae, 'target_layer'):
+            self.target_layer = ae.target_layer
         self.name = name
 
     def register_ae(self, ae):
@@ -440,6 +442,7 @@ class Map(Operation):
         Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
 
         for obj in iterable:
             assert(self.check_source_type(obj))
@@ -475,6 +478,7 @@ class Assign(Operation):
         assert(False)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
 
         for obj in iterable:
             assert(self.check_source_type(obj))
@@ -504,6 +508,8 @@ class Transform(Operation):
         assert(False)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
         for obj in iterable:
             # TODO shall we also return the existing objects (for comp_inst)?
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
@@ -521,6 +527,8 @@ class Check(Operation):
         Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
         for ae in self.analysis_engines:
             for obj in iterable:
                 assert(self.check_source_type(obj))
@@ -543,7 +551,7 @@ class Step:
         if self.source_layer == self.target_layer:
             self.target_layer = op.target_layer
         else:
-            assert(op.source_layer == self.target_layer)
+            assert(op.target_layer == self.target_layer)
         self.operations.append(op)
         return op
 
