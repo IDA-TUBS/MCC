@@ -8,9 +8,28 @@ class MappingEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='mapping')
 
     def map(self, obj, candidates):
-        if candidates is None or len(candidates) == 0 or None in candidates:
-            # TODO derive from connections
+        assert(candidates is not None)
+
+        if len(candidates) > 0:
             return candidates
+        else: # only if no candidates present 
+            # TODO continue here (1)
+            # TODO only for proxies (check)
+            # TODO map providing component for proxy service to same platform component as its client
+            # TODO map requiring components for proxy service to same platform component as its server
+            raise NotImplementedError()
+
+#        dependent_nodes = set()
+#        for e in self.layer.graph.out_edges(obj):
+#            dependent_nodes = e.target()
+#        for e in self.layer.graph.in_edges(obj):
+#            dependent_nodes = e.source()
+#
+#        candidates = set()
+#        for n in dependent_nodes:
+#            derived_value = self.layer.get_param_value(self, 'mapping', n)
+#            if derived_value is not None:
+#                candidates.add(derived_value)
 
         return candidates
 
@@ -206,6 +225,39 @@ class ServiceEngine(AnalysisEngine):
             graph_objs.update(con.get_graph_objs())
 
         return graph_objs
+
+class ServiceReachabilityEngine(AnalysisEngine):
+
+    def __init__(self, layer, target_layer):
+        acl = { target_layer : { 'reads'  : set(['mapping']) } }
+    
+        AnalysisEngine.__init__(self, layer, param='connection', acl=acl)
+        self.target_layer = target_layer
+
+    def map(self, obj, candidates):
+        assert(isinstance(obj, Edge))
+        assert(candidates is not None)
+
+        exclude = set()
+        for candidate in candidates:
+            src_mapping = self.target_layer.get_param_value(self, 'mapping', candidate.source)
+            dst_mapping = self.target_layer.get_param_value(self, 'mapping', candidate.target)
+
+            assert(src_mapping is not None)
+            assert(dst_mapping is not None)
+
+            # TODO continue here (2)
+            raise NotImplementedError()
+
+            if src_mapping != dst_mapping:
+#                print("%s != %s" % (src_mapping, dst_mapping))
+                exclude.add(candidate)
+
+#        print(" --- ")
+#        print(candidates)
+#        print(exclude)
+
+        return candidates - exclude
 
 class QueryEngine(AnalysisEngine):
     def __init__(self, layer):

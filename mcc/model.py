@@ -1231,24 +1231,27 @@ class Mcc:
         transform.add_operation(Transform(pe, ca, 'pattern'))
         self.model.add_step(transform)
 
-        # TODO copy mapping and map unmapped components to platform 
+        # copy mapping and map unmapped components to platform 
         cpe = CopyEngine(ca, 'mapping', fc)
+        me = MappingEngine(ca)
         op = Map(cpe, 'mapping')
-        op.register_ae(MappingEngine(ca))
+        op.register_ae(me)
         mapping = NodeStep(op)
         mapping.add_operation(Assign(cpe))
         self.model.add_step(mapping)
 
         # FIXME: make this more systematically (see ServiceEngine)
         se = ServiceEngine(fc, ca)
-        compat = EdgeStep(Map(se))
-        # TODO reduce candidates by platform mapping
+        sre = ServiceReachabilityEngine(fc, ca)
+        op = Map(se)
+        op.register_ae(sre)
+        compat = EdgeStep(op)
         compat.add_operation(Assign(se))
         compat.add_operation(Transform(se, ca))
         self.model.add_step(compat)
 
         # check mapping
-        self.model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
+        self.model.add_step(NodeStep(Check(me, name='platform mapping is complete')))
 
         # check that service dependencies are satisfied and connections are local
         self.model.add_step(NodeStep(Check(ComponentDependencyEngine(ca), name='service dependencies')))

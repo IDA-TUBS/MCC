@@ -458,6 +458,9 @@ class Map(Operation):
                     # build intersection of candidates for all analyses
                     candidates &= ae.map(obj, candidates)
 
+                if None in candidates:
+                    candidates.remove(None)
+
                 for c in candidates:
                     assert(isinstance(c, ae.target_type()))
 
@@ -484,6 +487,9 @@ class Assign(Operation):
             assert(self.check_source_type(obj))
 
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            if len(candidates) == 0:
+                logging.error("No candidates left.")
+
             result = self.analysis_engines[0].assign(obj, candidates)
             if isinstance(result, list) or isinstance(result, set):
                 for r in result:
