@@ -339,7 +339,7 @@ class AnalysisEngine:
     def acl_string(self, newline='\n'):
         result = ''
         for layer in self.acl:
-            result += '%s: %s' % (layer, newline)
+            result += '[%s]%s' % (layer, newline)
             for access, params in self.acl[layer].items():
                 result += '  %s: %s%s' % (access, ','.join([str(p) for p in params]), newline)
         return result
