@@ -1231,21 +1231,20 @@ class Mcc:
         transform.add_operation(Transform(pe, ca, 'pattern'))
         self.model.add_step(transform)
 
-        # copy mapping and map unmapped components to platform 
-        cpe = CopyEngine(ca, 'mapping', fc)
-        me = MappingEngine(ca)
-        op = Map(cpe, 'mapping')
-        op.register_ae(me)
-        mapping = NodeStep(op)
-        mapping.add_operation(Assign(cpe))
-        self.model.add_step(mapping)
-
         # FIXME: make this more systematically (see ServiceEngine)
         se = ServiceEngine(fc, ca)
+        self.model.add_step(EdgeStep(Map(se)))
+
+        # copy mapping and map unmapped components to platform 
+        cpe = CopyEngine(ca, 'parent-mapping', fc, 'mapping')
+        mapping = NodeStep(Map(cpe, 'parent-mapping'))
+        me = MappingEngine(ca, fc)
+        mapping.add_operation((Map(me, 'mapping')))
+        mapping.add_operation(Assign(me))
+        self.model.add_step(mapping)
+
         sre = ServiceReachabilityEngine(fc, ca)
-        op = Map(se)
-        op.register_ae(sre)
-        compat = EdgeStep(op)
+        compat = EdgeStep(Map(sre))
         compat.add_operation(Assign(se))
         compat.add_operation(Transform(se, ca))
         self.model.add_step(compat)
@@ -1328,5 +1327,4 @@ class Mcc:
         self.model.write_dot('mcc.dot')
         self.model.execute()
 
-        raise NotImplementedError()
         return True

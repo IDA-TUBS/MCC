@@ -4,34 +4,73 @@ from mcc.graph import *
 from mcc import model
 
 class MappingEngine(AnalysisEngine):
-    def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param='mapping')
+    def __init__(self, layer, source_layer, source_param='parent-mapping'):
+        acl = { layer        : {'reads' : set([source_layer.name, source_param]) },
+                source_layer : {'reads' : set(['pattern', 'service', 'connection'])} }
+        AnalysisEngine.__init__(self, layer, param='mapping', acl=acl)
+        self.source_layer = source_layer
+        self.source_param = source_param
 
     def map(self, obj, candidates):
-        assert(candidates is not None)
+        assert(candidates is None)
+        candidates = set()
 
-        if len(candidates) > 0:
-            return candidates
-        else: # only if no candidates present 
-            # TODO continue here (1)
-            # TODO only for proxies (check)
-            # TODO map providing component for proxy service to same platform component as its client
-            # TODO map requiring components for proxy service to same platform component as its server
-            raise NotImplementedError()
+        # copy parent-mapping if present
+        parent_mapping = self.layer.get_param_candidates(self, self.source_param, obj)
+        if parent_mapping is not None and len(parent_mapping) > 0:
+            return parent_mapping
+        else: # only if no parent-mapping present 
 
-#        dependent_nodes = set()
-#        for e in self.layer.graph.out_edges(obj):
-#            dependent_nodes = e.target()
-#        for e in self.layer.graph.in_edges(obj):
-#            dependent_nodes = e.source()
-#
-#        candidates = set()
-#        for n in dependent_nodes:
-#            derived_value = self.layer.get_param_value(self, 'mapping', n)
-#            if derived_value is not None:
-#                candidates.add(derived_value)
+            # only for proxies (check)
+            parent = self.layer.get_param_value(self, self.source_layer.name, obj)
+            if isinstance(parent, model.Proxy):
+                pattern = self.source_layer.get_param_value(self, 'pattern', parent)
+                # determine whether client or server 
+                if obj.uid() == pattern.providing_component(parent.service).uid():
+                    # server:
+                    # map to same platform component as its client
+                    clients = set()
+                    # take 'connection' candidates for edges from source_layer that belong to parent.service
+                    for e in self.source_layer.graph.in_edges(parent):
+                        if self.source_layer.get_param_value(self, 'service', e) == parent.service:
+                            for con in self.source_layer.get_param_candidates(self, 'connection', e):
+                                clients.add(con.source)
+
+                    for n in clients:
+                        derived_values = self.layer.get_param_candidates(self, self.source_param, n)
+                        if derived_values is not None:
+                            assert(len(derived_values) > 0)
+                            candidates.update(derived_values)
+                        else:
+                            logging.warning("Candidates for param '%s' is None." % self.source_param)
+
+                elif obj.uid() in [x.uid() for x in pattern.requiring_components(parent.service)]:
+                    # client:
+                    # map to same platform component as its server
+                    servers = set()
+                    # take 'connection' candidates for edges from source_layer that belong to parent.service
+                    for e in self.source_layer.graph.out_edges(parent):
+                        if self.source_layer.get_param_value(self, 'service', e) == parent.service:
+                            for con in self.source_layer.get_param_candidates(self, 'connection', e):
+                                servers.add(con.target)
+
+                    for n in servers:
+                        derived_values = self.layer.get_param_candidates(self, self.source_param, n)
+                        if derived_values is not None:
+                            assert(len(derived_values) > 0)
+                            candidates.update(derived_values)
+                        else:
+                            logging.warning("Candidates for param '%s' is None." % self.source_param)
+                else:
+                    logging.error("Cannot determine role of component %s in proxy pattern" % obj)
+
+            else:
+                raise NotImplementedError()
 
         return candidates
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
 
     def check(self, obj):
         """ check whether a platform mapping is assigned to all nodes
@@ -74,7 +113,8 @@ class DependencyEngine(AnalysisEngine):
 
 class ComponentDependencyEngine(AnalysisEngine):
     def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param=None)
+        acl = { layer : { 'reads' : set(['mapping']) } }
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
         """ Check that a) all service requirements are satisfied and b) that service connections are local
@@ -204,7 +244,6 @@ class ServiceEngine(AnalysisEngine):
 
         # FIXME continue here
         # TODO if services differ, insert protocol stack (separate AE?)
-        # TODO add separate AE which removes candidates that do not reside on the same resource
 
         return candidates
 
@@ -246,16 +285,8 @@ class ServiceReachabilityEngine(AnalysisEngine):
             assert(src_mapping is not None)
             assert(dst_mapping is not None)
 
-            # TODO continue here (2)
-            raise NotImplementedError()
-
             if src_mapping != dst_mapping:
-#                print("%s != %s" % (src_mapping, dst_mapping))
                 exclude.add(candidate)
-
-#        print(" --- ")
-#        print(candidates)
-#        print(exclude)
 
         return candidates - exclude
 

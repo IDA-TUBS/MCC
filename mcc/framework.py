@@ -46,6 +46,8 @@ class Registry:
         # perform sanity checks (step's layers are correct, etc.)
         if len(self.steps) > 0:
             if not Registry.same_layers(self.steps[-1], step):
+                self.print_steps()
+                print(step)
                 assert(step.target_layer == self.next_layer(self.steps[-1].target_layer))
         else:
             assert(step.target_layer == self.by_order[0])
@@ -393,16 +395,19 @@ class DummyEngine(AnalysisEngine):
         return True
 
 class CopyEngine(AnalysisEngine):
-    def __init__(self, layer, param, source_layer):
-        acl = { layer : { 'reads' : set([source_layer.name])},
-                source_layer : {'reads' : set([layer.name, 'mapping'])}}
+    def __init__(self, layer, param, source_layer, source_param=None):
+        if source_param is None:
+            source_param = param
+        acl = { layer        : {'reads' : set([source_layer.name])},
+                source_layer : {'reads' : set([layer.name, source_param])}}
 
         AnalysisEngine.__init__(self, layer, param, acl=acl)
         self.source_layer = source_layer
+        self.source_param = source_param
 
     def map(self, obj, candidates):
         src_obj = self.layer.get_param_value(self, self.source_layer.name, obj)
-        return set([self.source_layer.get_param_value(self, self.param, src_obj)])
+        return set([self.source_layer.get_param_value(self, self.source_param, src_obj)])
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -447,8 +452,9 @@ class Map(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            candidates = set()
-            first = True
+            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            first = len(candidates) == 0
+
             for ae in self.analysis_engines:
 
                 if first:
