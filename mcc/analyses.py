@@ -12,12 +12,16 @@ class MappingEngine(AnalysisEngine):
         self.source_param = source_param
 
     def map(self, obj, candidates):
+        """ Copies nodes 'parent-mapping' candidates to 'mapping' if present. 
+            Otherwise it uses the 'parent-mapping' from the component to which the node connects for the proxied service.
+        """
+
         assert(candidates is None)
         candidates = set()
 
         # copy parent-mapping if present
         parent_mapping = self.layer.get_param_candidates(self, self.source_param, obj)
-        if parent_mapping is not None and len(parent_mapping) > 0:
+        if parent_mapping is not None and len(parent_mapping) > 0 and None not in parent_mapping:
             return parent_mapping
         else: # only if no parent-mapping present 
 
@@ -67,6 +71,8 @@ class MappingEngine(AnalysisEngine):
             else:
                 raise NotImplementedError()
 
+        if None in candidates:
+            candidates.remove(None)
         return candidates
 
     def assign(self, obj, candidates):
@@ -152,18 +158,11 @@ class ServiceEngine(AnalysisEngine):
             self.target = target
             self.source_service = source_service
             self.target_service = target_service
-            self.protocol_stack = None
-
-        def assign_protocol_stack(self, protocol_stack):
-            self.protocol_stack = protocol_stack
 
         def get_graph_objs(self):
             result = set()
 
-            if self.protocol_stack is not None:
-                raise NotImplementedError()
-            else:
-                result.add(GraphObj(Edge(self.source, self.target), params={ 'service' : self.source_service }))
+            result.add(GraphObj(Edge(self.source, self.target), params={ 'source-service' : self.source_service, 'target-service' : self.target_service }))
 
             return result
 
@@ -242,9 +241,6 @@ class ServiceEngine(AnalysisEngine):
         for src_comp in src_comps:
             candidates.add(ServiceEngine.Connection(src_comp, dst_comp, src_service, dst_service))
 
-        # FIXME continue here
-        # TODO if services differ, insert protocol stack (separate AE?)
-
         return candidates
 
     def assign(self, obj, candidates):
@@ -289,6 +285,52 @@ class ServiceReachabilityEngine(AnalysisEngine):
                 exclude.add(candidate)
 
         return candidates - exclude
+
+class ProtocolStackEngine(AnalysisEngine):
+    """ Selects 'protocolstack' parameter for edges that have 'source-service' != 'target-service'.
+    """
+
+    def __init__(self, layer, repo):
+        acl = { layer : { 'reads' : set(['source-service', 'target-service'])} }
+        AnalysisEngine.__init__(self, layer, param='protocolstack', acl=acl)
+        self.repo = repo
+
+    def map(self, obj, candidates):
+        assert(isinstance(obj, Edge))
+
+        source_service = self.layer.get_param_value(self, 'source-service', obj)
+        target_service = self.layer.get_param_value(self, 'target-service', obj)
+
+        if source_service != target_service:
+            comps = self.repo.find_protocolstacks(from_service=source_service, to_service=target_service)
+            if len(comps) == 0:
+                logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (from_service, to_service))
+            return comps
+
+        return set([None])
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
+
+class MuxerEngine(AnalysisEngine):
+    """ Selects 'muxer' parameter for nodes who have to many clients to a service.
+    """
+
+    def __init__(self, layer, repo):
+        AnalysisEngine.__init__(self, layer, param='muxer')
+        self.repo = repo
+
+    def map(self, obj, candidates):
+        assert(not isinstance(obj, Edge))
+
+        # FIXME we can have multiple services provided by this node
+        # shall we set the muxer to all corresponding edges?
+        # how do we then perform the transformation? insert muxer for each edge and later merge in comp_inst?
+
+        raise NotImplementedError()
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
 
 class QueryEngine(AnalysisEngine):
     def __init__(self, layer):
@@ -341,29 +383,44 @@ class ComponentEngine(AnalysisEngine):
         return set([self.layer.get_param_value(self, self.param, obj)])
 
 class PatternEngine(AnalysisEngine):
-    def __init__(self, layer):
-        acl = { layer : { 'reads' : set(['component']) } }
+    def __init__(self, layer, source_param='component'):
+        acl = { layer : { 'reads' : set([source_param]) } }
         AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
+        self.source_param = source_param
 
     def map(self, obj, candidates):
-        assert(not isinstance(obj, Edge))
-
-        assert(candidates is None)
-        return self.layer.get_param_value(self, 'component', obj).patterns()
+        component = self.layer.get_param_value(self, self.source_param, obj)
+        if component is not None:
+            return component.patterns()
+        else:
+            return set([None])
 
     def assign(self, obj, candidates):
-        assert(not isinstance(obj, Edge))
-
         if len(candidates) == 0:
             raise Exception("no pattern left for assignment")
 
         return list(candidates)[0]
 
     def check(self, obj):
-        return self.layer.get_param_value(self, self.param, obj) is not None
+        if isinstance(obj, Edge):
+            expected = self.layer.get_param_value(self, self.source_param, obj) is not None
+            present  = self.layer.get_param_value(self, self.param, obj) is not None
+            return expected == present
+        else:
+            return self.layer.get_param_value(self, self.param, obj) is not None
 
     def transform(self, obj, target_layer):
-        return self.layer.get_param_value(self, self.param, obj).flatten()
+        if self.layer.get_param_value(self, self.param, obj) is None:
+            if isinstance(obj, Edge):
+                assert(obj.source in target_layer.graph.nodes())
+                assert(obj.target in target_layer.graph.nodes())
+
+            return obj
+        elif isinstance(obj, Edge):
+            # TODO implement
+            raise NotImplementedError()
+        else:
+            return self.layer.get_param_value(self, self.param, obj).flatten()
 
 class SpecEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):

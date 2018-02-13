@@ -422,6 +422,18 @@ class Repository(XMLParser):
 
         return result
 
+    def find_protocolstacks(self, from_service=None, to_service=None, query=None):
+        if query is not None:
+            from_service = query['from_service']
+            to_service   = query['to_service']
+
+        result = set()
+        for p in self._find_component_by_class('protocol'):
+            if p.find('protocol').get('from') == from_service and p.find('protocol').get('to') == to_service:
+                result.add(p)
+
+        return result
+
     def find_components_by_type(self, query, querytype):
         if querytype == 'function':
             components = self._find_function_by_name(query)
@@ -430,7 +442,7 @@ class Repository(XMLParser):
         elif querytype == 'mux':
             raise NotImplementedError()
         elif querytype == 'proto':
-            raise NotImplementedError()
+            components = self.find_protocolstacks(query=query)
         else: # 'component' or 'composite'
             components = self._find_element_by_attribute('component', { "name" : query }) + \
                          self._find_element_by_attribute('composite', { "name" : query })

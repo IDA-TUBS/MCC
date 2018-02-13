@@ -286,6 +286,8 @@ class SystemModel(Registry):
         Registry.__init__(self)
         self.add_layer(Layer('func_arch', nodetype=Subsystem.Child))
         self.add_layer(Layer('comm_arch', nodetype=Subsystem.Child))
+        self.add_layer(Layer('comp_arch-pre1', nodetype=Repository.Component))
+        self.add_layer(Layer('comp_arch-pre2', nodetype=Repository.Component))
         self.add_layer(Layer('comp_arch', nodetype=Repository.Component))
         self.add_layer(Layer('comp_inst', nodetype=Repository.Component))
 
@@ -305,8 +307,10 @@ class SystemModel(Registry):
                 self.platform : self.platform.pf_dot_styles
                 }
 
-        self.dot_styles[self.by_name['comm_arch']] = self.dot_styles[self.by_name['func_arch']]
-        self.dot_styles[self.by_name['comp_inst']] = self.dot_styles[self.by_name['comp_arch']]
+        self.dot_styles[self.by_name['comm_arch']]      = self.dot_styles[self.by_name['func_arch']]
+        self.dot_styles[self.by_name['comp_inst']]      = self.dot_styles[self.by_name['comp_arch']]
+        self.dot_styles[self.by_name['comp_arch-pre1']] = self.dot_styles[self.by_name['comp_arch']]
+        self.dot_styles[self.by_name['comp_arch-pre2']] = self.dot_styles[self.by_name['comp_arch']]
 
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:
@@ -1197,9 +1201,9 @@ class Mcc:
     def __init__(self, repo):
         self.repo  = repo
 
-    def _select_components(self):
+    def _select_components(self, dlayer):
         fc = self.model.by_name['comm_arch']
-        ca = self.model.by_name['comp_arch']
+        ca = self.model.by_name[dlayer]
 
         ce   = ComponentEngine(fc, self.repo)
         rtee = RteEngine(fc)
@@ -1252,10 +1256,58 @@ class Mcc:
         # check mapping
         self.model.add_step(NodeStep(Check(me, name='platform mapping is complete')))
 
-        # check that service dependencies are satisfied and connections are local
-        self.model.add_step(NodeStep(Check(ComponentDependencyEngine(ca), name='service dependencies')))
-
         # TODO (?) check that connections satisfy functional dependencies
+
+    def _insert_protocolstacks(self, slayer, dlayer):
+        slayer = self.model.by_name[slayer]
+        dlayer = self.model.by_name[dlayer]
+
+        # select protocol stacks
+        pse = ProtocolStackEngine(slayer, self.repo)
+        select = EdgeStep(Map(pse))
+        select.add_operation(Assign(pse))
+
+        # select pattern (if composite)
+        pe = PatternEngine(slayer, source_param='protocolstack')
+        select.add_operation(Map(pe))
+        select.add_operation(Assign(pe))
+        self.model.add_step(select)
+
+        # copy nodes
+        self.model.add_step(CopyNodeStep(slayer, dlayer))
+        self.model.add_step(CopyMappingStep(slayer, dlayer))
+
+        # copy or transform edges
+        self.model.add_step(EdgeStep(Transform(pe, dlayer)))
+
+        # derive mapping
+        ise = InheritEngine(dlayer, param='mapping', out=False)
+        ite = InheritEngine(dlayer, param='mapping', out=True)
+        op = Map(ise)
+        op.register_ae(ite)
+        inherit = NodeStep(op)
+        inherit.add_operation(Assign(ite))
+        self.model.add_step(inherit)
+
+    def _insert_muxers(self, slayer, dlayer):
+        slayer = self.model.by_name[slayer]
+        dlayer = self.model.by_name[dlayer]
+
+        # select muxers
+        me = MuxerEngine(slayer, self.repo)
+        select = NodeStep(Map(me))
+        select.add_operation(Assign(me))
+        self.model.add_step(select)
+
+        # TODO continue here
+
+        # copy & transform
+        self.model.add_step(CopyNodeStep(slayer, dlayer))
+        self.model.add_step(CopyMappingStep(slayer, dlayer))
+        self.model.add_step(CopyEdgeStep(slayer, dlayer))
+
+        # check that service dependencies are satisfied and connections are local
+        self.model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
 
     def _insert_proxies(self):
         fa = self.model.by_name['func_arch']
@@ -1307,17 +1359,13 @@ class Mcc:
         self._insert_proxies()
 
         # select components and transform into comp_arch
-        self._select_components()
+        self._select_components(dlayer='comp_arch-pre1')
 
-        # FIXME continue refactoring
+        # TODO test case for protocol stack insertion
+        self._insert_protocolstacks(slayer='comp_arch-pre1', dlayer='comp_arch-pre2')
 
-        # TODO implement transformation steps:
-        # - map protocol stacks
-        # - assign protocol stacks
-        # - transform
-        # - map muxers
-        # - assign muxers
-        # - transform 
+        # TODO test case for muxer insertion
+#        self._insert_muxers(slayer='comp_arch-pre2', dlayer='comp_arch')
 
         # TODO implement transformation/merge into component instantiation
 

@@ -385,16 +385,24 @@ class AnalysisEngine:
         return object
 
 class DummyEngine(AnalysisEngine):
+    """ Can be used for identity-tranformation.
+    """
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, None)
 
     def transform(self, obj, target_layer):
+        if isinstance(obj, Edge):
+            assert(obj.source in target_layer.graph.nodes())
+            assert(obj.target in target_layer.graph.nodes())
+
         return obj
 
     def check(self, obj):
         return True
 
 class CopyEngine(AnalysisEngine):
+    """ Copies 'source_param' from 'source_layer' to 'param' of 'layer'.
+    """
     def __init__(self, layer, param, source_layer, source_param=None):
         if source_param is None:
             source_param = param
@@ -408,6 +416,40 @@ class CopyEngine(AnalysisEngine):
     def map(self, obj, candidates):
         src_obj = self.layer.get_param_value(self, self.source_layer.name, obj)
         return set([self.source_layer.get_param_value(self, self.source_param, src_obj)])
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
+
+class InheritEngine(AnalysisEngine):
+    """ Inherits 'param' from source nodes (out=False) or target nodes (out=True).
+    """
+    def __init__(self, layer, param, out=False):
+        AnalysisEngine.__init__(self, layer, param)
+        self.out=out
+
+    def map(self, obj, candidates):
+        if self.out:
+            edges = self.layer.graph.out_edges(obj)
+        else:
+            edges = self.layer.graph.in_edges(obj)
+
+        if len(edges) == 0:
+            return candidates
+
+        candidates = set()
+
+        for e in edges:
+            candidates.add(self.layer.get_param_value(self, self.param, e.target if self.out else e.source))
+
+        if len(candidates) > 1:
+            logging.error("Cannot inherit '%s' from %s node unambiguously" 
+                    % (self.param, 'target' if self.out else 'source'))
+            return set([None])
+        elif len(candidates) == 0:
+            logging.warning("No value for param '%s' for node %s\'s %s nodes." % 
+                    (self.param, obj, 'target' if self.out else 'source'))
+
+        return candidates
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -453,27 +495,28 @@ class Map(Operation):
             assert(self.check_source_type(obj))
 
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-            first = len(candidates) == 0
+            if len(candidates) == 0:
+                candidates = None
 
             for ae in self.analysis_engines:
 
-                if first:
+                if candidates is None:
                     candidates = ae.map(obj, None)
-                    first = False
                 else:
                     # build intersection of candidates for all analyses
-                    candidates &= ae.map(obj, candidates)
+                    new_candidates = ae.map(obj, set(candidates))
+                    if new_candidates is not None:
+                        candidates &= new_candidates
 
-                if None in candidates:
-                    candidates.remove(None)
-
-                for c in candidates:
-                    assert(isinstance(c, ae.target_type()))
+                if candidates is not None:
+                    for c in candidates:
+                        assert(isinstance(c, ae.target_type()))
 
             # TODO (?) check target type
             # TODO (?) we may need to iterate over this multiple times
 
             # update candidates for this parameter in layer object
+            assert(candidates is not None)
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
         return True
@@ -494,7 +537,7 @@ class Assign(Operation):
 
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
             if len(candidates) == 0:
-                logging.error("No candidates left.")
+                logging.error("No candidates left for param '%s'." % self.param)
 
             result = self.analysis_engines[0].assign(obj, candidates)
             if isinstance(result, list) or isinstance(result, set):
@@ -592,9 +635,17 @@ class CopyNodeTransform(Transform):
     def __init__(self, layer, target_layer):
         Transform.__init__(self, DummyEngine(layer), target_layer)
 
+class CopyEdgeTransform(Transform):
+    def __init__(self, layer, target_layer):
+        Transform.__init__(self, DummyEngine(layer), target_layer)
+
 class CopyNodeStep(NodeStep):
     def __init__(self, layer, target_layer):
         NodeStep.__init__(self, CopyNodeTransform(layer, target_layer))
+
+class CopyEdgeStep(EdgeStep):
+    def __init__(self, layer, target_layer):
+        EdgeStep.__init__(self, CopyEdgeTransform(layer, target_layer))
 
 class CopyMappingStep(NodeStep):
     def __init__(self, layer, target_layer):
@@ -607,3 +658,15 @@ class CopyServiceStep(EdgeStep):
         ce = CopyEngine(target_layer, 'service', layer)
         EdgeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
+
+class InheritFromSourceStep(NodeStep):
+    def __init__(self, layer, param):
+        ie = InheritEngine(layer, param, out=False)
+        NodeStep.__init__(self, Map(ie))
+        self.add_operation(Assign(ie))
+
+class InheritFromTargetStep(NodeStep):
+    def __init__(self, layer, param):
+        ie = InheritEngine(layer, param, out=True)
+        NodeStep.__init__(self, Map(ie))
+        self.add_operation(Assign(ie))
