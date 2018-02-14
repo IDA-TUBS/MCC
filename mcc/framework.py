@@ -195,10 +195,13 @@ class Registry:
         raise NotImplementedError()
 
 class Layer:
-    def __init__(self, name, nodetype=object):
+    def __init__(self, name, nodetypes={object}):
         self.graph = Graph()
         self.name = name
-        self.nodetype = nodetype
+        self._nodetypes = nodetypes
+
+    def node_types(self):
+        return tuple(self._nodetypes)
 
     def __str__(self):
         return self.name
@@ -232,7 +235,6 @@ class Layer:
             # now we add the remaining edges
             for o in edges:
                 inserted.update(self.insert_obj(o, nodes_only=False))
-
             assert(len(obj) == len(inserted))
         elif isinstance(obj, GraphObj):
             if obj.is_edge():
@@ -379,10 +381,14 @@ class AnalysisEngine:
         raise NotImplementedError()
 
     def source_types(self):
-        return set([object])
+        """ returns compatible source types, i.e. nodes of layer must be an instance of this type
+        """
+        return tuple({object})
 
-    def target_type(self):
-        return object
+    def target_types(self):
+        """ returns compatible target types, i.e. nodes of target layer expect an instance of this type or a subclass
+        """
+        return tuple({object})
 
 class DummyEngine(AnalysisEngine):
     """ Can be used for identity-tranformation.
@@ -400,8 +406,8 @@ class DummyEngine(AnalysisEngine):
     def check(self, obj):
         return True
 
-    def target_type(self):
-        return self.layer.nodetype
+    def target_types(self):
+        return self.layer.node_types()
 
 class CopyEngine(AnalysisEngine):
     """ Copies 'source_param' from 'source_layer' to 'param' of 'layer'.
@@ -479,15 +485,21 @@ class Operation:
                     (ae.layer, self.source_layer))
 
         # check types
-        found = False
-        for t in ae.source_types():
-            if issubclass(self.source_layer.nodetype, t):
-                found = True
+        checked = True
+        for has in self.source_layer.node_types():
+            found = False
+            for t in ae.source_types():
+                if issubclass(has, t):
+                    found = True
+                    break
+                
+            if not found:
+                checked = False
                 break
 
-        if not found:
-            raise Exception("Analysis engine %s does not support nodetype %s of source layer" % (ae,
-                self.source_layer.nodetype))
+        if not checked:
+            raise Exception("Analysis engine %s does not support nodetypes %s of source layer" % (ae,
+                self.source_layer.node_types()))
 
     def register_ae(self, ae):
         self._check_ae_compatible(ae)
@@ -496,11 +508,10 @@ class Operation:
 
     def check_source_type(self, obj):
         for ae in self.analysis_engines:
-            for t in ae.source_types():
-                if isinstance(obj, t):
-                    return True
+            if not isinstance(obj, ae.source_types()):
+                return False
 
-        return False
+        return True
 
     def execute(self, iterable):
         raise NotImplementedError()
@@ -576,9 +587,20 @@ class Transform(Operation):
     def _check_ae_compatible(self, ae):
         Operation._check_ae_compatible(self, ae)
 
-        if not issubclass(ae.target_type(), self.target_layer.nodetype):
-            raise Exception("Analysis engine %s does not have nodetype %s of target layer" % (ae,
-                self.target_layer.nodetype))
+        compatible = False
+        for t in ae.target_types():
+            if compatible:
+                break
+            
+            for expected in self.target_layer.node_types():
+                if issubclass(t, expected):
+                    compatible = True
+                    break
+
+        if not compatible:
+            print(ae.target_types())
+            raise Exception("Analysis engine %s does not have nodetypes %s of target layer" % (ae,
+                self.target_layer.node_types()))
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
@@ -593,6 +615,15 @@ class Transform(Operation):
             assert new_objs, "transform() did not return any object"
             inserted = self.target_layer.insert_obj(new_objs)
             assert len(inserted) > 0
+
+            for o in inserted:
+                if not isinstance(o, Edge):
+                    if not isinstance(o, self.target_layer.node_types()):
+                        print(type(o))
+                        print(self.target_layer.node_types())
+                            
+                    assert(isinstance(o, self.target_layer.node_types()))
+
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
                 self.target_layer._set_param_value(self.source_layer.name, o, obj)

@@ -262,8 +262,8 @@ class ServiceEngine(AnalysisEngine):
 
         return graph_objs
 
-    def target_type(self):
-        return parser.Repository.Component
+    def target_types(self):
+        return tuple({parser.Repository.Component})
 
 class ServiceReachabilityEngine(AnalysisEngine):
 
@@ -350,7 +350,7 @@ class QueryEngine(AnalysisEngine):
         return list(candidates)[0]
 
     def source_types(self):
-        return set([self.layer.nodetype])
+        return self.layer.node_types()
 
 class ComponentEngine(AnalysisEngine):
     def __init__(self, layer, repo):
@@ -423,8 +423,8 @@ class PatternEngine(AnalysisEngine):
         else:
             return self.layer.get_param_value(self, self.param, obj).flatten()
 
-    def target_type(self):
-        return self.layer.nodetype
+    def target_types(self):
+        return self.layer.node_types()
 
 class SpecEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):
@@ -585,8 +585,8 @@ class ReachabilityEngine(AnalysisEngine):
 
             return result
 
-    def target_type(self):
-        return self.target_layer.nodetype
+    def target_types(self):
+        return self.target_layer.node_types()
 
 class GenodeSubsystemEngine(AnalysisEngine):
     """ Decompose component graph into subsystems by insert 'init' or other RTEs (e.g. noux, etc.).

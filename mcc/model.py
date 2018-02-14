@@ -284,12 +284,12 @@ class SubsystemModel(PlatformModel, QueryModel):
 class SystemModel(Registry):
     def __init__(self, repo, platform, dotpath=None):
         Registry.__init__(self)
-        self.add_layer(Layer('func_arch', nodetype=Subsystem.Child))
-        self.add_layer(Layer('comm_arch', nodetype=Subsystem.Child))
-        self.add_layer(Layer('comp_arch-pre1', nodetype=Repository.Component))
-        self.add_layer(Layer('comp_arch-pre2', nodetype=Repository.Component))
-        self.add_layer(Layer('comp_arch', nodetype=Repository.Component))
-        self.add_layer(Layer('comp_inst', nodetype=Repository.Component))
+        self.add_layer(Layer('func_arch', nodetypes={Subsystem.Child}))
+        self.add_layer(Layer('comm_arch', nodetypes={Subsystem.Child,Proxy}))
+        self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))
+        self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component}))
+        self.add_layer(Layer('comp_arch', nodetypes={Repository.Component}))
+        self.add_layer(Layer('comp_inst', nodetypes={Repository.Component}))
 
         self.platform = platform
         self.repo = repo
