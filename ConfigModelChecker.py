@@ -4,6 +4,7 @@ import logging
 import argparse
 from mcc import parser as cfgparser
 from mcc import model
+from mcc import lib
 
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('file', metavar='xml_file', type=str, 
@@ -32,7 +33,5 @@ if __name__ == '__main__':
     cfg.check_atomic_components()
     cfg.check_composite_components()
 
-    mcc = model.Mcc(repo=cfg)
+    mcc = lib.SimpleMcc(repo=cfg)
     mcc.search_config(args.file, args.schema, args)
-
-#    parser.check_system()

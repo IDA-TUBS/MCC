@@ -8,17 +8,39 @@ These files contain a list of binaries, the component repository and an abstract
 
 The script `ConfigModelChecker.py` takes an XML file as input and performs the following:
 
-* Checks the XML structure (nodes, required/optional attributes, etc.).
+* Checks the XML structure (nodes, required/optional attributes, etc.) according to XSD.
 * Checks ambiguity of function and component names.
 * Checks ambiguity of component classification.
 * Checks availability of referenced names.
 * Tries to transform the abstract configuration into an actual system configuration.
 
+## Specification
+
+TODO describe general structure of XML:
+
+* components
+* composites
+* classification: function, proxy, protocol stack, muxer, filter
+* requirements: rte, spec, caps, RAM
+
+## Transformation
+
+TODO write examples and tutorial (sphinx/readthedocs)
+
+* copying nodes/edges/params
+* inheriting params
+* inserting intermediate nodes (arc split)
+* applying patterns (pattern-based transformation)
+
 # Known issues/limitations
 
 Model:
 
-* There is currently no way to describe a mapping between a function provided
+* We intentionally use a flat specification of components and composites, i.e. in contrast 
+  to Genode's packaging tools (depot), we do not explicitly specify sandboxed subsystems.
+  The reason for this is that we do not want to handle blackboxes/grayboxes (yet?). Instead,
+  we can perform sandboxing by inserting subsystems automatically.
+* (obsolete?) There is currently no way to describe a mapping between a function provided
   by a component and the service(s) by which this function can be accessed. This
   is intentional because it simplifies the specification and we expect that there
   are only rare cases where this would be actually necessary. More precisely, those
@@ -61,7 +83,7 @@ Model:
 		  <service name="bar"> <function name="FOOBAR" /> </service>
       </requires>
 
-* We currently assume, that function and the corresponding service dependencies have
+* (obsolete?) We currently assume, that function and the corresponding service dependencies have
   the same direction. From the modelling perspective there is no particular reason for
   this. However, specifying such cases can reduce readability significantly. We should
   evaluate this on an example which included the `report_rom` component. We could, for
