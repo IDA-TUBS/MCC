@@ -2,6 +2,7 @@ import logging
 from mcc.framework import *
 from mcc.graph import *
 from mcc import model
+from mcc import parser
 
 class MappingEngine(AnalysisEngine):
     def __init__(self, layer, source_layer, source_param='parent-mapping'):
@@ -261,6 +262,9 @@ class ServiceEngine(AnalysisEngine):
 
         return graph_objs
 
+    def target_type(self):
+        return parser.Repository.Component
+
 class ServiceReachabilityEngine(AnalysisEngine):
 
     def __init__(self, layer, target_layer):
@@ -379,9 +383,6 @@ class ComponentEngine(AnalysisEngine):
     def check(self, obj):
         return self.layer.get_param_value(self, self.param, obj) is not None
 
-    def transform(self, obj, target_layer):
-        return set([self.layer.get_param_value(self, self.param, obj)])
-
 class PatternEngine(AnalysisEngine):
     def __init__(self, layer, source_param='component'):
         acl = { layer : { 'reads' : set([source_param]) } }
@@ -421,6 +422,9 @@ class PatternEngine(AnalysisEngine):
             raise NotImplementedError()
         else:
             return self.layer.get_param_value(self, self.param, obj).flatten()
+
+    def target_type(self):
+        return self.layer.nodetype
 
 class SpecEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):
@@ -580,3 +584,14 @@ class ReachabilityEngine(AnalysisEngine):
                            result.append(GraphObj(Edge(proxy, n), params={ 'service' : carrier }))
 
             return result
+
+    def target_type(self):
+        return self.target_layer.nodetype
+
+class GenodeSubsystemEngine(AnalysisEngine):
+    """ Decompose component graph into subsystems by insert 'init' or other RTEs (e.g. noux, etc.).
+    """
+    # TODO [low] implement GenodeSubystemEngine (only required for nested/hierarchical systems)
+
+    def __init__(self, layer):
+        AnalysisEngine.__init__(self, layer, param='rte-instance')

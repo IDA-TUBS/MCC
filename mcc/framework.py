@@ -400,6 +400,9 @@ class DummyEngine(AnalysisEngine):
     def check(self, obj):
         return True
 
+    def target_type(self):
+        return self.layer.nodetype
+
 class CopyEngine(AnalysisEngine):
     """ Copies 'source_param' from 'source_layer' to 'param' of 'layer'.
     """
@@ -456,27 +459,48 @@ class InheritEngine(AnalysisEngine):
 
 class Operation:
     def __init__(self, ae, name=''):
-        self.analysis_engines = [ae]
         self.param = ae.param
         self.source_layer = ae.layer
         self.target_layer = ae.layer
         if hasattr(ae, 'target_layer'):
             self.target_layer = ae.target_layer
+
         self.name = name
 
+        self._check_ae_compatible(ae)
+        self.analysis_engines = [ae]
+
+    def _check_ae_compatible(self, ae):
+        if ae.param != self.param:
+            raise Exception("Cannot register analysis engines because of incompatible parameters (%s != %s)" %
+                    (ae.param, self.param))
+        if ae.layer != self.source_layer:
+            raise Exception("Cannot register analysis engines because of incompatible source layer (%s != %s)" %
+                    (ae.layer, self.source_layer))
+
+        # check types
+        found = False
+        for t in ae.source_types():
+            if issubclass(self.source_layer.nodetype, t):
+                found = True
+                break
+
+        if not found:
+            raise Exception("Analysis engine %s does not support nodetype %s of source layer" % (ae,
+                self.source_layer.nodetype))
+
     def register_ae(self, ae):
-        assert(ae.param == self.param)
-        assert(ae.layer == self.source_layer)
+        self._check_ae_compatible(ae)
         self.analysis_engines.append(ae)
         return ae
 
     def check_source_type(self, obj):
         for ae in self.analysis_engines:
             for t in ae.source_types():
-                if not isinstance(obj, t):
-                    return False
+                if isinstance(obj, t):
+                    return True
 
-        return True
+        return False
 
     def execute(self, iterable):
         raise NotImplementedError()
@@ -508,13 +532,6 @@ class Map(Operation):
                     if new_candidates is not None:
                         candidates &= new_candidates
 
-                if candidates is not None:
-                    for c in candidates:
-                        assert(isinstance(c, ae.target_type()))
-
-            # TODO (?) check target type
-            # TODO (?) we may need to iterate over this multiple times
-
             # update candidates for this parameter in layer object
             assert(candidates is not None)
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
@@ -543,10 +560,8 @@ class Assign(Operation):
             if isinstance(result, list) or isinstance(result, set):
                 for r in result:
                     assert(r in candidates)
-                    assert(isinstance(r, self.analysis_engines[0].target_type()))
             else:
                 assert(result in candidates)
-                assert(isinstance(result, self.analysis_engines[0].target_type()))
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
@@ -557,6 +572,13 @@ class Transform(Operation):
         Operation.__init__(self, ae, name)
         self.target_layer = target_layer
         self.source_layer = ae.layer
+
+    def _check_ae_compatible(self, ae):
+        Operation._check_ae_compatible(self, ae)
+
+        if not issubclass(ae.target_type(), self.target_layer.nodetype):
+            raise Exception("Analysis engine %s does not have nodetype %s of target layer" % (ae,
+                self.target_layer.nodetype))
 
     def register_ae(self, ae):
         # only one analysis engine can be registered
