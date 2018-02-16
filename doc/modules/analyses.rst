@@ -1,9 +1,6 @@
 Analyses module
 ================
 
-.. todo::
-   Add description of analyses module.
-
 Class diagram
 -------------
 

@@ -1,10 +1,30 @@
+"""
+Description
+-----------
+
+Implements graph-related data structures.
+Serves as a wrapper to networkx so that we could potentially replace it with another graph library.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
 import networkx as nx
 import logging
 
 class GraphObj:
-    # captures dangling graph objects, i.e. Edge or Node, and its parameters
+    """ Captures dangling graph objects, i.e. Edge or Node, and its parameters.
+
+    Used by :func:`mcc.framework.AnalysisEngine.transform()`.
+    """
 
     def __init__(self, obj, params=None):
+        """
+        Args:
+            :param obj: Node or Edge wrapped by this class.
+            :param params: params of obj
+            :type  params: dict or None
+        """
         self.obj = obj
         self._params = params
 
@@ -15,12 +35,18 @@ class GraphObj:
         return False
 
     def params(self):
+        """
+        Returns:
+            params
+        """
         if self._params is None:
             return dict()
 
         return self._params
 
 class Edge:
+    """ Edge object used by :class:`Graph`.
+    """
     def __init__(self, source, target):
         self.source = source
         self.target = target
@@ -28,6 +54,8 @@ class Edge:
         assert(not isinstance(self.target, list))
 
 class Graph:
+    """ Wrapper for :class:`nx.MultiDiGraph`.
+    """
     def __init__(self):
         self.graph = nx.MultiDiGraph()
 

@@ -1,30 +1,41 @@
+"""
+Description
+-----------
+
+Implements generic MCC framework, i.e. cross-layer model, model operations, and generic analysis engines.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
+
 import logging
 from mcc.graph import *
 
 class Registry:
+    """ Implements/manages a cross-layer model.
+
+    Layers and transformation steps are stored, managed, and executed by this class.
+    """
     def __init__(self):
         self.by_order  = list()
         self.by_name   = dict()
         self.steps     = list()
 
     @staticmethod
-    def same_layers(step1, step2):
+    def _same_layers(step1, step2):
         if step1 == None or step2 == None:
             return False
         return step1.target_layer == step2.target_layer
 
-    def previous_step(self, step):
+    def _previous_step(self, step):
         idx = self.steps.index(step)
         if idx == 0:
             return None
         else:
             return self.steps[idx-1]
 
-    def add_layer(self, layer):
-        self.by_order.append(layer)
-        self.by_name[layer.name] = layer
-
-    def next_layer(self, layer):
+    def _next_layer(self, layer):
         current_layer = self.by_name[layer.name]
         idx = self.by_order.index(current_layer)
         if len(self.by_order) > idx+1:
@@ -32,8 +43,21 @@ class Registry:
         else:
             return None
 
+    def add_layer(self, layer):
+        """ Adds layer.
+
+        Added layers can be accessed either by name or by order using the dict 
+        members `Registry.by_name` and `Registry.by_order`.
+
+        Args:
+            :type layer: :class:`Layer`
+        """
+        self.by_order.append(layer)
+        self.by_name[layer.name] = layer
+
     def reset(self, layer=None):
-        # clear all layers from 'layer' and below
+        """ Clears all layers from 'layer' and below.
+        """
         if layer is None:
             start = 0
         else:
@@ -43,18 +67,29 @@ class Registry:
             self.by_order[i].clear()
 
     def add_step(self, step):
+        """ Adds a step.
+
+        All added steps are executed sequentially by :func:`Registry.execute()`.
+        Sanity checks are performed when adding a step, e.g. whether a step operates on the
+        same or next layer as the previously added step.
+
+        Args:
+            :type step: :class:`Step`
+        """
         # perform sanity checks (step's layers are correct, etc.)
         if len(self.steps) > 0:
-            if not Registry.same_layers(self.steps[-1], step):
+            if not Registry._same_layers(self.steps[-1], step):
                 self.print_steps()
                 print(step)
-                assert(step.target_layer == self.next_layer(self.steps[-1].target_layer))
+                assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
         else:
             assert(step.target_layer == self.by_order[0])
 
         self.steps.append(step)
 
     def write_dot(self, filename):
+        """ Produces a DOT file illustrating the registered steps and layers.
+        """
         with open(filename, 'w+') as dotfile:
             dotfile.write("digraph {\n")
             dotfile.write("  compound=true;\n")
@@ -157,13 +192,17 @@ class Registry:
             dotfile.write("}\n")
 
     def print_steps(self):
+        """ Prints details about the registered steps and layers.
+        """
         print()
         for step in self.steps:
-            if not Registry.same_layers(self.previous_step(step), step):
+            if not Registry._same_layers(self._previous_step(step), step):
                 print("[%s]" % step.target_layer)
             print("  %s" % step)
 
     def print_engines(self):
+        """ Prints details of the involved analysis engines
+        """
         aengines = set()
         for step in self.steps:
             for op in step.operations:
@@ -175,10 +214,12 @@ class Registry:
             print(ae.acl_string())
 
     def execute(self):
+        """ Executes the registered steps sequentially.
+        """
         print()
         for step in self.steps:
-            previous_step = self.previous_step(step)
-            if not Registry.same_layers(previous_step, step):
+            previous_step = self._previous_step(step)
+            if not Registry._same_layers(previous_step, step):
                 logging.info("Creating layer %s" % step.target_layer)
                 if previous_step is not None:
                     self._output_layer(previous_step.target_layer)
@@ -192,21 +233,39 @@ class Registry:
         self._output_layer(self.steps[-1].target_layer)
 
     def _output_layer(self, layer, suffix):
-        raise NotImplementedError()
+        """ Must be implemented by derived classes.
+        """
+        logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
+        return
 
 class Layer:
+    """ Implementation of a single layer in the cross-layer model.
+    """
     def __init__(self, name, nodetypes={object}):
+        """
+        Args:
+            :param name: Layer name.
+            :type  name: str
+            :param nodetypes: (optional) Possible node types (base classes).
+            :type  nodetypes: set
+        """
         self.graph = Graph()
         self.name = name
         self._nodetypes = nodetypes
 
     def node_types(self):
+        """
+        Returns:
+            tuple of possible node types (allowed base classes)
+        """
         return tuple(self._nodetypes)
 
     def __str__(self):
         return self.name
 
     def clear(self):
+        """ Clears the layer.
+        """
         self.graph = Graph()
 
     def _set_params(self, obj, params):
@@ -214,6 +273,17 @@ class Layer:
             self._set_param_value(name, obj, value)
 
     def insert_obj(self, obj, nodes_only=False):
+        """ Inserts one or multiple objects into the layer.
+
+        Args:
+            :param obj: Object(s) to be inserted.
+            :type  obj: :class:`mcc.graph.Edge`, :class:`mcc.graph.GraphObj`, object (used as node), a list or set of these.
+            :param nodes_only: Only insert node objects (used internally for two-pass insertion)
+            :type  nodes_only: boolean
+
+        Returns:
+            set of inserted nodes and edges
+        """
         inserted = set()
 
         if isinstance(obj, Edge):
@@ -265,6 +335,19 @@ class Layer:
         return attributes['params']
 
     def get_param_candidates(self, ae, param, obj):
+        """ Get candidate values for the given parameter and object.
+
+        Args:
+            :param ae: Analysis engine that accesses this parameter (for acl check).
+            :type  ae: :class:`AnalysisEngine`
+            :param param: Accessed parameter.
+            :type  param: str
+            :param obj: Accessed object for which the parameter candidates are returned.
+            :type  obj: Valid node or edge object of this layer.
+
+        Returns:
+            set of candidate values for the given param and object. Empty set if parameter is not present.
+        """
         assert(ae.check_acl(self, param, 'reads'))
 
         params = self._get_params(obj)
@@ -275,6 +358,18 @@ class Layer:
             return set()
 
     def set_param_candidates(self, ae, param, obj, candidates):
+        """ Set candidate values for the given parameter and object.
+
+        Args:
+            :param ae: Analysis engine that accesses this parameter (for acl check).
+            :type  ae: :class:`AnalysisEngine`
+            :param param: Accessed parameter.
+            :type  param: str
+            :param obj: Accessed object for which the parameter candidates are set.
+            :type  obj: Valid node or edge object of this layer.
+            :param candidates: candidate values
+            :type  candidate: set
+        """
         assert(ae.check_acl(self, param, 'writes'))
         self._set_param_candidates(param, obj, candidates)
 
@@ -287,6 +382,19 @@ class Layer:
         params[param]['candidates'] = candidates
 
     def get_param_value(self, ae, param, obj):
+        """ Get value for the given parameter and object.
+
+        Args:
+            :param ae: Analysis engine that accesses this parameter (for acl check).
+            :type  ae: :class:`AnalysisEngine`
+            :param param: Accessed parameter.
+            :type  param: str
+            :param obj: Accessed object for which the parameter value is returned.
+            :type  obj: Valid node or edge object of this layer.
+
+        Returns:
+            Values for the given param and object. None if parameter is not present.
+        """
         assert(ae.check_acl(self, param, 'reads'))
         return self._get_param_value(param, obj)
 
@@ -299,6 +407,17 @@ class Layer:
             return None
 
     def set_param_value(self, ae, param, obj, value):
+        """ Set value for the given parameter and object.
+
+        Args:
+            :param ae: Analysis engine that accesses this parameter (for acl check).
+            :type  ae: :class:`AnalysisEngine`
+            :param param: Accessed parameter.
+            :type  param: str
+            :param obj: Accessed object for which the parameter value is set.
+            :type  obj: Valid node or edge object of this layer.
+            :param value: Value to be set.
+        """
         assert(ae.check_acl(self, param, 'writes'))
         self._set_param_value(param, obj, value)
 
@@ -311,9 +430,24 @@ class Layer:
         params[param]['value'] = value
 
 class AnalysisEngine:
-    # TODO implement check of supported layers, node types, edge types, etc.
+    """ Base class for analysis engines.
+    """
 
     def __init__(self, layer, param, name=None, acl=None):
+        """
+        Args:
+            :param layer: The (source) layer on which the analysis engines operates.
+            :type  layer: :class:`Layer`
+            :param param: The parameter that is modified by this analysis engine.
+            :type  param: str
+            :param name:  (optional) Name of the analysis engine.
+            :type  name:  str
+            :param acl:   Access list for this analysis engine.
+            :type  acl:   dict, example (default):
+
+                { layer : { 'reads' : param, 'writes' : param } }
+
+        """
         self.layer = layer
         self.param = param
         self.name = name
@@ -349,6 +483,17 @@ class AnalysisEngine:
         return result
 
     def check_acl(self, layer, param, access):
+        """ Checks whether a certain access is granted by the engines acl.
+
+        Args:
+            :param layer:  accessed layer
+            :type  layer:  :class:`Layer`
+            :param param:  accessed param
+            :type  param:  str
+            :param access: access type
+            :type  access: str ('reads' or 'writes')
+
+        """
         if layer not in self.acl:
             logging.critical('%s has no access to layer "%s".' % (type(self).__name__, layer))
             logging.info('Requested: %s(%s.%s)' % (access, layer, param))
@@ -368,25 +513,69 @@ class AnalysisEngine:
         logging.info('ACL is:\n%s' % self.acl_string())
         return False
 
-    def map(self, source, candidates=None):
+    def map(self, obj, candidates=None):
+        """ Must be implemented by derived classes.
+
+        Args:
+            :param obj: The graph object to evalute.
+            :param candidates: The existing set of candidate values.
+            :type  candidates: set or None
+
+        Returns:
+            set of candidate values
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()
 
-    def assign(self, source, candidates):
+    def assign(self, obj, candidates):
+        """ Must be implemented by derived classes.
+
+        Args:
+            :param obj: The graph object to evalute.
+            :param candidates: The existing set of candidates.
+            :type  candidates: set
+
+        Returns:
+            One value from candidates
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()
 
-    def transform(self, source, target_layer):
+    def transform(self, obj, target_layer):
+        """ Must be implemented by derived classes.
+
+        Args:
+            :param obj: The graph object to evalute.
+            :param target_layer: The target layer.
+            :type  target_layer: :class:`Layer`
+
+        Returns:
+            A node (object), an edge (:class:`mcc.graph.Edge`), a :class:`mcc.graph.GraphObj`, or a set or list of these.
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()
 
     def check(self, obj):
+        """ Must be implemented by derived classes.
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()
 
     def source_types(self):
-        """ returns compatible source types, i.e. nodes of layer must be an instance of this type
+        """ Returns compatible source types, i.e. nodes of layer must be an instance of this type.
         """
         return tuple({object})
 
     def target_types(self):
-        """ returns compatible target types, i.e. nodes of target layer expect an instance of this type or a subclass
+        """ Returns compatible target types, i.e. nodes of target layer expect an instance of this type or a subclass.
         """
         return tuple({object})
 
@@ -410,9 +599,20 @@ class DummyEngine(AnalysisEngine):
         return self.layer.node_types()
 
 class CopyEngine(AnalysisEngine):
-    """ Copies 'source_param' from 'source_layer' to 'param' of 'layer'.
+    """ Copies a parameter from one layer to another layer.
     """
     def __init__(self, layer, param, source_layer, source_param=None):
+        """ 
+        Args:
+            :param layer: The target layer.
+            :type  layer: :class:`Layer`
+            :param param: The target parameter.
+            :type  param: str
+            :param source_layer: The source layer.
+            :type  source_layer: :class:`Layer`
+            :param source_param: An optional source parameter (otherwise: same as param).
+            :type  source_param: str
+        """
         if source_param is None:
             source_param = param
         acl = { layer        : {'reads' : set([source_layer.name])},
@@ -430,9 +630,18 @@ class CopyEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class InheritEngine(AnalysisEngine):
-    """ Inherits 'param' from source nodes (out=False) or target nodes (out=True).
+    """ Inherits a parameter from neighbouring nodes.
     """
     def __init__(self, layer, param, out=False):
+        """ 
+        Args:
+            :param layer: The layer on which we operate.
+            :type  layer: :class:`Layer`
+            :param param: The parameter to inherit.
+            :type  param: str
+            :param out: Whether to evaluate outgoing or incoming edges when iterating neighbouring nodes.
+            :type  out: boolean
+        """
         AnalysisEngine.__init__(self, layer, param)
         self.out=out
 
@@ -464,7 +673,23 @@ class InheritEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class Operation:
+    """ Base class for operations on a model.
+    """
+
     def __init__(self, ae, name=''):
+        """ Creates a model operation.
+
+        The source layer, param, and (if present) target layer are taken from ae. 
+
+        Args:
+            :param ae: The analysis engine used for the operation.
+            :type  ae: :class:`AnalysisEngine`
+            :param name: An optional name.
+            :type  name: str
+
+        Raises:
+            Exception: ae is not compatible
+        """
         self.param = ae.param
         self.source_layer = ae.layer
         self.target_layer = ae.layer
@@ -502,11 +727,32 @@ class Operation:
                 self.source_layer.node_types()))
 
     def register_ae(self, ae):
+        """ Registers another analysis engine.
+        
+        The analysis engine is checked for compatibility.
+
+        Args:
+            :param ae: The analysis engine.
+            :type  ae: :class:`AnalysisEngine`
+
+        Raises:
+            Exception: the ae is not compatible
+
+        """
+
         self._check_ae_compatible(ae)
         self.analysis_engines.append(ae)
         return ae
 
     def check_source_type(self, obj):
+        """ Checks whether obj is of expected source type.
+
+        Args:
+            :param obj: node object
+
+        Returns:
+            boolean.
+        """
         for ae in self.analysis_engines:
             if not isinstance(obj, ae.source_types()):
                 return False
@@ -520,7 +766,20 @@ class Operation:
         return "%s(%s) [%s]" % (type(self).__name__, self.name, ','.join([str(ae) for ae in self.analysis_engines]))
 
 class Map(Operation):
+    """ Implements the map operation, which return candidates for the associated parameter.
+    """
     def __init__(self, ae, name=''):
+        """ Creates a map operation.
+
+        Args:
+            :param ae: The analysis engine used for the operation.
+            :type  ae: :class:`AnalysisEngine`
+            :param name: An optional name.
+            :type  name: str
+
+        Raises:
+            Exception: ae is not compatible
+        """
         Operation.__init__(self, ae, name)
 
     def execute(self, iterable):
@@ -550,10 +809,27 @@ class Map(Operation):
         return True
 
 class Assign(Operation):
+    """ Implements the assign operation, which selects one of the previously mapped candidates for the associated parameter.
+    """
     def __init__(self, ae, name=''):
+        """ Creates an assign operation.
+
+        Args:
+            :param ae: The analysis engine used for the operation.
+            :type  ae: :class:`AnalysisEngine`
+            :param name: An optional name.
+            :type  name: str
+
+        Raises:
+            Exception: ae is not compatible
+        """
         Operation.__init__(self, ae, name)
 
     def register_ae(self, ae):
+        """
+        Returns:
+            False -- only a single analysis engine must be registered (which is given on construction)
+        """
         # only one analysis engine can be registered
         assert(False)
 
@@ -579,7 +855,23 @@ class Assign(Operation):
         return True
 
 class Transform(Operation):
+    """ Implements the transform operation, which transforms objects (nodes/edges) of one layer into objects of the target layer.
+    """
+
     def __init__(self, ae, target_layer, name=''):
+        """ Creates an assign operation.
+
+        Args:
+            :param ae: The analysis engine used for the operation.
+            :type  ae: :class:`AnalysisEngine`
+            :param target_layer: The target layer.
+            :type  ae: :class:`Layer`
+            :param name: An optional name.
+            :type  name: str
+
+        Raises:
+            Exception: ae is not compatible
+        """
         Operation.__init__(self, ae, name)
         self.target_layer = target_layer
         self.source_layer = ae.layer
@@ -603,6 +895,10 @@ class Transform(Operation):
                 self.target_layer.node_types()))
 
     def register_ae(self, ae):
+        """
+        Returns:
+            False -- only a single analysis engine must be registered (which is given on construction)
+        """
         # only one analysis engine can be registered
         assert(False)
 
@@ -631,6 +927,8 @@ class Transform(Operation):
         return True
 
 class Check(Operation):
+    """ Implements the check operation, which is used for admission testing.
+    """
     def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
@@ -647,13 +945,29 @@ class Check(Operation):
         return True
 
 class Step:
+    """ Implements model transformation step.
+
+        A step consists of several operation that are executed sequentially.
+        All operations must have the same source layer and target layer.
+
+    """
     def __init__(self, op):
+        """ Initialises the object and sets the first operation of type :class:`Operation`"""
         assert(isinstance(op, Operation))
         self.operations = [op]
         self.source_layer = op.source_layer
         self.target_layer = op.target_layer
 
     def add_operation(self, op):
+        """ Adds an operation to the internal list.
+
+        Args:
+            :param op: The operation.
+            :type  op: :class:`Operation`
+
+        Returns:
+            op
+        """
         assert(isinstance(op, Operation))
         assert(op.source_layer == self.source_layer)
         if self.source_layer == self.target_layer:
@@ -666,8 +980,20 @@ class Step:
     def __repr__(self):
         return type(self).__name__ + ': \n    ' + '\n    '.join([str(op) for op in self.operations])
 
-class NodeStep(Step):
     def execute(self):
+        """ Must be implemented by derived classes.
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError()
+
+class NodeStep(Step):
+    """ Implements model transformation step on nodes.
+    """
+    def execute(self):
+        """ For every operation, calls :func:`Operation.execute()` for every node in the layer.
+        """
         for op in self.operations:
             if not op.execute(self.source_layer.graph.nodes()):
                 raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
@@ -676,7 +1002,11 @@ class NodeStep(Step):
         return True
 
 class EdgeStep(Step):
+    """ Implements model transformation step on edges.
+    """
     def execute(self):
+        """ For every operation, calls :func:`Operation.execute()` for every edge in the layer.
+        """
         for op in self.operations:
             if not op.execute(self.source_layer.graph.edges()):
                 raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
@@ -685,40 +1015,56 @@ class EdgeStep(Step):
         return True
 
 class CopyNodeTransform(Transform):
+    """ Transform operation that returns the nodes found in the layer.
+    """
     def __init__(self, layer, target_layer):
         Transform.__init__(self, DummyEngine(layer), target_layer)
 
 class CopyEdgeTransform(Transform):
+    """ Transform operation that returns the edges found in the layer.
+    """
     def __init__(self, layer, target_layer):
         Transform.__init__(self, DummyEngine(layer), target_layer)
 
 class CopyNodeStep(NodeStep):
+    """ Copies nodes to target layer.
+    """
     def __init__(self, layer, target_layer):
         NodeStep.__init__(self, CopyNodeTransform(layer, target_layer))
 
 class CopyEdgeStep(EdgeStep):
+    """ Copies edges to target layer.
+    """
     def __init__(self, layer, target_layer):
         EdgeStep.__init__(self, CopyEdgeTransform(layer, target_layer))
 
 class CopyMappingStep(NodeStep):
+    """ Copies 'mapping' parameter of the nodes to the target layer.
+    """
     def __init__(self, layer, target_layer):
         ce = CopyEngine(target_layer, 'mapping', layer)
         NodeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
 
 class CopyServiceStep(EdgeStep):
+    """ Copies 'service' parameter of the edges to the target layer.
+    """
     def __init__(self, layer, target_layer):
         ce = CopyEngine(target_layer, 'service', layer)
         EdgeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
 
 class InheritFromSourceStep(NodeStep):
+    """ Inherits a parameter value from neighbouring source nodes.
+    """
     def __init__(self, layer, param):
         ie = InheritEngine(layer, param, out=False)
         NodeStep.__init__(self, Map(ie))
         self.add_operation(Assign(ie))
 
 class InheritFromTargetStep(NodeStep):
+    """ Inherits a parameter value from neighbouring target nodes.
+    """
     def __init__(self, layer, param):
         ie = InheritEngine(layer, param, out=True)
         NodeStep.__init__(self, Map(ie))

@@ -1,9 +1,6 @@
 Model module
 ================
 
-.. todo::
-   Add description of model module.
-
 Class diagram
 -------------
 

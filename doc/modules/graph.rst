@@ -1,9 +1,6 @@
 Graph module
 ================
 
-.. todo::
-   Add description of graph module.
-
 Class diagram
 -------------
 

@@ -1,3 +1,13 @@
+"""
+Description
+-----------
+
+Implements analysis engines.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
 import logging
 from mcc.framework import *
 from mcc.graph import *
@@ -77,10 +87,12 @@ class MappingEngine(AnalysisEngine):
         return candidates
 
     def assign(self, obj, candidates):
+        """ Assigns the first candidate.
+        """
         return list(candidates)[0]
 
     def check(self, obj):
-        """ check whether a platform mapping is assigned to all nodes
+        """ Checks whether a platform mapping is assigned to all nodes.
         """
         assert(not isinstance(obj, Edge))
 
@@ -96,7 +108,7 @@ class DependencyEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
-        """ Check whether all dependencies are satisfied
+        """ Checks whether all functional dependencies are satisfied by the selected component.
         """
         assert(not isinstance(obj, Edge))
 
@@ -124,7 +136,7 @@ class ComponentDependencyEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
-        """ Check that a) all service requirements are satisfied and b) that service connections are local
+        """ Checks that a) all service requirements are satisfied and b) that service connections are local.
         """
         assert(not isinstance(obj, Edge))
 
@@ -154,6 +166,8 @@ class ComponentDependencyEngine(AnalysisEngine):
 class ServiceEngine(AnalysisEngine):
 
     class Connection:
+        """ Used for the 'connection' param.
+        """
         def __init__(self, source, target, source_service, target_service):
             self.source = source
             self.target = target
@@ -173,7 +187,11 @@ class ServiceEngine(AnalysisEngine):
         self.target_layer = target_layer
 
     def map(self, obj, candidates):
-        """ Select candidates for to-be-connected source and target nodes between components
+        """ Finds candidates for to-be-connected source and target nodes between previously selected components/patterns.
+
+        After inserting a pattern, we must connect its exposed services and external requirements.
+        For this we have to look at the edges in the source layer to find the counterpart and add the corresponding
+        edges in the target layer.
         """
         # FIXME: make this more systematically by adding a side layer with service requirements as nodes
         #        in order to decide on each service requirement (of a component) separately
@@ -245,14 +263,14 @@ class ServiceEngine(AnalysisEngine):
         return candidates
 
     def assign(self, obj, candidates):
-        """ Choose a candidate
+        """ Returns all candidates, as all remaining candidates are connections that must be inserted.
         """
         assert(isinstance(obj, Edge))
 
         return list(candidates)
 
     def transform(self, obj, target_layer):
-        """ Transform comm_arch edges into comp_arch edges
+        """ Transform comm_arch edges into comp_arch edges.
         """
         assert(isinstance(obj, Edge))
 
@@ -274,6 +292,9 @@ class ServiceReachabilityEngine(AnalysisEngine):
         self.target_layer = target_layer
 
     def map(self, obj, candidates):
+        """ Excludes connection candidates (:class:`ServiceEngine.Connection`) whose source and target component with
+        differing 'mapping' parameter.
+        """
         assert(isinstance(obj, Edge))
         assert(candidates is not None)
 
@@ -300,6 +321,9 @@ class ProtocolStackEngine(AnalysisEngine):
         self.repo = repo
 
     def map(self, obj, candidates):
+        """ Finds possible protocol stack components for connections (:class:`ServiceEngine.Connection`) that have
+        different source and target service.
+        """
         assert(isinstance(obj, Edge))
 
         source_service = self.layer.get_param_value(self, 'source-service', obj)
@@ -314,6 +338,8 @@ class ProtocolStackEngine(AnalysisEngine):
         return set([None])
 
     def assign(self, obj, candidates):
+        """ Assigns the first candidate.
+        """
         return list(candidates)[0]
 
 class MuxerEngine(AnalysisEngine):
@@ -337,10 +363,14 @@ class MuxerEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class QueryEngine(AnalysisEngine):
+    """ Assigns 'mapping' parameter as suggested by the query model.
+    """
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, param='mapping')
 
     def assign(self, obj, candidates):
+        """ Assigns the first candidate.
+        """
         if len(candidates) == 0:
             logging.error("No mapping candidate for '%s'." % (obj.label()))
             raise Exception("ERROR")
@@ -358,6 +388,8 @@ class ComponentEngine(AnalysisEngine):
         self.repo = repo
 
     def map(self, obj, candidates):
+        """ Finds component candidates for queried childs.
+        """
         assert(not isinstance(obj, Edge))
 
         assert(candidates is None)
@@ -373,6 +405,8 @@ class ComponentEngine(AnalysisEngine):
         return set()
 
     def assign(self, obj, candidates):
+        """ Assigns the first candidate.
+        """
         assert(not isinstance(obj, Edge))
 
         if len(candidates) == 0:
@@ -381,6 +415,8 @@ class ComponentEngine(AnalysisEngine):
         return list(candidates)[0]
 
     def check(self, obj):
+        """ Sanity check.
+        """
         return self.layer.get_param_value(self, self.param, obj) is not None
 
 class PatternEngine(AnalysisEngine):
@@ -390,6 +426,8 @@ class PatternEngine(AnalysisEngine):
         self.source_param = source_param
 
     def map(self, obj, candidates):
+        """ Finds component patterns.
+        """
         component = self.layer.get_param_value(self, self.source_param, obj)
         if component is not None:
             return component.patterns()
@@ -397,12 +435,16 @@ class PatternEngine(AnalysisEngine):
             return set([None])
 
     def assign(self, obj, candidates):
+        """ Assigns the first candidate.
+        """
         if len(candidates) == 0:
             raise Exception("no pattern left for assignment")
 
         return list(candidates)[0]
 
     def check(self, obj):
+        """ Checks whether a pattern was assigned.
+        """
         if isinstance(obj, Edge):
             expected = self.layer.get_param_value(self, self.source_param, obj) is not None
             present  = self.layer.get_param_value(self, self.param, obj) is not None
@@ -411,6 +453,8 @@ class PatternEngine(AnalysisEngine):
             return self.layer.get_param_value(self, self.param, obj) is not None
 
     def transform(self, obj, target_layer):
+        """ Inserts the pattern into target_layer.
+        """
         if self.layer.get_param_value(self, self.param, obj) is None:
             if isinstance(obj, Edge):
                 assert(obj.source in target_layer.graph.nodes())
@@ -439,6 +483,8 @@ class SpecEngine(AnalysisEngine):
         return True
 
     def map(self, obj, candidates): 
+        """ Reduces set of 'mapping' candidates by checking the obj's spec requirements.
+        """
         assert(not isinstance(obj, Edge))
 
         # no need to check this for proxies
@@ -456,6 +502,8 @@ class SpecEngine(AnalysisEngine):
         return keep
 
     def check(self, obj):
+        """ Sanity check.
+        """
         assert(not isinstance(obj, Edge))
 
         # no need to check this for proxies
@@ -484,6 +532,8 @@ class RteEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
     def map(self, obj, candidates): 
+        """ Reduces set of 'mapping' candidates by checking the obj's rte requirements.
+        """
         assert(not isinstance(obj, Edge))
 
         # no need to check this for proxies
@@ -502,6 +552,8 @@ class RteEngine(AnalysisEngine):
         return keep
 
     def check(self, obj):
+        """ Sanity check
+        """
         assert(not isinstance(obj, Edge))
 
         # no need to check this for proxies
@@ -542,6 +594,8 @@ class ReachabilityEngine(AnalysisEngine):
             return set([(carrier, pcomp)])
 
     def map(self, obj, candidates):
+        """ Finds possible carriers.
+        """
         assert(isinstance(obj, Edge))
         assert(candidates is None)
 
@@ -550,12 +604,20 @@ class ReachabilityEngine(AnalysisEngine):
         return candidates
 
     def assign(self, obj, candidates):
+        """ Assigns first candidate
+        """
         assert(isinstance(obj, Edge))
         assert(len(candidates) > 0)
 
         return list(candidates)[0]
 
     def transform(self, obj, target_layer):
+        """ Transforms obj (Edge) based on the selected carrier.
+
+            'native' -- returns obj
+
+            'else'   -- inserts :class:`mcc.model.Proxy`
+        """
         assert(isinstance(obj, Edge))
         assert(target_layer == self.target_layer)
 

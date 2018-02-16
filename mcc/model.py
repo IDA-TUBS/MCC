@@ -1,9 +1,21 @@
-import networkx as nx
+"""
+Description
+-----------
+
+Implements model-specific data structures which are used by our cross-layer model.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
+
 from mcc.parser import *
 from mcc.framework import *
 from mcc.analyses import *
 
 class Proxy:
+    """ Node type representing to-be-inserted proxies; used in comm_arch layer.
+    """
     def __init__(self, carrier, service):
         self.carrier = carrier
         self.service = service
@@ -17,79 +29,9 @@ class Proxy:
     def type(self):
         return 'proxy'
 
-# wrapper class to allow multiple nodes of the same component
-class Component:
-    def __init__(self, xml_node):
-        self.xml = xml_node
-
-    def route_to(self, system_graph, service, component, label=None):
-        # check component specifications
-        if not self.requires(service):
-            logging.error("Cannot route service '%s' of component '%s' which does not require this service." % (service, self.xml.get('name')))
-            return False
-
-        if not component.provides(service):
-            logging.error("Cannot route service '%s' to component '%s' which does not provide this service." % (service, component.xml.get('name')))
-            return False
-
-        # add edge
-        attribs = {'service' : service}
-        if label is not None and label != 'None':
-            attribs['label'] = label
-
-        return system_graph.add_component_edge(self, component, attribs)
-
-    def max_clients(self, name):
-        if self.xml.find('provides') is not None:
-            for s in self.xml.find('provides').findall('service'):
-                if s.get('name') == name:
-                    if 'max_clients' in s.keys():
-                        return int(s.get('max_clients'))
-
-        return float('inf')
-
-    def connections(self, system_graph, name):
-        i = 0
-        for e in system_graph.component_in_edges(self):
-            if e.attr['service'] == name:
-                i += 1
-
-        return i
-
-    def connected(self, system_graph, name, label):
-        for e in system_graph.component_out_edges(self):
-            if e.attr['service'] == name:
-                if label is not None and label != 'None':
-                    if 'label' in e.attr and e.attr['label'] == label:
-                        return True
-                else:
-                    return True
-
-        return False
-
-    def provides(self, name, provisiontype='service'):
-        if self.xml.find('provides') is not None:
-            for s in self.xml.find('provides').findall(provisiontype):
-                if s.get('name') == name:
-                    return True
-
-        return False
-
-    def requires(self, name, requirementtype='service'):
-        if self.xml.find('requires') is not None:
-            for s in self.xml.find('requires').findall(requirementtype):
-                if s.get('name') == name:
-                    return True
-
-        return False
-
-    def is_comp(self, component):
-        return component is self.xml
-
-    def component(self):
-        return self.xml
-
 class QueryModel(object):
+    """ Base class for a query model which is given to the MCC.
+    """
 
     def __init__(self):
         self.query_graph = Graph()
@@ -101,9 +43,17 @@ class QueryModel(object):
                             }}
 
     def children(self):
+        """
+        Returns:
+            nodes of the query graph
+        """
         return self.query_graph.nodes()
 
     def routes(self):
+        """
+        Returns:
+            edges of the query graph
+        """
         return self.query_graph.edges()
 
     def _write_dot_node(self, dotfile, node, prefix=""):
@@ -133,6 +83,8 @@ class QueryModel(object):
 
 
 class PlatformModel(object):
+    """ Base class of a platform model.
+    """
 
     def __init__(self):
         self.platform_graph = Graph()
@@ -144,9 +96,18 @@ class PlatformModel(object):
         raise NotImplementedError()
 
 class SubsystemModel(PlatformModel, QueryModel):
-    # the subsystem graph models the (hierarchical) structure of the subsystems
+    """ Models the (hierarchical) structure of (Genode) subsystems.
+
+    A subsystem model specifies both, the platform (consisting of subsystems) and an abstract, pre-defined mapping
+    of children that reside in the subsystems.
+    """
 
     def __init__(self, parser):
+        """ Initialises the query model and platform model using the given parser.
+
+        Args:
+            :type parser: :class:`mcc.parser.SubsystemParser`
+        """
         PlatformModel.__init__(self)
         self.subsystem_root = None
         self.subsystem_graph = self.platform_graph
@@ -282,6 +243,8 @@ class SubsystemModel(PlatformModel, QueryModel):
             return False, 'Nic', 'Network'
 
 class SystemModel(Registry):
+    """ Our cross-layer model.
+    """
     def __init__(self, repo, platform, dotpath=None):
         Registry.__init__(self)
         self.add_layer(Layer('func_arch', nodetypes={Subsystem.Child}))

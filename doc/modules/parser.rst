@@ -1,9 +1,6 @@
 Parser module
 ================
 
-.. todo::
-   Add description of parser module.
-
 Class diagram
 -------------
 

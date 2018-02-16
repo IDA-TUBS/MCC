@@ -1,3 +1,13 @@
+"""
+Description
+-----------
+
+Implements XML parser classes for the component repository.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
 from lxml import objectify
 from lxml import etree as ET
 from lxml.etree import XMLSyntaxError

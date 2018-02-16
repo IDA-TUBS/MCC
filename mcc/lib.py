@@ -1,17 +1,37 @@
-import networkx as nx
+"""
+Description
+-----------
+
+Implements variants of the MCC by composing cross-layer models, analysis engines, and steps.
+
+:Authors:
+    - Johannes Schlatow
+
+"""
 from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
 
 class MccBase:
+    """ MCC base class. Implements helper functions for common transformation steps.
+    """
 
     def __init__(self, repo):
+        """
+        Args:
+            :param repo: component and contract repository
+        """
         self.repo = repo
 
-    def search_config(self, subsystem_xml, xsd_file, args):
-        raise NotImplementedError()
-
     def _select_components(self, model, slayer, dlayer):
+        """ Selects components for nodes in source layer and transforms into target layer.
+
+        Args:
+            :param model: cross-layer model
+            :type  model: :class:`mcc.framework.Registry`
+            :param slayer: source layer
+            :param dlayer: target layer
+        """
         fc = model.by_name[slayer]
         ca = model.by_name[dlayer]
 
@@ -69,6 +89,15 @@ class MccBase:
         # TODO (?) check that connections satisfy functional dependencies
 
     def _insert_protocolstacks(self, model, slayer, dlayer):
+        """ Inserts protocol stacks for edges in source layer and transforms into target layer.
+
+        Args:
+            :param model: cross-layer model
+            :type  model: :class:`mcc.framework.Registry`
+            :param slayer: source layer
+            :param dlayer: target layer
+        """
+
         slayer = model.by_name[slayer]
         dlayer = model.by_name[dlayer]
 
@@ -100,6 +129,15 @@ class MccBase:
         model.add_step(inherit)
 
     def _insert_muxers(self, model, slayer, dlayer):
+        """ Inserts multiplexers for edges in source layer and transforms into target layer.
+
+        Args:
+            :param model: cross-layer model
+            :type  model: :class:`mcc.framework.Registry`
+            :param slayer: source layer
+            :param dlayer: target layer
+        """
+
         slayer = model.by_name[slayer]
         dlayer = model.by_name[dlayer]
 
@@ -120,6 +158,15 @@ class MccBase:
         model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
 
     def _insert_proxies(self, model, slayer, dlayer):
+        """ Inserts proxies for edges in source layer and transforms into target layer.
+
+        Args:
+            :param model: cross-layer model
+            :type  model: :class:`mcc.framework.Registry`
+            :param slayer: source layer
+            :param dlayer: target layer
+        """
+
         fa = model.by_name[slayer]
         fc = model.by_name[dlayer]
 
@@ -140,11 +187,23 @@ class MccBase:
 
 
 class SimpleMcc(MccBase):
+    """ Composes MCC for Genode systems. Only considers functional requirements.
+    """
 
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
     def search_config(self, subsystem_xml, xsd_file, args):
+        """ Searches a system configuration for the given query.
+
+        Args:
+            :param subsystem_xml: filename containing abstract subsystem configuruation
+            :type  subsystem_xml: str
+            :param xsd_file: XSD filename for subsystem_xml
+            :type  xsd_file: str
+            :param args: args from :class:`argparse.ArgumentParser`
+        """
+
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 1) we parse the platform model (here: subsystem structure)
