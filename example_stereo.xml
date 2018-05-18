@@ -302,7 +302,7 @@
 		</timing>
 
 		<pattern>
-			<component name="debay_left-hw">
+			<component name="debay_left">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
 				<route><service name="ROM"><external ref="cam"/></service></route>
 			</component>
