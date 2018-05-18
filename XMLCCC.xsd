@@ -21,6 +21,14 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
 
+  <xs:complexType name="RefType">
+    <xs:attribute name="ref" type="xs:string" />
+  </xs:complexType>
+
+  <xs:complexType name="QuantumType">
+    <xs:attribute name="quantum" type="xs:integer" use="required"/>
+  </xs:complexType>
+
    <xs:complexType name="RepositoryType">
      <xs:choice maxOccurs="unbounded">
        <xs:element name="binary" type="BinaryType" />
@@ -52,6 +60,7 @@
        </xs:choice>
        <xs:element name="provides" type="ProvidesType" minOccurs="0" />
        <xs:element name="requires" type="RequiresType" minOccurs="0" />
+       <xs:element name="timing" type="TimingType" minOccurs="0" />
        <xs:element name="defaults"                     minOccurs="0" />
      </xs:sequence>
      <xs:attribute name="name"      type="xs:string" use="required"/>
@@ -66,6 +75,7 @@
               <xs:attribute name="name" type="xs:string" use="required"/>
               <xs:attribute name="max_clients" type="xs:integer"/>
               <xs:attribute name="filter" type="xs:string"/>
+              <xs:attribute name="ref" type="xs:string"/>
               <xs:attribute name="type" default="native">
                 <xs:simpleType>
                   <xs:restriction base="xs:string">
@@ -93,6 +103,7 @@
            </xs:choice>
            <xs:attribute name="name" type="xs:string" use="required"/>
            <xs:attribute name="label" type="xs:string"/>
+			  <xs:attribute name="ref" type="xs:string"/>
            <xs:attribute name="filter" type="xs:string"/>
            <xs:attribute name="function" type="xs:string"/>
          </xs:complexType>
@@ -100,6 +111,8 @@
 
        <xs:element name="rte" minOccurs="0" maxOccurs="1" type="NameType" />
        <xs:element name="spec" minOccurs="0" maxOccurs="unbounded" type="NameType" />
+		 <xs:element name="ram" minOccurs="0" maxOccurs="1" type="QuantumType" />
+		 <xs:element name="caps" minOccurs="0" maxOccurs="1" type="QuantumType" />
 
      </xs:choice>
    </xs:complexType>
@@ -146,7 +159,63 @@
            <xs:attribute name="label" type="xs:string"/>
            <xs:attribute name="filter" type="xs:string"/>
            <xs:attribute name="function" type="xs:string"/>
+			  <xs:attribute name="ref" type="xs:string"/>
          </xs:complexType>
+       </xs:element>
+     </xs:choice>
+   </xs:complexType>
+
+	<xs:complexType name="TaskType">
+     <xs:choice minOccurs="1" maxOccurs="unbounded">
+       <xs:element name="task" minOccurs="1" maxOccurs="unbounded">
+         <xs:complexType>
+           <xs:attribute name="wcet" type="xs:integer" use="required"/>
+           <xs:attribute name="bcet" type="xs:integer" use="required"/>
+         </xs:complexType>
+       </xs:element>
+       <xs:element name="signal" minOccurs="1" maxOccurs="unbounded">
+         <xs:complexType>
+           <xs:attribute name="to_ref" type="xs:string" use="required"/>
+         </xs:complexType>
+       </xs:element>
+       <xs:element name="call" minOccurs="1" maxOccurs="unbounded">
+         <xs:complexType>
+           <xs:attribute name="to_ref" type="xs:string" use="required"/>
+           <xs:attribute name="method" type="xs:string" use="required"/>
+         </xs:complexType>
+       </xs:element>
+	  </xs:choice>
+	</xs:complexType>
+
+   <xs:complexType name="TimingType">
+     <xs:choice minOccurs="1" maxOccurs="unbounded">
+       <xs:element name="on-time" minOccurs="1" maxOccurs="1">
+			<xs:complexType>
+				<xs:complexContent>
+					<xs:extension base="TaskType">
+					  <xs:attribute name="period" type="xs:integer" use="required"/>
+					</xs:extension>
+				</xs:complexContent>
+			</xs:complexType>
+       </xs:element>
+       <xs:element name="on-signal" minOccurs="1" maxOccurs="1">
+			<xs:complexType>
+				<xs:complexContent>
+					<xs:extension base="TaskType">
+					  <xs:attribute name="from_ref" type="xs:string" use="required"/>
+					</xs:extension>
+				</xs:complexContent>
+			</xs:complexType>
+       </xs:element>
+       <xs:element name="on-rpc" minOccurs="1" maxOccurs="1">
+			<xs:complexType>
+				<xs:complexContent>
+					<xs:extension base="TaskType">
+					  <xs:attribute name="from_ref" type="xs:string" use="required"/>
+					  <xs:attribute name="method" type="xs:string" use="required"/>
+					</xs:extension>
+				</xs:complexContent>
+			</xs:complexType>
        </xs:element>
      </xs:choice>
    </xs:complexType>
@@ -168,12 +237,14 @@
                  <xs:attribute name="name" type="xs:string" use="required"/>
                  <xs:attribute name="max_clients" type="xs:string"/>
                  <xs:attribute name="filter" type="xs:string"/>
+					  <xs:attribute name="ref" type="xs:string"/>
                </xs:complexType>
              </xs:element>
            </xs:choice>
          </xs:complexType>
        </xs:element>
        <xs:element name="requires" type="CompositeRequiresType" minOccurs="0" />
+       <xs:element name="timing" type="TimingType" minOccurs="0" />
        <xs:element name="pattern" minOccurs="1" maxOccurs="unbounded">
          <xs:complexType>
            <xs:choice maxOccurs="unbounded">
@@ -191,14 +262,25 @@
         <xs:element name="route" minOccurs="0">
           <xs:complexType>
             <xs:choice maxOccurs="unbounded">
-                <xs:element name="service" type="ServiceType" />
+                <xs:element name="service">
+						<xs:complexType>
+							<xs:complexContent>
+								<xs:extension base="ServiceType">
+								  <xs:choice maxOccurs="1">
+									 <xs:element name="external" type="RefType" />
+									 <xs:element name="child" type="NameType" />
+								  </xs:choice>
+								</xs:extension>
+							</xs:complexContent>
+						</xs:complexType>
+					</xs:element>
             </xs:choice>
           </xs:complexType>
         </xs:element>
         <xs:element name="expose" minOccurs="0">
           <xs:complexType>
             <xs:choice maxOccurs="unbounded">
-              <xs:element name="service" type="NameType" />
+              <xs:element name="service" type="ServiceType" />
             </xs:choice>
           </xs:complexType>
         </xs:element>
@@ -208,12 +290,8 @@
    </xs:complexType>
 
    <xs:complexType name="ServiceType">
-     <xs:choice maxOccurs="1">
-       <xs:element name="external" />
-       <xs:element name="child" type="NameType" />
-     </xs:choice>
      <xs:attribute name="name" type="xs:string" use="required"/>
-     <xs:attribute name="label" type="xs:string"/>
+     <xs:attribute name="ref" type="xs:string" />
    </xs:complexType>
 
    <xs:complexType name="SystemType">
