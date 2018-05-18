@@ -193,7 +193,10 @@ class ServiceEngine(AnalysisEngine):
         For this we have to look at the edges in the source layer to find the counterpart and add the corresponding
         edges in the target layer.
         """
-        # FIXME: make this more systematically by adding a side layer with service requirements as nodes
+        # FIXME: decide on source components and destination component separately, then transform
+        #        since we have the `ref` attribute, we can first assign the outer ref on both sides and then the
+        #        internal mapping
+        # (old) FIXME: make this more systematically by adding a side layer with service requirements as nodes
         #        in order to decide on each service requirement (of a component) separately
 
         assert(isinstance(obj, Edge))
