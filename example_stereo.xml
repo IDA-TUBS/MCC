@@ -261,7 +261,8 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
-			<service name="Nic" function="Network" />
+			<service name="Nic" function="Network" ref="from"/>
+			<service name="Nic" function="Network" ref="to"/>
 		</requires>
 
 		<pattern>
@@ -271,19 +272,19 @@
                     <service name="ROM" />
                 </expose>
                 <route>
-                    <service name="Nic"><external /></service>
+                    <service name="Nic"><external ref="to" /></service>
                 </route>
             </component>
             <component name="remote_rom_server">
                 <route>
 						 <service name="ROM"><external /></service>
-                         <service name="Nic"><external /></service>
+                         <service name="Nic"><external ref="from" /></service>
                 </route>
             </component>
 		</pattern>
 	</composite>
 
-	<composite>
+	<composite name="STEREO_MATCH">
 		<!-- This component is classified as a function provider. //-->
 		<function name="STEREO_MATCH" />
 
@@ -293,7 +294,8 @@
 			<service name="ROM" ref="out"/>
 		</provides>
 		<requires>
-			<service name="ROM" function="CAMERA" ref="cam"/>
+			<service name="ROM" function="CAMERA" ref="camleft"/>
+			<service name="ROM" function="CAMERA" ref="camright"/>
 		</requires>
 		<timing>
 			<on-time period="10">
@@ -304,11 +306,11 @@
 		<pattern>
 			<component name="debay_left">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><external ref="cam"/></service></route>
+				<route><service name="ROM"><external ref="camleft"/></service></route>
 			</component>
 			<component name="debay_right">
 				<!-- route ROM requirement to ROM service provided by `CAMERA` function //-->
-				<route><service name="ROM"><external ref="cam"/></service></route>
+				<route><service name="ROM"><external ref="camright"/></service></route>
 			</component>
 			<component name="rect_left">
 				<!-- route ROM requirement internally //-->
@@ -326,17 +328,17 @@
 				</route>
 				<expose>
 					<!-- expose provided ROM service (link to composite provision) //-->
-					<service name="ROM" />
+					<service name="ROM" ref="out"/>
 				</expose>
 			</component>
 		</pattern>
 
 		<pattern>
 			<component name="rect_left">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external ref="camleft"/></service></route>
 			</component>
 			<component name="rect_right">
-				<route><service name="ROM"><external /></service></route>
+				<route><service name="ROM"><external ref="camright"/></service></route>
 			</component>
 			<component name="stereo_match">
 				<route>
@@ -344,13 +346,13 @@
 					<service name="ROM" ref="right"><child name="rect_right" /></service>
 				</route>
 				<expose>
-					<service name="ROM" />
+					<service name="ROM" ref="out"/>
 				</expose>
 			</component>
 		</pattern>
 	</composite>
 
-	<composite>
+	<composite name="DISP_TO_PC">
 		<function name="DISP_TO_PC" />
 		<provides>
 			<service name="ROM" />

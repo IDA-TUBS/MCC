@@ -29,6 +29,25 @@ class XMLParser:
 
 class Repository(XMLParser):
 
+    class Service:
+        def __init__(self, xml_node):
+            self.xml_node = xml_node
+
+        def label(self):
+            return self.xml_node.get('label')
+
+        def function(self):
+            return self.xml_node.get('function')
+
+        def name(self):
+            return self.xml_node.get('name')
+
+        def ref(self):
+            return self.xml_node.get('ref');
+
+        def matches(self, rhs):
+            return self.name() == rhs.name()
+
     class Component:
         def __init__(self, xml_node, repo):
             self.repo = repo
@@ -59,17 +78,19 @@ class Repository(XMLParser):
 
             return functions
 
-        def requires_services(self):
+        def requires_services(self, name=None):
             services = list()
             for s in self.xml_node.findall("./requires/service"):
-                services.append(s.get("name"))
+                if name is None or s.get('name') == name:
+                    services.append(Repository.Service(s))
 
             return services
 
-        def provides_services(self):
+        def provides_services(self, name=None):
             services = list()
             for s in self.xml_node.findall("./provides/service"):
-                services.append(s.get("name"))
+                if name is None or s.get('name') == name:
+                    services.append(Repository.Service(s))
 
             return services
 
@@ -82,7 +103,7 @@ class Repository(XMLParser):
         def service_for_function(self, function):
             for s in self.xml_node.findall("./requires/service[@function]"):
                 if s.get('function') == function:
-                    return s.get('name')
+                    return Repository.Service(s)
 
         def label(self):
             name = self.xml_node.get('name')
@@ -101,12 +122,12 @@ class Repository(XMLParser):
 
             return result
 
-        def providing_component(self, service):
-            assert(service in self.provides_services())
+        def providing_component(self, service, function=None, to_ref=None):
+            assert(service is None or len(self.provides_services(service)))
             return self
 
-        def requiring_components(self, service, function=None):
-            assert(service in self.requires_services())
+        def requiring_components(self, service, function=None, to_ref=None):
+            assert(service is None or len(self.requires_services(service)))
             return set([self])
 
         def flatten(self):
@@ -133,28 +154,37 @@ class Repository(XMLParser):
         def requires_rte(self):
             return self.component.requires_rte
 
-        def providing_component(self, service):
+        def providing_component(self, service, function=None, to_ref=None):
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./expose/service'):
-                    if s.get('name') == service:
+                    if service is not None and s.get('name') != service:
+                        continue
+                    if function is not None and c.find('function').get('name') != function:
+                        continue
+
+                    if to_ref is None or s.get('ref') == to_ref:
                         component = self.repo.find_components_by_type(c.get('name'), querytype='component')
-                        # FIXME we might have multiple options here
+                        assert(len(component) == 1)
                         return component[0]
 
-            logging.error("Service '%s' is not exposed." % service)
+            logging.error("Service '%s' is not exposed (Function %s, to_ref %s)." % (service, function, to_ref))
             return None
 
-        def requiring_components(self, service, function=None):
+        def requiring_components(self, service, function=None, to_ref=None):
             result = set()
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./route/service'):
-                    if s.get('name') == service and s.find('external') is not None:
-                        if s.find('external').get('function') is None or function is None or s.find('external').get('function') == function:
+                    if s.find('external') is not None:
+                        if service is not None and s.get('name') != service:
+                            continue
+
+                        if to_ref is None or s.find('external').get('ref') == to_ref:
                             components = self.repo.find_components_by_type(c.get('name'), querytype='component')
                             result.update(components)
 
             if len(result) == 0:
                 logging.error("Service '%s' is not required by component pattern for '%s'." % (service, self.component.label()))
+                logging.error("  (Function %s, to_ref %s)" % (function, to_ref))
             return result
 
         def flatten(self):
@@ -390,15 +420,10 @@ class Repository(XMLParser):
         services = set()
         functions = set()
         for r in component.findall("./requires/service"):
-            # service required twice must be distinguished by label
+            # service required twice must be distinguished by label or ref
             if r.get("name") in services:
-                labels = set()
-                if "label" not in r.keys():
-                    logging.error("Requirement <service name=\"%s\" /> is ambiguous and must therefore specify a label." %(r.get("name")))
-                elif r.get("label") in labels:
-                    logging.error("Requirement <service name=\"%s\" label=\"%s\" /> is ambiguous" % (r.get("name"), r.get("label")))
-                else:
-                    labels.add(r.get("label"))
+                if "label" not in r.keys() and "ref" not in r.keys():
+                    logging.error("Requirement <service name=\"%s\" /> is ambiguous and must therefore specify a label or ref." %(r.get("name")))
             else:
                 services.add(r.get("name"))
 

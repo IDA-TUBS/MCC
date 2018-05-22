@@ -12,91 +12,19 @@ import logging
 from mcc.framework import *
 from mcc.graph import *
 from mcc import model
-from mcc import parser
+from mcc import parser 
 
 class MappingEngine(AnalysisEngine):
-    def __init__(self, layer, source_layer, source_param='parent-mapping'):
-        acl = { layer        : {'reads' : set([source_layer.name, source_param]) },
-                source_layer : {'reads' : set(['pattern', 'service', 'connection'])} }
-        AnalysisEngine.__init__(self, layer, param='mapping', acl=acl)
-        self.source_layer = source_layer
-        self.source_param = source_param
-
-    def map(self, obj, candidates):
-        """ Copies nodes 'parent-mapping' candidates to 'mapping' if present. 
-            Otherwise it uses the 'parent-mapping' from the component to which the node connects for the proxied service.
-        """
-
-        assert(candidates is None)
-        candidates = set()
-
-        # copy parent-mapping if present
-        parent_mapping = self.layer.get_param_candidates(self, self.source_param, obj)
-        if parent_mapping is not None and len(parent_mapping) > 0 and None not in parent_mapping:
-            return parent_mapping
-        else: # only if no parent-mapping present 
-
-            # only for proxies (check)
-            parent = self.layer.get_param_value(self, self.source_layer.name, obj)
-            if isinstance(parent, model.Proxy):
-                pattern = self.source_layer.get_param_value(self, 'pattern', parent)
-                # determine whether client or server 
-                if obj.uid() == pattern.providing_component(parent.service).uid():
-                    # server:
-                    # map to same platform component as its client
-                    clients = set()
-                    # take 'connection' candidates for edges from source_layer that belong to parent.service
-                    for e in self.source_layer.graph.in_edges(parent):
-                        if self.source_layer.get_param_value(self, 'service', e) == parent.service:
-                            for con in self.source_layer.get_param_candidates(self, 'connection', e):
-                                clients.add(con.source)
-
-                    for n in clients:
-                        derived_values = self.layer.get_param_candidates(self, self.source_param, n)
-                        if derived_values is not None:
-                            assert(len(derived_values) > 0)
-                            candidates.update(derived_values)
-                        else:
-                            logging.warning("Candidates for param '%s' is None." % self.source_param)
-
-                elif obj.uid() in [x.uid() for x in pattern.requiring_components(parent.service)]:
-                    # client:
-                    # map to same platform component as its server
-                    servers = set()
-                    # take 'connection' candidates for edges from source_layer that belong to parent.service
-                    for e in self.source_layer.graph.out_edges(parent):
-                        if self.source_layer.get_param_value(self, 'service', e) == parent.service:
-                            for con in self.source_layer.get_param_candidates(self, 'connection', e):
-                                servers.add(con.target)
-
-                    for n in servers:
-                        derived_values = self.layer.get_param_candidates(self, self.source_param, n)
-                        if derived_values is not None:
-                            assert(len(derived_values) > 0)
-                            candidates.update(derived_values)
-                        else:
-                            logging.warning("Candidates for param '%s' is None." % self.source_param)
-                else:
-                    logging.error("Cannot determine role of component %s in proxy pattern" % obj)
-
-            else:
-                raise NotImplementedError()
-
-        if None in candidates:
-            candidates.remove(None)
-        return candidates
-
-    def assign(self, obj, candidates):
-        """ Assigns the first candidate.
-        """
-        return list(candidates)[0]
+    def __init__(self, layer):
+        acl = { layer        : {'reads' : set(['mapping']) }}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
         """ Checks whether a platform mapping is assigned to all nodes.
         """
         assert(not isinstance(obj, Edge))
 
-        okay = self.layer.get_param_value(self, self.param, obj) is not None
+        okay = self.layer.get_param_value(self, 'mapping', obj) is not None
         if not okay:
             logging.info("Node '%s' is not mapped to anything.", obj)
 
@@ -164,155 +92,138 @@ class ComponentDependencyEngine(AnalysisEngine):
         return True
 
 class ServiceEngine(AnalysisEngine):
-
     class Connection:
-        """ Used for the 'connection' param.
-        """
-        def __init__(self, source, target, source_service, target_service):
-            self.source = source
-            self.target = target
+        def __init__(self, source_service, target_service):
             self.source_service = source_service
             self.target_service = target_service
 
-        def get_graph_objs(self):
-            result = set()
-
-            result.add(GraphObj(Edge(self.source, self.target), params={ 'source-service' : self.source_service, 'target-service' : self.target_service }))
-
-            return result
-
     def __init__(self, layer, target_layer):
-        acl = { layer : { 'reads' : set(['service', 'function', 'component', 'pattern', target_layer.name]) } }
-        AnalysisEngine.__init__(self, layer, param='connection', acl=acl)
+        acl = { layer : { 'reads' : set(['service', 'pattern', 'component', target_layer.name]) } }
+        AnalysisEngine.__init__(self, layer, param='connections', acl=acl)
         self.target_layer = target_layer
 
-    def map(self, obj, candidates):
-        """ Finds candidates for to-be-connected source and target nodes between previously selected components/patterns.
+    def _get_ports(self, obj):
+        constraints = self.layer.get_param_value(self, 'service', obj)
 
-        After inserting a pattern, we must connect its exposed services and external requirements.
-        For this we have to look at the edges in the source layer to find the counterpart and add the corresponding
-        edges in the target layer.
+        source_comp = self.layer.get_param_value(self, 'component', obj.source)
+        target_comp = self.layer.get_param_value(self, 'component', obj.target)
+
+        if constraints is None:
+            logging.error('%s -> %s' % (source_comp, target_comp))
+        assert(constraints is not None)
+
+        source_ports = source_comp.requires_services()
+        target_ports = target_comp.provides_services()
+
+        if constraints.name is not None:
+            source_ports = [p for p in source_ports if p.name() == constraints.name]
+            target_ports = [p for p in target_ports if p.name() == constraints.name]
+
+        if constraints.to_ref is not None:
+            target_ports = [p for p in target_ports if p.ref() == constraints.to_ref]
+
+        if constraints.from_ref is not None:
+            source_ports = [p for p in source_ports if p.ref() == constraints.from_ref]
+
+        if constraints.function is not None:
+            source_ports = [p for p in source_ports if p.function() == constraints.function]
+
+        # remark: we do not check the function provision as this is/should be checked by a functional dependency engine before
+        #         otherwise, if the function is not implemented by the target comp,
+        #                    it should have never been selected in the first place
+
+        return source_ports, target_ports
+
+    def check(self, obj):
+        """ Check ServiceConstraints object for compatibility with connected provider
         """
-        # FIXME: decide on source components and destination component separately, then transform
-        #        since we have the `ref` attribute, we can first assign the outer ref on both sides and then the
-        #        internal mapping
-        # (old) FIXME: make this more systematically by adding a side layer with service requirements as nodes
-        #        in order to decide on each service requirement (of a component) separately
-
         assert(isinstance(obj, Edge))
+        source_ports, target_ports = self._get_ports(obj)
 
-        service  = self.layer.get_param_value(self, 'service', obj)
-        function = self.layer.get_param_value(self, 'function', obj)
+        constraints = self.layer.get_param_value(self, 'service', obj)
+        source_comp = self.layer.get_param_value(self, 'component', obj.source)
+        target_comp = self.layer.get_param_value(self, 'component', obj.target)
 
-        # get dangling provisions
-        dst = self.layer.get_param_value(self, 'component', obj.target)
-        provisions = dst.provides_services()
+        if len(target_ports) > 1:
+            logging.warning("Service provision is under constrained for %s by %s" % (target_comp, constraints))
 
-        assert function is None or function == dst.function()
-        function = dst.function()
+        if len(source_ports) == 0:
+            logging.error("Service requirement is over constrained for %s by %s" % ( source_comp, constraints))
 
-        # get dangling requirements
-        src = self.layer.get_param_value(self, 'component', obj.source)
-        if function is not None and src.service_for_function(function) is not None:
-            requirements = set([src.service_for_function(function)])
-        else:
-            requirements = src.requires_services()
+        if len(target_ports) == 0:
+            logging.error("Service provision is over constrained for %s by %s" % ( target_comp, constraints))
 
-        # if multiple dangling services, try to match by service or function
-        if len(requirements) == 1:
-            src_service = requirements.pop()
-        else:
-            src_service = service
-            assert service in requirements, "Cannot choose from multiple dangling service requirements '%s'." % service
+        return len(source_ports) > 0 and len(target_ports) > 0
 
-        if len(provisions) == 1:
-            dst_service = provisions.pop()
-        else:
-            dst_service = service
-            assert service in provisions, "Cannot choose from multiple dangling service provisions."
+    def map(self, obj, candidates):
+        assert(isinstance(obj, Edge))
+        source_ports, target_ports = self._get_ports(obj)
 
-        # match selected services to src_candidates/dst_candidates
-        src_pattern = self.layer.get_param_value(self, 'pattern', obj.source)
-        dst_pattern = self.layer.get_param_value(self, 'pattern', obj.target)
-
-        src_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.source)
-        dst_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.target)
-
-        # find source components in target layer
-        src_comps = set()
-        for c in src_pattern.requiring_components(src_service, function=function):
-            found = False
-            for x in src_mapping:
-                if hasattr(x, 'uid'):
-                    if x.uid() == c.uid():
-                        src_comps.add(x)
-                        found = True
-            assert(found)
-
-        # find dst component in target layer
-        c = dst_pattern.providing_component(dst_service)
-        found = False
-        for x in dst_mapping:
-            if hasattr(x, 'uid'):
-                if x.uid() == c.uid():
-                    dst_comp = x
-                    found = True
-        assert(found)
-        
         candidates = set()
-        for src_comp in src_comps:
-            candidates.add(ServiceEngine.Connection(src_comp, dst_comp, src_service, dst_service))
 
-        return candidates
+        # there may be multiple source ports, i.e. multiple requirements connected to the same target
+        for src in source_ports:
+            candidates.add(self.Connection(src, target_ports[0]))
+
+        return [candidates]
 
     def assign(self, obj, candidates):
-        """ Returns all candidates, as all remaining candidates are connections that must be inserted.
-        """
         assert(isinstance(obj, Edge))
 
-        return list(candidates)
+        assert(len(candidates) == 1)
+
+        return list(candidates)[0]
+
+    def _find_in_target_layer(self, component, nodes):
+        for x in nodes:
+            if hasattr(x, 'uid'):
+                if x.uid() == component.uid():
+                    return x
+
+        return None
 
     def transform(self, obj, target_layer):
         """ Transform comm_arch edges into comp_arch edges.
         """
         assert(isinstance(obj, Edge))
 
+        source_comp = self.layer.get_param_value(self, 'component', obj.source)
+        target_comp = self.layer.get_param_value(self, 'component', obj.target)
+
+        source_pattern = self.layer.get_param_value(self, 'pattern', obj.source)
+        target_pattern = self.layer.get_param_value(self, 'pattern', obj.target)
+
+        src_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.source)
+        dst_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.target)
+
         graph_objs = set()
         for con in self.layer.get_param_value(self, self.param, obj):
-            graph_objs.update(con.get_graph_objs())
+            src_serv = con.source_service
+            dst_serv = con.target_service
+
+            src_comps = source_pattern.requiring_components(src_serv.name(), src_serv.function(), src_serv.ref())
+            assert(len(src_comps) == 1)
+
+            dst_comp = target_pattern.providing_component(dst_serv.name(), dst_serv.function(), dst_serv.ref())
+            assert(dst_comp is not None)
+
+            # find source component and target component in target_layer
+            src_node = self._find_in_target_layer(list(src_comps)[0], src_mapping)
+            dst_node = self._find_in_target_layer(dst_comp, dst_mapping)
+
+            assert(src_node is not None)
+            assert(dst_node is not None)
+
+            obj = GraphObj(Edge(src_node, dst_node), params={ 'source-service' : src_serv, 'target-service' : dst_serv })
+            graph_objs.add(obj)
+
+        assert(len(graph_objs) > 0)
 
         return graph_objs
 
     def target_types(self):
         return tuple({parser.Repository.Component})
 
-class ServiceReachabilityEngine(AnalysisEngine):
-
-    def __init__(self, layer, target_layer):
-        acl = { target_layer : { 'reads'  : set(['mapping']) } }
-    
-        AnalysisEngine.__init__(self, layer, param='connection', acl=acl)
-        self.target_layer = target_layer
-
-    def map(self, obj, candidates):
-        """ Excludes connection candidates (:class:`ServiceEngine.Connection`) whose source and target component with
-        differing 'mapping' parameter.
-        """
-        assert(isinstance(obj, Edge))
-        assert(candidates is not None)
-
-        exclude = set()
-        for candidate in candidates:
-            src_mapping = self.target_layer.get_param_value(self, 'mapping', candidate.source)
-            dst_mapping = self.target_layer.get_param_value(self, 'mapping', candidate.target)
-
-            assert(src_mapping is not None)
-            assert(dst_mapping is not None)
-
-            if src_mapping != dst_mapping:
-                exclude.add(candidate)
-
-        return candidates - exclude
 
 class ProtocolStackEngine(AnalysisEngine):
     """ Selects 'protocolstack' parameter for edges that have 'source-service' != 'target-service'.
@@ -332,11 +243,12 @@ class ProtocolStackEngine(AnalysisEngine):
         source_service = self.layer.get_param_value(self, 'source-service', obj)
         target_service = self.layer.get_param_value(self, 'target-service', obj)
 
-        if source_service != target_service:
-            comps = self.repo.find_protocolstacks(from_service=source_service, to_service=target_service)
-            if len(comps) == 0:
-                logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (from_service, to_service))
-            return comps
+        if source_service is not None and target_service is not None:
+            if not source_service.matches(target_service):
+                comps = self.repo.find_protocolstacks(from_service=source_service.name(), to_service=target_service.name())
+                if len(comps) == 0:
+                    logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
+                return comps
 
         return set([None])
 
@@ -591,7 +503,7 @@ class ReachabilityEngine(AnalysisEngine):
         dst_comp = self.layer.get_param_value(self, 'mapping', obj.target)
 
         result, carrier, pcomp = self.platform_model.reachable(src_comp, dst_comp)
-        if result or carrier == self.layer.get_param_value(self, 'service', obj):
+        if result or carrier == self.layer.get_param_value(self, 'service', obj).name:
             return set([('native', pcomp)])
         else:
             return set([(carrier, pcomp)])
@@ -644,9 +556,10 @@ class ReachabilityEngine(AnalysisEngine):
             # add dependencies to pcomp
             for n in self.layer.graph.nodes():
                 if n.type() == 'function' and n.query() == pcomp:
-                    if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source) \
-                       or self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.target):
-                           result.append(GraphObj(Edge(proxy, n), params={ 'service' : carrier }))
+                    if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source):
+                        result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='to') }))
+                    elif self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.target):
+                        result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='from') }))
 
             return result
 
