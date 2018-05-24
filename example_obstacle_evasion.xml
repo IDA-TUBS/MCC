@@ -1,0 +1,619 @@
+<!-- test file for obstacle evasion //-->
+<xml>
+<repository>
+	<!-- list of available binaries //-->
+	<!--    system binaries  //-->
+	<binary name="nic_drv"/>
+	<binary name="can_drv"/>
+	<binary name="nic_bridge"/>
+	<binary name="remote_rom_client"/>
+	<binary name="remote_rom_server"/>
+	
+	<!--    functional binaries  //-->
+	<binary name="sensor_data_aq" />
+	<!--<binary name="sensor_data_prep" />//-->
+	<binary name="vehicle_contour_filter" />
+	<binary name="stream_splitter" />
+	<binary name="contrast_enhancement" />
+	<binary name="vertical_segmentation" />
+	<binary name="curb_classification" />
+	<binary name="horizontal_segmentation" />
+	<binary name="stixel_height_filter" />
+	<binary name="free_range_filter" />
+	<binary name="grid_update_image_creator">
+		<component name="img_updater_bayes"/>
+		<component name="img_updater_reflectance"/>
+	</binary>
+	<binary name="grid_cell_updater">
+		<component name="cell_updater_bayes"/>
+		<component name="cell_updater_reflectance"/>
+	</binary>
+	<binary name="grid_layer">
+		<component name="grid_layer_bayes"/>
+		<component name="cell_updater_reflectance"/>
+	</binary>
+	<binary name="tristate_fusion" />
+	<binary name="drivable_area_extraction" />
+	<binary name="scene_estimation" />
+	<binary name="decision_taking" />
+	<binary name="constraint_generation" />
+	<binary name="trajectory_optimization" />
+	<binary name="vehicle_control" />
+	
+	<!-- ############################################## //-->
+	
+	<!-- list of components //-->
+	<!--	system components	//-->
+	<component name="can_drv" singleton="true">
+		<function name="CAN" />
+		<provides>
+			<service name="CAN" max_clients="32" />
+		</provides>
+	</component>
+  
+	<component name="nic_drv" singleton="true">
+		<function name="Network" />
+		<provides>
+			<service name="Nic" max_clients="1" />
+		</provides>
+	</component>
+
+	<component name="nic_bridge">
+        <mux service="Nic" />
+
+		<provides>
+			<service name="Nic" /> <!-- max_clients defaults to an unlimited number //-->
+		</provides>
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="remote_rom_client">
+		<!-- unclassified component (later classified in the scope of a composite component) //-->
+		<provides>
+			<service name="ROM" />
+		</provides>
+
+		<requires>
+			<service name="Nic" />
+		</requires>
+	</component>
+
+	<component name="remote_rom_server">
+		<!-- unclassified component (later classified in the scope of a composite component) //-->
+		<requires>
+			<service name="Nic" />
+			<service name="ROM" />
+		</requires>
+	</component>
+	
+	<!--	list of functional components//-->
+	<component name="sensor_data_aq">
+		<function name="SENSOR_DATA_AQ" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<spec name="legacy_pc" />
+		</requires>
+	</component>
+<!--	
+	<component name="sensor_data_prep">
+		<function name="SENSOR_DATA_PREP" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+			<spec name="legacy_pc" />
+		</requires>
+	</component> //-->
+	
+	<!-- sensor data preprocessing //-->	
+	<component name="stream_splitter">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud" />
+		</requires>
+	</component>
+	
+	<component name="vehicle_contour_filter">
+		<filter>
+			<add tag="contour" />
+		</filter>
+		<provides>
+			<service name="ROM"  />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud" />
+		</requires>
+	</component>
+	
+	<component name="vertical_segmentation">
+	<filter>
+		<add tag="vertical_seg" />
+		<remove tag="contour" />
+	</filter>
+	<provides>
+		<service name="ROM" />
+	</provides>
+	<requires>
+		<service name="ROM" filter="pointcloud contour" />
+	</requires>
+	</component>
+	
+	<component name="curb_classification">
+		<filter>
+			<add tag="curbs" />
+			<remove tag="vertical_seg" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud vertical_seg !contour" />
+		</requires>
+	</component>
+	
+	<component name="horizontal_segmentation">
+		<filter>
+			<add tag="horizontal_seg" />
+			<remove tag="curbs" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud curbs !vertical_seg !contour" />
+		</requires>
+	</component>
+	
+	<component name="stixel_height_filter">
+		<filter>
+			<add tag="stixel" />
+			<remove tag="horizontal_seg" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud horizontal_seg !curbs !vertical_seg !contour" />
+		</requires>
+	</component>
+	
+	<component name="free_range_filter">
+		<filter>
+			<add tag="free_range" />
+			<remove tag="stixel" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud stixel !horizontal_seg !curbs !vertical_seg !contour" />
+		</requires>
+	</component>
+	
+	<component name="contrast_enhancement">
+		<filter>
+			<add tag="contrast" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="pointcloud" />
+		</requires>
+	</component>
+	
+	<!-- grid layer bayes //-->	
+	<component name="img_updater_bayes">
+		<filter>
+			<reset tag="img_bayes" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="pointcloud free_range" /> 
+		</requires>
+	</component>
+
+	<component name="cell_updater_bayes">
+		<filter>
+			<reset tag="img_bayes_updated" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="img_bayes" />
+		</requires>
+	</component>
+	
+	<component name="grid_layer_bayes">
+		<filter>
+			<reset tag="grid_bayes" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="img_bayes_updated"/>
+		</requires>
+	</component>
+	
+	<!-- grid layer reflectance //-->
+	<component name="img_updater_reflectance">
+		<filter>
+			<reset tag="img_reflectance" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="pointcloud free_range" />
+		</requires>
+	</component>
+	
+	<component name="cell_updater_reflectance">
+		<filter>
+			<reset tag="img_reflectance_updated" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="img_reflectance" />
+		</requires>
+	</component>
+	
+	<component name="grid_layer_reflectance">
+		<filter>
+			<reset tag="grid_reflectance" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="img_reflectance_updated"/>
+		</requires>
+	</component>
+	
+	<component name="tristate_fusion">
+		<filter>
+			<reset tag="grid_fused" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="grid_bayes" />
+			<service name="ROM" label="grid_reflectance" />
+		</requires>
+	</component>
+
+	
+	<!-- target pose generation //-->
+	<component name="drivable_area_extraction">
+		<filter>
+			<reset tag="drivable_area" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="grid_fused" />
+		</requires>
+	</component>
+	
+	<component name="scene_estimation">
+		<filter>
+			<reset tag="drivable_area_predicted" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="drivable_area" />
+		</requires>
+	</component>
+	
+	<component name="decision_taking">
+		<filter>
+			<reset tag="target_pose" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="drivable_area_predicted" />
+		</requires>
+	</component>
+	
+	<!-- TRAJECTORY_GENERATION //-->
+	<component name="constraint_generation">
+		<filter>
+			<reset tag="constraints"/>
+		</filter> 
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="target_pose" />
+		</requires>
+	</component>
+	
+	<component name="trajectory_optimization">
+		<filter>
+			<reset tag="trajectory"/>
+		</filter> 
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="constraints" />
+		</requires>
+	</component>
+	
+	<component name="vehicle_control">
+		<function name="VEHICLE_CONTROL" />
+		<provides>
+			<service name="CAN" />
+		</provides>
+		<requires>
+			<service name="ROM" label="trajectory"/>
+		</requires>
+	</component>
+
+	<!-- list of composites //-->
+	<!--	system composites	//-->
+	<composite name="ROM_PROXY">
+		
+		<proxy carrier="Nic" />
+
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+			<service name="Nic" function="Network" />
+		</requires>
+
+		<pattern>
+            <component name="remote_rom_client">
+                <expose>
+                    <service name="ROM" />
+                </expose>
+                <route>
+                    <service name="Nic"><external /></service>
+                </route>
+            </component>
+            <component name="remote_rom_server">
+                <route>
+						 <service name="ROM"><external /></service>
+                         <service name="Nic"><external /></service>
+                </route>
+            </component>
+		</pattern>
+	</composite>
+	
+	
+	<!--	functional composites	//-->
+	<composite>
+		<function name="SENSOR_DATA_PREP" />
+		<provides>
+			<service name="ROM" ref="free_range" />
+			<!-- <service name="ROM" ref="contrast" /> //-->
+		</provides>
+		<requires>
+			<service name="ROM" function="SENSOR_DATA_AQ" />
+		</requires>
+		
+		<pattern>
+			<component name="vehicle_contour_filter">
+				<route><service name="ROM"><external /></service></route>
+			</component>
+			<component name="stream_splitter">
+				<route><service name="ROM"><child name="vehicle_contour_filter" /></service></route>
+			</component>
+			<component name="contrast_enhancement">
+				<route><service name="ROM"><child name="stream_splitter" /></service></route>
+				<!-- <expose><service name="ROM" ref="contrast"/></expose>	//-->
+			</component>
+			<component name="vertical_segmentation">
+				<route><service name="ROM"><child name="stream_splitter" /></service></route>
+			</component>
+			<component name="curb_classification">
+				<route><service name="ROM"><child name="vertical_segmentation" /></service></route>
+			</component>
+			<component name="horizontal_segmentation">
+				<route><service name="ROM"><child name="curb_classification" /></service></route>
+			</component>
+			<component name="stixel_height_filter">
+				<route><service name="ROM"><child name="horizontal_segmentation" /></service></route>
+			</component>
+			<component name="free_range_filter">
+				<route><service name="ROM"><child name="stixel_height_filter" /></service></route>
+				<expose><service name="ROM" ref="free_range"/></expose>
+			</component>
+		</pattern>
+	</composite>
+	
+	<composite>
+		<function name="GRID_LAYER_BAYES" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" function="SENSOR_DATA_PREP" ref="free_range" />
+		</requires>
+		
+		<pattern>
+			<component name="img_updater_bayes">
+				<route><service name="ROM"><external  ref="free_range" /></service></route>
+			</component>
+			<component name="cell_updater_bayes">
+				<route><service name="ROM"><child name="img_updater_bayes" /></service></route>
+			</component>
+			<component name="grid_layer_bayes">
+				<route><service name="ROM"><child name="cell_updater_bayes"/></service></route>
+				<expose><service name="ROM" /></expose>
+			</component>
+		</pattern>
+	</composite>
+	
+	<composite>
+		<function name="GRID_LAYER_REFLECTANCE" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" function="SENSOR_DATA_PREP" ref="free_range" />
+		</requires>
+		
+		<pattern>
+			<component name="img_updater_reflectance">
+				<route><service name="ROM"><external  ref="free_range" /></service></route>
+			</component>
+			<component name="cell_updater_reflectance">
+				<route><service name="ROM"><child name="img_updater_reflectance" /></service></route>
+			</component>
+			<component name="grid_layer_reflectance">
+				<route><service name="ROM"><child name="cell_updater_reflectance"/></service></route>
+				<expose><service name="ROM" /></expose>
+			</component>
+		</pattern>
+	</composite>
+	
+	<composite>
+		<function name="TARGET_POSE_GENERATION" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="grid_fused" />
+		</requires>
+		
+		<pattern>
+			<component name="drivable_area_extraction">
+				<route><service name="ROM"><external /></service></route>
+			</component>
+			<component name="scene_estimation">
+				<route><service name="ROM"><child name="drivable_area_extraction" /></service></route>
+			</component>
+			<component name="decision_taking">
+				<route><service name="ROM"><child name="scene_estimation" /></service></route>
+				<expose><service name="ROM" /></expose>
+			</component>
+		</pattern>
+	</composite>
+	
+	<composite>
+		<function name="TRAJECTORY_GENERATION" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" label="target_pose" />
+		</requires>
+		
+		<pattern>
+			<component name="decision_taking">
+				<route><service name="ROM"><external /></service></route>
+			</component>
+			<component name="trajectory_optimization">
+				<route><service name="ROM"><child name="decision_taking" /></service></route>
+				<expose><service name="ROM" /></expose>
+			</component>
+		</pattern>
+	</composite>
+
+</repository>
+
+<system name="obstacle_evasion">
+	<provides>
+		<spec name="legacy_pc"/>
+	</provides>
+	
+	<subsystem name="legacy_pc">
+		<child name="SENS_DATA_AQ">
+			<function name="SENSOR_DATA_AQ"/>
+		</child>
+		
+		<child name="SENS_DATA_PREP">
+			<function name="SENSOR_DATA_PREP" />
+			<route>
+				<service name="ROM"><child name="SENS_DATA_AQ" /></service>
+			</route>
+		</child>
+<!--	
+		<child name="NIC"><function name="Network" /></child>
+	</subsystem>
+	
+	<subsystem name="nuc"> //-->
+		<child name="GRID_BAYES">
+			<function name="GRID_LAYER_BAYES"/>
+			<route>
+				<service name="ROM"><child name="SENS_DATA_PREP" /></service>
+			</route>
+		</child>
+		
+		<child name="GRID_REFLECTANCE">
+			<function name="GRID_LAYER_REFLECTANCE"/>
+			<route>
+				<service name="ROM"><child name="SENS_DATA_PREP"/></service>
+			</route>
+		</child>
+				
+		<child name="TRISTATE">
+			<component name="tristate_fusion" />
+			<route>
+				<service name="ROM"><child name="GRID_BAYES" /></service>
+				<service name="ROM"><child name="GRID_REFLECTANCE" /></service>
+			</route>
+		</child>
+				
+		<child name="TARGET_POSE_GEN">
+			<function name="TARGET_POSE_GENERATION"/>
+			<dependency>
+				<child name="TRISTATE" />
+			</dependency>
+		</child>
+		
+		<child name="NIC"><function name="Network" /></child>
+	</subsystem>
+	
+	
+	<subsystem name="zynq"> 
+		
+		<child name="TRAJ_GEN">
+			<function name="TRAJECTORY_GENERATION" />
+			<route>
+				<service name="ROM"><child name="TARGET_POSE_GEN" /></service>
+			</route>
+		</child>
+		
+		<child name="NIC"><function name="Network" /></child>
+	</subsystem>
+	
+	
+	<subsystem name="dspace"> 
+		<child name="VEHICLE_CTRL">
+			<function name="VEHICLE_CONTROL" />
+			<route>
+				<service name="ROM"><child name="TRAJ_GEN"/></service>
+			</route>
+		</child>
+		
+		<child name="NIC"><function name="Network" /></child>
+		<child name="CAN"><function name="CAN" /></child>
+	</subsystem>
+	
+	
+</system>
+
+</xml>
