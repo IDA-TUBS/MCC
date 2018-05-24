@@ -118,6 +118,10 @@
 		</provides>
 		<requires>
 			<spec name="zynq" />
+			<service name="GPIO" />
+			<service name="I2C" />
+			<service name="VDMA" />
+			<service name="PL_IRQ" />
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
