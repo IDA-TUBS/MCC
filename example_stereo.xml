@@ -326,9 +326,9 @@
 					<service name="ROM" ref="left"><child name="rect_left" /></service>
 					<service name="ROM" ref="right"><child name="rect_right" /></service>
 				</route>
-				<expose>
+				<expose ref="out">
 					<!-- expose provided ROM service (link to composite provision) //-->
-					<service name="ROM" ref="out"/>
+					<service name="ROM"/>
 				</expose>
 			</component>
 		</pattern>
@@ -345,8 +345,8 @@
 					<service name="ROM" ref="left"><child name="rect_left" /></service>
 					<service name="ROM" ref="right"><child name="rect_right" /></service>
 				</route>
-				<expose>
-					<service name="ROM" ref="out"/>
+				<expose ref="out">
+					<service name="ROM" />
 				</expose>
 			</component>
 		</pattern>

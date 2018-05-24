@@ -1069,6 +1069,17 @@ class CopyServiceStep(EdgeStep):
         EdgeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
 
+class CopyServicesStep(EdgeStep):
+    """ Copies 'source-service' and 'target-service' parameter of the edges to the target layer.
+    """
+    def __init__(self, layer, target_layer):
+        ce1 = CopyEngine(target_layer, 'source-service', layer)
+        ce2 = CopyEngine(target_layer, 'target-service', layer)
+        EdgeStep.__init__(self, Map(ce1, 'source-service'))
+        self.add_operation(Assign(ce1, 'source-service'))
+        self.add_operation(Map(ce2, 'target-service'))
+        self.add_operation(Assign(ce2, 'target-service'))
+
 class InheritFromSourceStep(NodeStep):
     """ Inherits a parameter value from neighbouring source nodes.
     """

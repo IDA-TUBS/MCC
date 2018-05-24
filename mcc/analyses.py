@@ -60,36 +60,41 @@ class DependencyEngine(AnalysisEngine):
 
 class ComponentDependencyEngine(AnalysisEngine):
     def __init__(self, layer):
-        acl = { layer : { 'reads' : set(['mapping']) } }
+        acl = { layer : { 'reads' : set(['mapping', 'source-service']) } }
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def check(self, obj):
-        """ Checks that a) all service requirements are satisfied and b) that service connections are local.
+        """ Checks that 
+            a) all service requirements are satisfied once and (nodes)
+            b) that service connections are local (edges).
         """
-        assert(not isinstance(obj, Edge))
-
-        # iterate function dependencies
-        for s in obj.requires_services():
-            # find provider among connected nodes
-            found = 0
-            for con in self.layer.graph.out_edges(obj):
-                comp2 = con.target
-                if s in comp2.provides_services():
-                    found += 1
-                    source_mapping = self.layer.get_param_value(self, 'mapping', obj)
-                    target_mapping = self.layer.get_param_value(self, 'mapping', comp2)
-                    if source_mapping != target_mapping:
-                        logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
-                        return False
-
-            if found == 0:
-                logging.error("Service dependency '%s' from component '%s' is not satisfied." % (s, obj))
+        if isinstance(obj, Edge):
+            source_mapping = self.layer.get_param_value(self, 'mapping', obj.source)
+            target_mapping = self.layer.get_param_value(self, 'mapping', obj.target)
+            if source_mapping != target_mapping:
+                logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                 return False
-            if found != len([x for x in obj.requires_services() if x == s]):
-                logging.error("Service dependency '%s' from component '%s' is ambiguously satisfied." % (s, obj))
-                return False
+            else:
+                return True
+        else:
+            # iterate function dependencies
+            for s in obj.requires_services():
+                # find provider among connected nodes
+                found = 0
+                for con in self.layer.graph.out_edges(obj):
+                    src_serv = self.layer.get_param_value(self, 'source-service', con)
+                    assert(src_serv is not None)
+                    if s == src_serv:
+                        found += 1
 
-        return True
+                if found == 0:
+                    logging.error("Service dependency '%s' from component '%s' is not satisfied." % (s, obj))
+                    return False
+                if found > 1:
+                    logging.error("Service dependency '%s' from component '%s' is ambiguously satisfied." % (s, obj))
+                    return False
+
+            return True
 
 class ServiceEngine(AnalysisEngine):
     class Connection:
@@ -126,7 +131,7 @@ class ServiceEngine(AnalysisEngine):
             source_ports = [p for p in source_ports if p.ref() == constraints.from_ref]
 
         if constraints.function is not None:
-            source_ports = [p for p in source_ports if p.function() == constraints.function]
+            source_ports = [p for p in source_ports if p.function() is None or p.function() == constraints.function]
 
         # remark: we do not check the function provision as this is/should be checked by a functional dependency engine before
         #         otherwise, if the function is not implemented by the target comp,
@@ -143,6 +148,9 @@ class ServiceEngine(AnalysisEngine):
         constraints = self.layer.get_param_value(self, 'service', obj)
         source_comp = self.layer.get_param_value(self, 'component', obj.source)
         target_comp = self.layer.get_param_value(self, 'component', obj.target)
+
+        if len(source_ports) > 1:
+            logging.warning("Service requirement is under constrained for %s by %s" % (source_comp, constraints))
 
         if len(target_ports) > 1:
             logging.warning("Service provision is under constrained for %s by %s" % (target_comp, constraints))
@@ -201,20 +209,38 @@ class ServiceEngine(AnalysisEngine):
             src_serv = con.source_service
             dst_serv = con.target_service
 
-            src_comps = source_pattern.requiring_components(src_serv.name(), src_serv.function(), src_serv.ref())
-            assert(len(src_comps) == 1)
+            src_comp, src_ref = source_pattern.requiring_component(src_serv.name(), src_serv.function(), src_serv.ref())
+            assert(src_comp is not None)
 
-            dst_comp = target_pattern.providing_component(dst_serv.name(), dst_serv.function(), dst_serv.ref())
+            dst_comp, dst_ref = target_pattern.providing_component(dst_serv.name(), dst_serv.function(), dst_serv.ref())
             assert(dst_comp is not None)
 
             # find source component and target component in target_layer
-            src_node = self._find_in_target_layer(list(src_comps)[0], src_mapping)
+            src_node = self._find_in_target_layer(src_comp, src_mapping)
             dst_node = self._find_in_target_layer(dst_comp, dst_mapping)
 
             assert(src_node is not None)
             assert(dst_node is not None)
 
-            obj = GraphObj(Edge(src_node, dst_node), params={ 'source-service' : src_serv, 'target-service' : dst_serv })
+            if src_comp is source_comp:
+                source_service = src_serv
+            else:
+                # transform src_serv to services of src_comp 
+                source_services = src_comp.requires_services(name=src_serv.name(), ref=src_ref)
+                assert len(source_services) == 1, "Invalid number (%d) of service requirements in component %s to service %s, ref %s" % (len(source_services), src_comp, src_serv.name(), src_ref)
+
+                source_service = source_services[0]
+
+            if dst_comp is target_comp:
+                target_service = dst_serv
+            else:
+                # transform dst_serv to services of dst_comp 
+                target_services = dst_comp.provides_services(name=dst_serv.name(), ref=dst_ref)
+                assert len(target_services) == 1, "Invalid number (%d) of service provisions in component %s of service %s, ref %s" % (len(target_services), dst_comp, dst_serv.name(), dst_ref)
+
+                target_service = target_services[0]
+
+            obj = GraphObj(Edge(src_node, dst_node), params={ 'source-service' : source_service, 'target-service' : target_service })
             graph_objs.add(obj)
 
         assert(len(graph_objs) > 0)
@@ -243,12 +269,13 @@ class ProtocolStackEngine(AnalysisEngine):
         source_service = self.layer.get_param_value(self, 'source-service', obj)
         target_service = self.layer.get_param_value(self, 'target-service', obj)
 
-        if source_service is not None and target_service is not None:
-            if not source_service.matches(target_service):
-                comps = self.repo.find_protocolstacks(from_service=source_service.name(), to_service=target_service.name())
-                if len(comps) == 0:
-                    logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
-                return comps
+        assert source_service is not None and target_service is  not None, "source-service (%s) or target-service (%s) not present for %s" % (source_service, target_service, obj)
+
+        if not source_service.matches(target_service):
+            comps = self.repo.find_protocolstacks(from_service=source_service.name(), to_service=target_service.name())
+            if len(comps) == 0:
+                logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
+            return comps
 
         return set([None])
 
@@ -371,6 +398,7 @@ class PatternEngine(AnalysisEngine):
         """ Inserts the pattern into target_layer.
         """
         if self.layer.get_param_value(self, self.param, obj) is None:
+            # no protocol stack was selected
             if isinstance(obj, Edge):
                 assert(obj.source in target_layer.graph.nodes())
                 assert(obj.target in target_layer.graph.nodes())

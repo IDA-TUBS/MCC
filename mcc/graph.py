@@ -53,6 +53,9 @@ class Edge:
         assert(not isinstance(self.source, list))
         assert(not isinstance(self.target, list))
 
+    def __repr__(self):
+        return "%s -> %s" % (self.source, self.target)
+
 class Graph:
     """ Wrapper for :class:`nx.MultiDiGraph`.
     """

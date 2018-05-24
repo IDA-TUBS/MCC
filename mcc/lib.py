@@ -110,9 +110,14 @@ class MccBase:
 
         # copy or transform edges
         model.add_step(EdgeStep(Transform(pe, dlayer)))
+        model.add_step(CopyServicesStep(slayer, dlayer))
 
         # derive mapping
         model.add_step(InheritFromBothStep(dlayer, 'mapping'))
+
+        # check that service dependencies are satisfied and connections are local
+        model.add_step(EdgeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
+        model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
 
     def _insert_muxers(self, model, slayer, dlayer):
         """ Inserts multiplexers for edges in source layer and transforms into target layer.

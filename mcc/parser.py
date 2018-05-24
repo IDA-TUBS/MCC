@@ -48,6 +48,20 @@ class Repository(XMLParser):
         def matches(self, rhs):
             return self.name() == rhs.name()
 
+        def __eq__(self, rhs):
+            return self.xml_node == rhs.xml_node
+
+        def __hash__(self):
+            return hash(self.xml_node)
+
+        def __repr__(self):
+            f = '' if self.function() is None else '%s ' % self.function()
+            n = '' if self.name() is None else 'via %s' % self.name()
+            l = '' if self.label() is None else '.%s' % self.label()
+            r = '' if self.ref() is None else ' as %s' % self.ref()
+
+            return '%s%s%s%s' % (f, n, l, r)
+
     class Component:
         def __init__(self, xml_node, repo):
             self.repo = repo
@@ -78,19 +92,21 @@ class Repository(XMLParser):
 
             return functions
 
-        def requires_services(self, name=None):
+        def requires_services(self, name=None, ref=None):
             services = list()
             for s in self.xml_node.findall("./requires/service"):
                 if name is None or s.get('name') == name:
-                    services.append(Repository.Service(s))
+                    if ref is None or s.get('ref') == ref:
+                        services.append(Repository.Service(s))
 
             return services
 
-        def provides_services(self, name=None):
+        def provides_services(self, name=None, ref=None):
             services = list()
             for s in self.xml_node.findall("./provides/service"):
                 if name is None or s.get('name') == name:
-                    services.append(Repository.Service(s))
+                    if ref is None or s.get('ref') == ref:
+                        services.append(Repository.Service(s))
 
             return services
 
@@ -124,11 +140,11 @@ class Repository(XMLParser):
 
         def providing_component(self, service, function=None, to_ref=None):
             assert(service is None or len(self.provides_services(service)))
-            return self
+            return self, to_ref
 
-        def requiring_components(self, service, function=None, to_ref=None):
+        def requiring_component(self, service, function=None, to_ref=None):
             assert(service is None or len(self.requires_services(service)))
-            return set([self])
+            return self, to_ref
 
         def flatten(self):
             # for composites, we must select a pattern first
@@ -155,23 +171,34 @@ class Repository(XMLParser):
             return self.component.requires_rte
 
         def providing_component(self, service, function=None, to_ref=None):
-            for c in self.xml_node.findall("component"):
-                for s in c.findall('./expose/service'):
-                    if service is not None and s.get('name') != service:
-                        continue
-                    if function is not None and c.find('function').get('name') != function:
-                        continue
-
-                    if to_ref is None or s.get('ref') == to_ref:
-                        component = self.repo.find_components_by_type(c.get('name'), querytype='component')
-                        assert(len(component) == 1)
-                        return component[0]
-
-            logging.error("Service '%s' is not exposed (Function %s, to_ref %s)." % (service, function, to_ref))
-            return None
-
-        def requiring_components(self, service, function=None, to_ref=None):
             result = set()
+            ref = None
+            for c in self.xml_node.findall("component"):
+                for e in c.findall('./expose'):
+                    if to_ref is None or e.get('ref') == to_ref:
+                        for s in e.findall('./service'):
+                            if service is not None and s.get('name') != service:
+                                continue
+                            if function is not None and c.find('function').get('name') != function:
+                                continue
+
+                            components = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                            assert(len(components) == 1)
+                            result.add(components[0])
+                            ref = s.get('ref')
+
+            if len(result) == 0:
+                logging.error("Service '%s' is not exposed in %s (Function %s, to_ref %s)." % (service, self.component, function, to_ref))
+            elif len(result) > 1:
+                logging.error("Service '%s' is exposed by multiple components (Function %s, to_ref %s)." % (service, function, to_ref))
+            else:
+                return list(result)[0], ref
+
+            return None, None
+
+        def requiring_component(self, service, function=None, to_ref=None):
+            result = set()
+            ref = None
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./route/service'):
                     if s.find('external') is not None:
@@ -180,12 +207,19 @@ class Repository(XMLParser):
 
                         if to_ref is None or s.find('external').get('ref') == to_ref:
                             components = self.repo.find_components_by_type(c.get('name'), querytype='component')
-                            result.update(components)
+                            assert(len(components) == 1)
+                            result.add(components[0])
+                            ref = s.get('ref')
 
             if len(result) == 0:
                 logging.error("Service '%s' is not required by component pattern for '%s'." % (service, self.component.label()))
                 logging.error("  (Function %s, to_ref %s)" % (function, to_ref))
-            return result
+            elif len(result) > 1:
+                logging.error("Service '%s' is required by multiple components." % (service))
+            else:
+                return list(result)[0], ref
+
+            return None, None
 
         def flatten(self):
             # fill set with atomic components and their edges as specified in the pattern
@@ -204,12 +238,18 @@ class Repository(XMLParser):
             # second, add connections
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./route/service'):
+                    services = child_lookup[c].requires_services(s.get('name'), ref=s.get('ref'))
+                    assert(len(services) == 1)
+                    source_service = services[0]
+
                     if s.find('child') is not None:
                         name = s.find('child').get('name')
                         if name not in name_lookup:
                             logging.critical("Cannot satisfy internal route to child '%s' of pattern." % name)
                         else:
-                            params = { 'label' : s.get('label'), 'service' : s.get('name') }
+                            provided = name_lookup[name].provides_services(name=s.get('name'))
+                            assert(len(provided) == 1)
+                            params = { 'source-service' : source_service, 'target-service' : provided[0]}
                             flattened.add(GraphObj(Edge(child_lookup[c], name_lookup[name]), params))
 
             return flattened
