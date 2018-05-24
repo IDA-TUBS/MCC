@@ -221,7 +221,14 @@
 		<requires>
 			<service name="ROM" filter="left" ref="left" />
 			<service name="ROM" filter="right" ref="right" />
+			<ram quantum="64" />
+			<caps quantum="500" />
 		</requires>
+		<timing>
+			<on-signal from_ref="left">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
 	</component>
 
 	<component name="disp_to_pc">
@@ -234,16 +241,21 @@
 		<requires>
 			<service name="ROM" filter="disp" ref="disp" />
 			<service name="ROM" filter="left rect" ref="img" />
-			<ram quantum="10" />
-			<caps quantum="2" />
+			<ram quantum="256" />
+			<caps quantum="500" />
 		</requires>
+		<timing>
+			<on-signal from_ref="disp">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
 	</component>
 
 	<component name="pose_estimation">
 		<requires>
 			<service name="ROM" filter="pointcloud" ref="in" />
-			<ram quantum="32" />
-			<caps quantum="300" />
+			<ram quantum="256" />
+			<caps quantum="500" />
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
