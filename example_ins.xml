@@ -1,4 +1,5 @@
-<config_model>
+<xml>
+<repository>
 	<binary name="LET_tx" />
 	<binary name="LET_rx" />
 	<binary name="speed_control" />
@@ -50,6 +51,9 @@
 		<provides>
 			<service name="ROM" />
 		</provides>
+        <requires>
+            <service name="imu" />
+        </requires>
 	</component>
 
 	<component name="steering" singleton="true">
@@ -214,6 +218,9 @@
 				<expose>
 					<service name="ROM" />
 				</expose>
+				<route>
+					<service name="Nic"><external /></service>
+				</route>
 			</component>
 			<component name="LET_tx">
 				<route>
@@ -223,30 +230,34 @@
 			</component>
 		</pattern>
 	</composite>
+</repository>
 
 <!-- example abstract config //-->
-<system> 
+<system name="ins"> 
 	<subsystem name="ecu1">
 		<provides>
 			<spec name="ecu1" />
 			<spec name="nic" />
 		</provides>
-		<child function="SPEED" />
-		<child function="STEERING" />
-		<child function="LONG">
+        <child name="speed"><function name="SPEED" /></child>
+        <child name="steering"><function name="STEERING" /></child>
+        <child>
+            <function name="LONG" />
 			<route>
 				<service name="ROM" label="accel"><child name="imu" /></service>
-				<service name="CTRL_SPEED"><child name="SPEED" /></service>
-				<service name="ROM" label="velocity"><child name="ACC" /></service>
+				<service name="CTRL_SPEED"><child name="speed" /></service>
+				<service name="ROM" label="velocity"><child name="acc" /></service>
 			</route>
 		</child>
-		<child function="LAT">
+        <child>
+            <function name="LAT" />
 			<route>
 				<service name="ROM" label="gyro"><child name="imu" /></service>
-				<service name="CTRL_STEERING"><child name="STEERING" /></service>
-				<service name="ROM" label="trajectory"><child name="TC" /></service>
+				<service name="CTRL_STEERING"><child name="steering" /></service>
+				<service name="ROM" label="trajectory"><child name="tc" /></service>
 			</route>
 		</child>
+        <child> <function name="Network" /> </child>
 
 		<subsystem name="imu">
 			<provides>
@@ -254,7 +265,7 @@
 				<spec name="imu" />
 			</provides>
 
-			<child function="IMU" />
+            <child name="imu"><function name="IMU" /></child>
 		</subsystem>
 	</subsystem>
 	<subsystem name="ecu2">
@@ -262,31 +273,32 @@
 			<spec name="ecu2" />
 			<spec name="nic" />
 		</provides>
-		<child function="TC">
+        <child name="tc">
+            <function name="TC" />
 			<route>
-				<service name="Nic"><child name="camera" /></service>
+				<service name="Nic"><child name="cam" /></service>
 			</route>
 		</child>
-		<child function="ACC">
+        <child name="acc">
+            <function name="ACC" />
 			<route>
 				<service name="Nic"><child name="radar" /></service>
 			</route>
 		</child>
+        <child> <function name="Network" /> </child>
 	</subsystem>
 
 	<subsystem name="camera">
 		<provides>
 			<rte name="camera" />
 		</provides>
-		<child function="CAM" />
+        <child name="cam"><function name="CAM" /></child>
 	</subsystem>
 	<subsystem name="radar">
 		<provides>
 			<rte name="radar" />
 		</provides>
-		<child function="RADAR" />
+        <child name="radar"><function name="RADAR" /></child>
 	</subsystem>
-
 </system>
-
-</config_model>
+</xml>
