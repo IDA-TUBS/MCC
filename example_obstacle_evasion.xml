@@ -291,8 +291,8 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" label="grid_bayes" />
-			<service name="ROM" label="grid_reflectance" />
+			<service name="ROM" label="grid_bayes" function="GRID_LAYER_BAYES"/>
+			<service name="ROM" label="grid_reflectance" function="GRID_LAYER_REFLECTANCE"/>
 		</requires>
 	</component>
 
