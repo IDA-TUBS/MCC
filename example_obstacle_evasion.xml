@@ -551,11 +551,10 @@
 				<service name="ROM"><child name="SENS_DATA_AQ" /></service>
 			</route>
 		</child>
-		<!--
 		<child name="NIC"><function name="Network" /></child>
 	</subsystem>
 	
-	<subsystem name="nuc">//-->
+	<subsystem name="nuc">
 		<child name="GRID_BAYES">
 			<function name="GRID_LAYER_BAYES"/>
 			<route>
@@ -576,12 +575,6 @@
 				<child name="GRID_BAYES" />
 				<child name="GRID_REFLECTANCE" />
 			</dependency>
-			<!--
-			<route>
-				<service name="ROM"><child name="GRID_BAYES" /></service>
-				<service name="ROM"><child name="GRID_REFLECTANCE" /></service>
-			</route>
-			//-->
 		</child>
 				
 		<child name="TARGET_POSE_GEN">

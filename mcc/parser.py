@@ -116,6 +116,14 @@ class Repository(XMLParser):
 
             return None
 
+        def type(self):
+            classes = self.repo._get_component_classes(self.xml_node)
+            assert(len(classes) <= 1)
+            if len(classes) == 1:
+                return list(classes)[0]
+            else:
+                return None
+
         def service_for_function(self, function):
             for s in self.xml_node.findall("./requires/service[@function]"):
                 if s.get('function') == function:
@@ -310,9 +318,8 @@ class Repository(XMLParser):
         if component_node.find("mux") is not None:
             classes.add("mux")
 
-        if component_node.find("provides") is not None:
-            if component_node.find("function") is not None:
-                classes.add("function")
+        if component_node.find("function") is not None:
+            classes.add("function")
 
         return classes
 

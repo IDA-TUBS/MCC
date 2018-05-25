@@ -35,6 +35,16 @@ class DependencyEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['component']) } }
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
+    def _find_provider_recursive(self, node, function):
+        for con in self.layer.graph.out_edges(node):
+            comp2 = self.layer.get_param_value(self, 'component', con.target)
+            if comp2.function() == function:
+                return True
+            elif comp2.type() == 'proxy':
+                return self._find_provider_recursive(con.target, function)
+
+        return False
+
     def check(self, obj):
         """ Checks whether all functional dependencies are satisfied by the selected component.
         """
@@ -45,14 +55,7 @@ class DependencyEngine(AnalysisEngine):
         # iterate function dependencies
         for f in comp.requires_functions():
             # find function among connected nodes
-            found = False
-            for con in self.layer.graph.out_edges(obj):
-                comp2 = self.layer.get_param_value(self, 'component', con.target)
-                if comp2.function() == f:
-                    found = True
-                    break
-
-            if not found:
+            if not self._find_provider_recursive(obj, f):
                 logging.error("Cannot satisfy function dependency '%s' from component '%s'." % (f, comp))
                 return False
 
