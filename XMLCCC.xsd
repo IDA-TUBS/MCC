@@ -282,6 +282,7 @@
             <xs:choice maxOccurs="unbounded">
               <xs:element name="service" type="ServiceType" />
             </xs:choice>
+            <xs:attribute name="ref" type="xs:string" />
           </xs:complexType>
         </xs:element>
         <xs:element name="config" minOccurs="0" />

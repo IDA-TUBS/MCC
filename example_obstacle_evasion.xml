@@ -291,8 +291,8 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" label="grid_bayes" />
-			<service name="ROM" label="grid_reflectance" />
+			<service name="ROM" label="grid_bayes" function="GRID_LAYER_BAYES"/>
+			<service name="ROM" label="grid_reflectance" function="GRID_LAYER_REFLECTANCE"/>
 		</requires>
 	</component>
 
@@ -380,7 +380,8 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
-			<service name="Nic" function="Network" />
+			<service name="Nic" function="Network" ref="from" />
+			<service name="Nic" function="Network" ref="to" />
 		</requires>
 
 		<pattern>
@@ -389,13 +390,13 @@
                     <service name="ROM" />
                 </expose>
                 <route>
-                    <service name="Nic"><external /></service>
+                    <service name="Nic"><external ref="to" /></service>
                 </route>
             </component>
             <component name="remote_rom_server">
                 <route>
 						 <service name="ROM"><external /></service>
-                         <service name="Nic"><external /></service>
+                         <service name="Nic"><external ref="from" /></service>
                 </route>
             </component>
 		</pattern>
@@ -438,12 +439,12 @@
 			</component>
 			<component name="free_range_filter">
 				<route><service name="ROM"><child name="stixel_height_filter" /></service></route>
-				<expose><service name="ROM" ref="free_range"/></expose>
+				<expose ref="free_range"><service name="ROM" /></expose>
 			</component>
 		</pattern>
 	</composite>
 	
-	<composite>
+	<composite name="GRID_LAYER_BAYES">
 		<function name="GRID_LAYER_BAYES" />
 		<provides>
 			<service name="ROM" />
@@ -466,7 +467,7 @@
 		</pattern>
 	</composite>
 	
-	<composite>
+	<composite name="GRID_LAYER_REFLECTANCE">
 		<function name="GRID_LAYER_REFLECTANCE" />
 		<provides>
 			<service name="ROM" />
@@ -550,11 +551,10 @@
 				<service name="ROM"><child name="SENS_DATA_AQ" /></service>
 			</route>
 		</child>
-<!--	
 		<child name="NIC"><function name="Network" /></child>
 	</subsystem>
 	
-	<subsystem name="nuc"> //-->
+	<subsystem name="nuc">
 		<child name="GRID_BAYES">
 			<function name="GRID_LAYER_BAYES"/>
 			<route>
@@ -571,10 +571,10 @@
 				
 		<child name="TRISTATE">
 			<component name="tristate_fusion" />
-			<route>
-				<service name="ROM"><child name="GRID_BAYES" /></service>
-				<service name="ROM"><child name="GRID_REFLECTANCE" /></service>
-			</route>
+			<dependency>
+				<child name="GRID_BAYES" />
+				<child name="GRID_REFLECTANCE" />
+			</dependency>
 		</child>
 				
 		<child name="TARGET_POSE_GEN">
