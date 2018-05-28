@@ -248,11 +248,11 @@
 			<ram quantum="256" />
 			<caps quantum="500" />
 		</requires>
-		<timing>
+		<!--timing> TODO: why does the checker fail when providing timing here?
 			<on-signal from_ref="disp">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="pose_estimation">

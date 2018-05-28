@@ -30,7 +30,7 @@
 	<component name="i2c_drv" singleton="true">
 		<function name="I2C" />
 		<provides>
-			<service name="I2C" max_clients="1" />
+			<service name="I2C" max_clients="32" />
 		</provides>
 		<requires>
 			<ram quantum="1" />
@@ -110,10 +110,10 @@
 		</provides>
 		<requires>
 			<spec name="zynq" />
-			<service name="GPIO" />
-			<service name="I2C" />
+			<!--service name="I2C" />
 			<service name="VDMA" />
 			<service name="PL_IRQ" />
+			<service name="GPIO" /-->
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
@@ -191,8 +191,8 @@
 			</component>
 			<component name="rect">
 				<route><service name="ROM"><child name="debay" /></service></route>
-				<expose>
-					<service name="ROM" ref="out"/>
+				<expose ref="out">
+					<service name="ROM"/>
 				</expose>
 			</component>
 		</pattern>
@@ -205,8 +205,8 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
-			<service name="Nic" function="Network" ref="sender"/>
-			<service name="Nic" function="Network" ref="receiver"/>
+			<service name="Nic" function="Network" ref="from"/>
+			<service name="Nic" function="Network" ref="to"/>
 		</requires>
 
 		<pattern>
@@ -215,18 +215,17 @@
 					<service name="ROM" />
 				</expose>
 				<route>
-					<service name="Nic"><external ref="receiver" /></service>
+					<service name="Nic"><external ref="to" /></service>
 				</route>
 			</component>
 			<component name="remote_rom_server">
 				<route>
 					<service name="ROM"><external /></service>
-					<service name="Nic"><external ref="sender" /></service>
+					<service name="Nic"><external ref="from" /></service>
 				</route>
 			</component>
 		</pattern>
 	</composite>
-
 </repository>
 
 <!-- system //-->
@@ -236,7 +235,6 @@
 	</provides>
 
 	<subsystem name="zynq">
-
 		<child name="CAM"><function name="CAMERA" /></child>
 		
 		<child name="PP">
@@ -247,6 +245,7 @@
 		</child>
 
 		<child name="NIC"><function name="Network" /></child>
+
 
 	</subsystem>
 
