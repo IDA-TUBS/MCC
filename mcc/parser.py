@@ -23,7 +23,7 @@ class XMLParser:
         if self._file is not None:
             if hasattr(ET, "XMLSchema"):
                 schema = None
-                if xsdfile is not None:
+                if xsd_file is not None:
                     schema = ET.XMLSchema(file=xsd_file)
                 parser = ET.XMLParser(schema=schema)
             else:
