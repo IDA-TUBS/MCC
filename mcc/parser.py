@@ -8,19 +8,26 @@ Implements XML parser classes for the component repository.
     - Johannes Schlatow
 
 """
-from lxml import objectify
-from lxml import etree as ET
-from lxml.etree import XMLSyntaxError
+try:
+    from lxml import etree as ET
+except ImportError:
+    from xml.etree import ElementTree as ET
+
 import logging
 
 from mcc.graph import GraphObj, Edge
 
 class XMLParser:
-    def __init__(self, xml_file, xsd_file):
+    def __init__(self, xml_file, xsd_file=None):
         self._file = xml_file
         if self._file is not None:
-            schema = ET.XMLSchema(file=xsd_file)
-            parser = ET.XMLParser(schema=schema)
+            if hasattr(ET, "XMLSchema"):
+                schema = None
+                if xsdfile is not None:
+                    schema = ET.XMLSchema(file=xsd_file)
+                parser = ET.XMLParser(schema=schema)
+            else:
+                parser = ET.XMLParser()
 
             self._tree = ET.parse(self._file, parser=parser)
             self._root = self._tree.getroot()
@@ -262,7 +269,7 @@ class Repository(XMLParser):
 
             return flattened
 
-    def __init__(self, config_model_file, xsd_file):
+    def __init__(self, config_model_file, xsd_file=None):
         XMLParser.__init__(self, config_model_file, xsd_file)
 
         if self._file is not None:

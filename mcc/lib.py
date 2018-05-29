@@ -184,7 +184,7 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
-    def search_config(self, subsystem_xml, xsd_file, args):
+    def search_config(self, subsystem_xml, xsd_file=None, outpath=None):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -192,7 +192,8 @@ class SimpleMcc(MccBase):
             :type  subsystem_xml: str
             :param xsd_file: XSD filename for subsystem_xml
             :type  xsd_file: str
-            :param args: args from :class:`argparse.ArgumentParser`
+            :param outpath: output path/prefix
+            :type  outpath: str
         """
 
         # check function/composite/component references, compatibility and routes in system and subsystems
@@ -201,14 +202,14 @@ class SimpleMcc(MccBase):
         subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml, xsd_file))
 
         # 2) we create a new system model
-        model = SystemModel(self.repo, subsys_platform, dotpath=args.dotpath)
+        model = SystemModel(self.repo, subsys_platform, dotpath=outpath)
 
         # 3) create query model (in SubsystemModel)
         query_model = subsys_platform
 
         # output query model
-        if args.dotpath is not None:
-            subsys_platform.write_dot(args.dotpath+"query_graph.dot")
+        if outpath is not None:
+            subsys_platform.write_dot(outpath+"query_graph.dot")
 
         # 4a) create system model from query model
         model.from_query(query_model)
@@ -239,7 +240,8 @@ class SimpleMcc(MccBase):
         # TODO implement backtracking
 
         model.print_steps()
-        model.write_dot('mcc.dot')
+        if outpath is not None:
+            model.write_dot(outpath+'mcc.dot')
         model.execute()
 
         return True

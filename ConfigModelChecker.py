@@ -34,4 +34,4 @@ if __name__ == '__main__':
     cfg.check_composite_components()
 
     mcc = lib.SimpleMcc(repo=cfg)
-    mcc.search_config(args.file, args.schema, args)
+    mcc.search_config(args.file, args.schema, args.dotpath)

@@ -9,7 +9,7 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
     - Johannes Schlatow
 
 """
-import networkx as nx
+from  networkx import MultiDiGraph
 import logging
 
 class GraphObj:
@@ -57,10 +57,10 @@ class Edge:
         return "%s -> %s" % (self.source, self.target)
 
 class Graph:
-    """ Wrapper for :class:`nx.MultiDiGraph`.
+    """ Wrapper for :class:`networkx.MultiDiGraph`.
     """
     def __init__(self):
-        self.graph = nx.MultiDiGraph()
+        self.graph = MultiDiGraph()
 
     def add_node(self, obj):
         self.graph.add_node(obj)
