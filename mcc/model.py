@@ -11,7 +11,24 @@ Implements model-specific data structures which are used by our cross-layer mode
 
 from mcc.parser import *
 from mcc.framework import *
-from mcc.analyses import *
+
+class ServiceConstraints:
+    def __init__(self, name=None, function=None, to_ref=None, from_ref=None):
+        self.name     = name
+        self.function = function
+        self.to_ref   = to_ref
+        self.from_ref = from_ref
+
+    def __repr__(self):
+        f = '' if self.function is None else '%s ' % self.function
+        n = '' if self.name is None else 'via %s' % self.name
+        pre = '' if self.to_ref is None and self.from_ref is None else ' ('
+        post = '' if self.to_ref is None and self.from_ref is None else ')'
+        mid = '' if self.to_ref is None and self.from_ref is None else '->'
+        fr = '' if self.from_ref is None else self.from_ref
+        to = '' if self.to_ref is None else self.to_ref
+
+        return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post) 
 
 class Proxy:
     """ Node type representing to-be-inserted proxies; used in comm_arch layer.
@@ -24,7 +41,7 @@ class Proxy:
         return "Proxy(%s)" % self.carrier
 
     def query(self):
-        return { 'service' : self.service, 'carrier' : self.carrier }
+        return { 'service' : self.service.name, 'carrier' : self.carrier }
 
     def type(self):
         return 'proxy'
@@ -292,7 +309,12 @@ class SystemModel(Registry):
             # remark: nodes in query_model and fa are the same objects
             e = fa.graph.create_edge(route.source, route.target)
             if 'service' in query_model.query_graph.edge_attributes(route):
-                fa._set_param_value('service', e, query_model.query_graph.edge_attributes(route)['service'])
+                fa._set_param_value('service', e, ServiceConstraints(name=query_model.query_graph.edge_attributes(route)['service']))
+            else:
+                function = None
+                if route.target.type() == 'function':
+                    function = route.target.query()
+                fa._set_param_value('service', e, ServiceConstraints(function=function))
 
     def _insert_query(self, child):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
@@ -314,8 +336,6 @@ class SystemModel(Registry):
     def _write_dot_edge(self, layer, dotfile, edge, prefix="  "):
         style = self.dot_styles[layer]['edge']
         name = layer._get_param_value('service', edge)
-        if name is None:
-            name = layer._get_param_value('function', edge)
 
         if name is not None:
             label = "label=\"%s\"," % name

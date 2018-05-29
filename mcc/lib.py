@@ -51,40 +51,32 @@ class MccBase:
         check.register_ae(spe)                       # check spec requirements
         model.add_step(pf_compat)
 
-        # select pattern (dummy step, nothing happening here)
-        pe = PatternEngine(fc)
-        pat_compat = NodeStep(Map(pe, 'pattern'))
-        pat_compat.add_operation(Assign(pe, 'pattern'))
-        model.add_step(pat_compat)
-
         # check dependencies
         model.add_step(NodeStep(Check(DependencyEngine(fc), name='dependencies')))
+
+        # select pattern (dummy step, nothing happening here)
+        pe = PatternEngine(fc)
+        model.add_step(MapAssignNodeStep(pe, 'pattern'))
 
         # sanity check and transform
         transform = NodeStep(Check(pe, name='pattern'))
         transform.add_operation(Transform(pe, ca, 'pattern'))
         model.add_step(transform)
 
-        # FIXME: make this more systematically (see ServiceEngine)
+        # select service connection and fix constraints
+        #  remark: for the moment, we assume there is only one possible connection left
         se = ServiceEngine(fc, ca)
-        model.add_step(EdgeStep(Map(se)))
+        connect = EdgeStep(Check(se, name='connect'))
+        connect.add_operation(Map(se, name='connect'))
+        connect.add_operation(Assign(se, name='connect'))
+        connect.add_operation(Transform(se, ca, name='connect'))
+        model.add_step(connect)
 
-        # copy mapping and map unmapped components to platform 
-        cpe = CopyEngine(ca, 'parent-mapping', fc, 'mapping')
-        mapping = NodeStep(Map(cpe, 'parent-mapping'))
-        me = MappingEngine(ca, fc)
-        mapping.add_operation((Map(me, 'mapping')))
-        mapping.add_operation(Assign(me))
-        model.add_step(mapping)
-
-        sre = ServiceReachabilityEngine(fc, ca)
-        compat = EdgeStep(Map(sre))
-        compat.add_operation(Assign(se))
-        compat.add_operation(Transform(se, ca))
-        model.add_step(compat)
+        model.add_step(CopyMappingStep(fc, ca))
+        model.add_step(InheritFromBothStep(ca, 'mapping'))
 
         # check mapping
-        model.add_step(NodeStep(Check(me, name='platform mapping is complete')))
+        model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
 
         # TODO (?) check that connections satisfy functional dependencies
 
@@ -118,15 +110,14 @@ class MccBase:
 
         # copy or transform edges
         model.add_step(EdgeStep(Transform(pe, dlayer)))
+        model.add_step(CopyServicesStep(slayer, dlayer))
 
         # derive mapping
-        ise = InheritEngine(dlayer, param='mapping', out=False)
-        ite = InheritEngine(dlayer, param='mapping', out=True)
-        op = Map(ise)
-        op.register_ae(ite)
-        inherit = NodeStep(op)
-        inherit.add_operation(Assign(ite))
-        model.add_step(inherit)
+        model.add_step(InheritFromBothStep(dlayer, 'mapping'))
+
+        # check that service dependencies are satisfied and connections are local
+        model.add_step(EdgeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
+        model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
 
     def _insert_muxers(self, model, slayer, dlayer):
         """ Inserts multiplexers for edges in source layer and transforms into target layer.

@@ -632,40 +632,41 @@ class CopyEngine(AnalysisEngine):
 class InheritEngine(AnalysisEngine):
     """ Inherits a parameter from neighbouring nodes.
     """
-    def __init__(self, layer, param, out=False):
+    def __init__(self, layer, param, out_edges=True, in_edges=True):
         """ 
         Args:
             :param layer: The layer on which we operate.
             :type  layer: :class:`Layer`
             :param param: The parameter to inherit.
             :type  param: str
-            :param out: Whether to evaluate outgoing or incoming edges when iterating neighbouring nodes.
-            :type  out: boolean
+            :param out_edges: Whether to evaluate outgoing edges when iterating neighbouring nodes.
+            :type  out_edges: boolean
+            :param in_edges: Whether to evaluate incoming edges when iterating neighbouring nodes.
+            :type  in_edges: boolean
         """
         AnalysisEngine.__init__(self, layer, param)
-        self.out=out
+        self.out_edges=out_edges
+        self.in_edges=in_edges
 
     def map(self, obj, candidates):
-        if self.out:
-            edges = self.layer.graph.out_edges(obj)
-        else:
-            edges = self.layer.graph.in_edges(obj)
-
-        if len(edges) == 0:
-            return candidates
-
         candidates = set()
 
-        for e in edges:
-            candidates.add(self.layer.get_param_value(self, self.param, e.target if self.out else e.source))
+        if self.out_edges:
+            edges = self.layer.graph.out_edges(obj)
+
+            for e in edges:
+                candidates.add(self.layer.get_param_value(self, self.param, e.target))
+
+        if self.in_edges:
+            edges = self.layer.graph.in_edges(obj)
+
+            for e in edges:
+                candidates.add(self.layer.get_param_value(self, self.param, e.source))
 
         if len(candidates) > 1:
-            logging.error("Cannot inherit '%s' from %s node unambiguously" 
-                    % (self.param, 'target' if self.out else 'source'))
-            return set([None])
+            logging.warning("Cannot inherit '%s' from source/target node unambiguously" % (self.param))
         elif len(candidates) == 0:
-            logging.warning("No value for param '%s' for node %s\'s %s nodes." % 
-                    (self.param, obj, 'target' if self.out else 'source'))
+            logging.warning("No value for param '%s' for node %s\'s nodes." % (self.param, obj))
 
         return candidates
 
@@ -788,8 +789,12 @@ class Map(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
+            # skip if parameter was already selected
+            if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
+                continue
+
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-            if len(candidates) == 0:
+            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
             for ae in self.analysis_engines:
@@ -839,16 +844,16 @@ class Assign(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
+            # skip if parameter was already selected
+            if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
+                continue
+
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
 
             result = self.analysis_engines[0].assign(obj, candidates)
-            if isinstance(result, list) or isinstance(result, set):
-                for r in result:
-                    assert(r in candidates)
-            else:
-                assert(result in candidates)
+            assert(result in candidates)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
@@ -1014,6 +1019,16 @@ class EdgeStep(Step):
 
         return True
 
+class MapAssignNodeStep(NodeStep):
+    def __init__(self, ae, name):
+        NodeStep.__init__(self, Map(ae, name=name))
+        self.add_operation(Assign(ae, name=name))
+
+class MapAssignEdgeStep(EdgeStep):
+    def __init__(self, ae, name):
+        EdgeStep.__init__(self, Map(ae, name=name))
+        self.add_operation(Assign(ae, name=name))
+
 class CopyNodeTransform(Transform):
     """ Transform operation that returns the nodes found in the layer.
     """
@@ -1054,11 +1069,22 @@ class CopyServiceStep(EdgeStep):
         EdgeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
 
+class CopyServicesStep(EdgeStep):
+    """ Copies 'source-service' and 'target-service' parameter of the edges to the target layer.
+    """
+    def __init__(self, layer, target_layer):
+        ce1 = CopyEngine(target_layer, 'source-service', layer)
+        ce2 = CopyEngine(target_layer, 'target-service', layer)
+        EdgeStep.__init__(self, Map(ce1, 'source-service'))
+        self.add_operation(Assign(ce1, 'source-service'))
+        self.add_operation(Map(ce2, 'target-service'))
+        self.add_operation(Assign(ce2, 'target-service'))
+
 class InheritFromSourceStep(NodeStep):
     """ Inherits a parameter value from neighbouring source nodes.
     """
     def __init__(self, layer, param):
-        ie = InheritEngine(layer, param, out=False)
+        ie = InheritEngine(layer, param, out_edges=False, in_edges=True)
         NodeStep.__init__(self, Map(ie))
         self.add_operation(Assign(ie))
 
@@ -1066,6 +1092,15 @@ class InheritFromTargetStep(NodeStep):
     """ Inherits a parameter value from neighbouring target nodes.
     """
     def __init__(self, layer, param):
-        ie = InheritEngine(layer, param, out=True)
+        ie = InheritEngine(layer, param, out_edges=True, in_eges=False)
+        NodeStep.__init__(self, Map(ie))
+        self.add_operation(Assign(ie))
+
+class InheritFromBothStep(NodeStep):
+    """ Inherits a parameter value from neighbouring source and target nodes.
+    """
+
+    def __init__(self, layer, param):
+        ie = InheritEngine(layer, param='mapping')
         NodeStep.__init__(self, Map(ie))
         self.add_operation(Assign(ie))
