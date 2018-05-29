@@ -12,6 +12,7 @@
       <xs:complexType>
         <xs:all>
           <xs:element name="repository" type="RepositoryType" minOccurs="0" />
+          <xs:element name="platform" type="PlatformType" minOccurs="0" />
           <xs:element name="system" type="SystemType" minOccurs="0" />
         </xs:all>
      </xs:complexType>
@@ -295,7 +296,7 @@
      <xs:attribute name="ref" type="xs:string" />
    </xs:complexType>
 
-   <xs:complexType name="SystemType">
+   <xs:complexType name="SubsystemType">
      <xs:sequence>
          <xs:element name="provides" minOccurs="0" maxOccurs="1">
            <xs:complexType>
@@ -305,8 +306,32 @@
              </xs:sequence>
            </xs:complexType>
          </xs:element>
+         <xs:element name="requires" minOccurs="0" maxOccurs="1">
+           <xs:complexType>
+             <xs:sequence maxOccurs="unbounded">
+               <xs:element name="comm" type="NameType" minOccurs="0"  />
+             </xs:sequence>
+           </xs:complexType>
+         </xs:element>
+			<xs:element name="config" type="NameType" minOccurs="1" maxOccurs="1" />
+		</xs:sequence>
+   	<xs:attribute name="name" type="xs:string" use="required"/>
+	</xs:complexType>
+
+   <xs:complexType name="CommType">
+   	<xs:attribute name="name" type="xs:string" use="required"/>
+	</xs:complexType>
+
+   <xs:complexType name="PlatformType">
+		<xs:sequence>
+			<xs:element name="subsystem" type="SubsystemType" minOccurs="1" maxOccurs="unbounded" />
+			<xs:element name="comm" type="CommType" minOccurs="0" maxOccurs="unbounded" />
+		</xs:sequence>
+	</xs:complexType>
+
+   <xs:complexType name="SystemType">
+     <xs:sequence>
          <xs:choice maxOccurs="unbounded">
-             <xs:element name="subsystem" type="SystemType" />
              <xs:element name="child">
                  <xs:complexType>
                    <xs:sequence>
@@ -343,6 +368,7 @@
                      <xs:element name="config" minOccurs="0" maxOccurs="1" />
                    </xs:sequence>
                    <xs:attribute name="name" type="xs:string"/>
+                   <xs:attribute name="subsystem" type="xs:string"/>
                  </xs:complexType>
              </xs:element>
          </xs:choice>
