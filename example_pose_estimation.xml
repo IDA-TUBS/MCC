@@ -142,11 +142,11 @@
 		<defaults>
 			<config rom="left" />
 		</defaults>
-		<timing>
+		<!--timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="rect_left">
@@ -164,11 +164,11 @@
 		<defaults>
 			<config rom="left" />
 		</defaults>
-		<timing>
+		<!--timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="debay_right">
@@ -186,11 +186,11 @@
 		<defaults>
 			<config rom="right" />
 		</defaults>
-		<timing>
+		<!--timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="rect_right">
@@ -208,11 +208,11 @@
 		<defaults>
 			<config rom="right" />
 		</defaults>
-		<timing>
+		<!--timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="stereo_match">
@@ -228,11 +228,11 @@
 			<ram quantum="64" />
 			<caps quantum="500" />
 		</requires>
-		<timing>
+		<!--timing>
 			<on-signal from_ref="left">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing>
+		</timing-->
 	</component>
 
 	<component name="disp_to_pc">
@@ -302,8 +302,8 @@
 					<service name="ROM" ref="left"><child name="rect_left" /></service>
 					<service name="ROM" ref="right"><child name="rect_right" /></service>
 				</route>
-				<expose>
-					<service name="ROM" ref="out"/>
+				<expose ref="out">
+					<service name="ROM"/>
 				</expose>
 			</component>
 		</pattern>
@@ -320,8 +320,8 @@
 					<service name="ROM" ref="left"><child name="rect_left" /></service>
 					<service name="ROM" ref="right"><child name="rect_right" /></service>
 				</route>
-				<expose>
-					<service name="ROM" ref="out"/>
+				<expose ref="out">
+					<service name="ROM"/>
 				</expose>
 			</component>
 		</pattern>
@@ -334,7 +334,7 @@
 		</provides>
 		<requires>
 			<service name="ROM" function="CAMERA" ref="camleft" />
-			<service name="ROM" function="STEREO_MATCH" ref="stereo" />
+			<service name="ROM" function="STEREO_MATCH" ref="out" />
 		</requires>
 
 		<pattern>
