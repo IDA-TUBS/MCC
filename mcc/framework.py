@@ -756,6 +756,7 @@ class Operation:
         """
         for ae in self.analysis_engines:
             if not isinstance(obj, ae.source_types()):
+                logging.error("%s is not an instance of %s" % (type(obj), ae.source_types()))
                 return False
 
         return True

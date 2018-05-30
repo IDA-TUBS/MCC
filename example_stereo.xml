@@ -419,7 +419,7 @@
 			<spec name="zynq" />
 		</provides>
 		<requires>
-			<comm name="network" />
+			<comm name="Network" />
 		</requires>
 		<config name="zynq.config" />
 	</subsystem>
@@ -429,7 +429,7 @@
 			<rte name="native" />
 		</provides>
 		<requires>
-			<comm name="network" />
+			<comm name="Network" />
 		</requires>
 		<config name="pc.config" />
 	</subsystem>
@@ -442,9 +442,9 @@
 <system name="stereo"> 
 
 	<!-- explicitly ask for CAMERA function //-->
-	<child name="CAM"><function name="CAMERA" /></child>
+	<child name="CAM" subsystem="zynq"><function name="CAMERA" /></child>
 		
-	<child name="STEREO">
+	<child name="STEREO" subsystem="zynq">
 		<function name="STEREO_MATCH" />
 		<dependency>
 			<!-- requires functional connection to child "CAM" //-->
@@ -452,7 +452,7 @@
 		</dependency>
 	</child>
 
-	<child name="PC">
+	<child name="PC" subsystem="zynq">
 		<function name="DISP_TO_PC" />
 		<dependency>
 			<!-- requires functional connection to child "CAM" and "STEREO_MATCH" //-->
@@ -462,8 +462,8 @@
 	</child>
 
 	<!-- remark: ROM proxies are automatically instantiated //-->
-	<child name="NIC" subsystem="zynq"><function name="Network" /></child>
-	<child name="NIC" subsystem="pc"><function name="Network" /></child>
+	<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
+	<child name="NIC2" subsystem="pc"><function name="Network" /></child>
 
 	<!-- explicitly connect ROM service to DISP_TO_PC //-->
 	<child subsystem="pc">

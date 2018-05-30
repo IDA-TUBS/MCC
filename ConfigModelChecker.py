@@ -11,6 +11,10 @@ parser.add_argument('file', metavar='xml_file', type=str,
         help='XML file to be processed')
 parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
         help='XML Schema Definition (xsd)')
+parser.add_argument('--platform', type=str, default=None,
+        help='XML file with platform specification')
+parser.add_argument('--repo', type=str, default=None,
+        help='XML file with contract repository')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
 
@@ -25,7 +29,15 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s')
     logging.getLogger().setLevel(logging.INFO)
 
-    cfg = cfgparser.Repository(args.file, args.schema)
+    repofile = args.repo
+    if repofile is None:
+        repofile = args.file
+
+    pffile = args.platform
+    if pffile is None:
+        pffile = args.file
+
+    cfg = cfgparser.Repository(repofile, args.schema)
     cfg.check_functions_unambiguous()
     cfg.check_components_unambiguous()
     cfg.check_classification_unambiguous()
@@ -34,4 +46,4 @@ if __name__ == '__main__':
     cfg.check_composite_components()
 
     mcc = lib.SimpleMcc(repo=cfg)
-    mcc.search_config(args.file, args.schema, args.dotpath)
+    mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath)
