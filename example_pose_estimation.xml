@@ -118,10 +118,10 @@
 		</provides>
 		<requires>
 			<spec name="zynq" />
-			<service name="GPIO" />
-			<service name="I2C" />
-			<service name="VDMA" />
-			<service name="PL_IRQ" />
+			<service name="GPIO" function="GPIO" />
+			<service name="I2C" function="I2C" />
+			<service name="VDMA" function="VDMA" />
+			<service name="PL_IRQ" function="PL_IRQ" />
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
@@ -423,7 +423,15 @@
 
 	<subsystem name="zynq">
 
-        <child name="CAM"><function name="CAMERA" /></child>
+		<child name="CAM">
+			<function name="CAMERA" />
+			<dependency>
+				<child name="GPIO" />
+				<child name="VDMA" />
+				<child name="I2C" />
+				<child name="PL_IRQ" />
+			</dependency>
+		</child>
 		
         <child name="STEREO">
             <function name="STEREO_MATCH" />
@@ -440,6 +448,12 @@
             </dependency>
         </child>
 
+		  <!-- remark: this could be automatically inserted once we add a step 
+		               which checks and adds missing functional dependencies  //-->
+        <child name="GPIO"><function name="GPIO" /></child>
+        <child name="VDMA"><function name="VDMA" /></child>
+        <child name="I2C"><function name="I2C" /></child>
+        <child name="PL_IRQ"><function name="PL_IRQ" /></child>
         <child name="NIC"><function name="Network" /></child>
 
 	</subsystem>
