@@ -32,8 +32,6 @@ class XMLParser:
             self._tree = ET.parse(self._file, parser=parser)
             self._root = self._tree.getroot()
 
-        self._structure = dict()
-
 class Repository(XMLParser):
 
     class Service:
@@ -697,187 +695,88 @@ class Repository(XMLParser):
                 if len(self._find_element_by_attribute("component", { "name" : b.get("name") })) == 0:
                     logging.error("Binary '%s' refers to non-existent component '%s'." %(b.get("name"), b.get("name")))
 
-    def structure_to_markdown(self, filename, structure=None, level=0, mdfile=None, path=None):
-        if structure is None:
-            structure = self._structure
+class ChildQuery:
+    def __init__(self, xml_node):
+        self._root      = xml_node
 
-        header = ['---',
-                    'title: Title',
-                    'author:',
-                    '- name: Johannes Schlatow',
-                    '  affiliation: TU Braunschweig, IDA',
-                    '  email: schlatow@ida.ing.tu-bs.de',
-                    'date: \\today',
-                    'abstract: Lorem ipsum.',
-                    'lang: english',
-                    'papersize: a4paper',
-                    'numbersections: 1',
-                    'draft: 1',
-                    'todomargin: 3cm',
-                    'packages:',
-                    '- tubscolors',
-                    '- array',
-                    '- booktabs',
-                    '- hyperref',
-                    'sfdefault: 1',
-                    'fancyhdr: 1',
-                    'compiletex: 0',
-                    'scalefigures: 1',
-                    'table_caption_above: 0',
-                    'floatpos: ht',
-                    'versiontag: draft -- \\today',
-                    '...',
-                    '---']
+        self._parse()
 
-        if level == 0:
+    def _parse(self):
+        self._type = None
 
-            with open(filename, 'w') as mdfile:
-                for l in header:
-                    mdfile.write(l + '\n')
+        for t in [ "function", "component" ]:
+            if self._root.find(t) is not None:
+                self._type = t
+                self._identifier = self._root.get('name')
+                self._queryname  = self._root.find(t).get('name')
+                break
 
-                self.structure_to_markdown(filename, structure, level=1, mdfile=mdfile)
+        assert(self._type is not None)
 
+    def identifier(self):
+        return self._identifier
+
+    def label(self):
+        if self._identifier is not None:
+            return self._identifier
         else:
+            return self._queryname
 
-            if path is None:
-                path = list()
+    def query(self):
+        return self._queryname
 
-            # iterate children
-            for node in structure.keys():
-                if 'leaf' in structure[node] and structure[node]['leaf'] is False:
-                    continue
-                if 'recursive-children' in structure[node] and structure[node]['recursive-children'] is True:
-                    continue
+    def type(self):
+        return self._type
 
-                mdfile.write('\clearpage\n\n')
-                for i in range(level):
-                    mdfile.write('#')
-                mdfile.write(' \<%s\> {#sec:%d-%s}\n' % (node, level, node))
+    def routes(self):
+        # FIXME remove if we do not require explicit routing anymore
+        routes = list()
+        route = self._root.find("route")
+        if route is not None:
+            for s in self._root.find("route").findall("service"):
+                attribs = { "service" : s.get("name") }
+                if s.find("child") is not None:
+                    # collect attributes
+                    attribs['child'] = s.find("child").get("name")
+                    if 'label' in s.keys():
+                        attribs['label'] = s.get('label')
 
-                # print path
-                mdfile.write('Hierarchy: \n')
-                mdfile.write('```\n')
-                indent = ''
-                for n in path + [node]:
-                    mdfile.write('%s<%s>\n' % (indent, n))
-                    indent += '  '
-                mdfile.write('```\n')
+                else:
+                    raise Exception("ERROR")
 
-                # TODO lookup elements from example file and add comments/annotations
+                routes.append(attribs)
 
-                # print attribute table
-                mdfile.write('\n| attribute | use | type |\n')
-                mdfile.write(  '|-----------|-----|------|\n')
-                if 'required-attrs' in structure[node]:
-                    for attr in structure[node]['required-attrs']:
-                        typename = 'string' # FIXME
-                        mdfile.write('| %s | required | %s |\n' % (attr, typename))
+        dependency = self._root.find("dependency")
+        if dependency is not None:
+            for c in self._root.find("dependency").findall("child"):
+                attribs = { "child" : c.get("name") }
+                routes.append(attribs)
 
-                if 'optional-attrs' in structure[node]:
-                    for attr in structure[node]['optional-attrs']:
-                        typename = 'string' # FIXME
-                        mdfile.write('| %s | optional | %s |\n' % (attr, typename))
+        return routes
 
-                mdfile.write(  ': Table of attributes\n\n')
+    def subsystem(self):
+        return self._root.get('subsystem')
 
-                # print children table
-                if 'children' in structure[node]:
-                    mdfile.write('\n| name | use | max | type |\n')
-                    mdfile.write(  '|------|-----|-----|------|\n')
-                    for name, spec in structure[node]['children'].items():
-                        if 'leaf' in spec and spec['leaf'] is False:
-                            typename = 'any'
-                        elif 'recursive-children' in spec and spec['recursive-children'] is True:
-                            typename = '[@sec:%d-%s]' % (level, node)
-                        else:
-                            typename = '[@sec:%d-%s]' % (level+1, name)
+    def __repr__(self):
+        return self.label()
 
-                        if 'max' in spec:
-                            max_occur = str(spec['max'])
-                        else:
-                            max_occur = "-"
-
-                        use = 'optional'
-                        if 'min' in spec:
-                            if spec['min'] > 0:
-                                use = 'required'
-                        
-                        mdfile.write('| %s | %s | %s | %s |\n' % (name, use, max_occur, typename))
-
-                    mdfile.write(  ': Table of children\n\n')
-
-                    self.structure_to_markdown(filename, structure[node]['children'], level=level+1, mdfile=mdfile, path=path+[node])
 
 class Subsystem:
+    """ .. deprecated:: X
+    """
 
-    class Child(object):
+    class Child(ChildQuery):
         def __init__(self, xml_node, subsystem):
-            self._root      = xml_node
             self._subsystem = subsystem
+            ChildQuery.__init__(xml_node)
 
             self._parse()
-
-        def _parse(self):
-            self._type = None
-
-            for t in [ "function", "component" ]:
-                if self._root.find(t) is not None:
-                    self._type = t
-                    self._identifier = self._root.get('name')
-                    self._queryname  = self._root.find(t).get('name')
-                    break
-
-            assert(self._type is not None)
 
         def subsystem(self):
             return self._subsystem
 
         def platform_component(self):
             return self._subsystem
-
-        def identifier(self):
-            return self._identifier
-
-        def label(self):
-            if self._identifier is not None:
-                return self._identifier
-            else:
-                return self._queryname
-
-        def query(self):
-            return self._queryname
-
-        def type(self):
-            return self._type
-
-        def routes(self):
-            # FIXME remove if we do not require explicit routing anymore
-            routes = list()
-            route = self._root.find("route")
-            if route is not None:
-                for s in self._root.find("route").findall("service"):
-                    attribs = { "service" : s.get("name") }
-                    if s.find("child") is not None:
-                        # collect attributes
-                        attribs['child'] = s.find("child").get("name")
-                        if 'label' in s.keys():
-                            attribs['label'] = s.get('label')
-
-                    else:
-                        raise Exception("ERROR")
-
-                    routes.append(attribs)
-
-            dependency = self._root.find("dependency")
-            if dependency is not None:
-                for c in self._root.find("dependency").findall("child"):
-                    attribs = { "child" : c.get("name") }
-                    routes.append(attribs)
-
-            return routes
-
-        def __repr__(self):
-            return self.label()
 
     def __init__(self, xml_node, parent=None):
         self._root   = xml_node
@@ -931,6 +830,9 @@ class Subsystem:
 
 
 class SubsystemParser:
+    """ .. deprecated:: X
+            Use :class:`mcc.parser.PlatformParser` and :class:`mcc.parser.SystemParser` instead
+    """
     def __init__(self, xml_file, xsd_file):
  
         XMLParser.__init__(self, xml_file, xsd_file)
@@ -944,3 +846,85 @@ class SubsystemParser:
 
     def root(self):
         return Subsystem(self._root)
+
+class SystemParser:
+    def __init__(self, xml_file, xsd_file):
+        XMLParser.__init__(self, xml_file, xsd_file)
+
+        if self._file is not None:
+            # find <system>
+            if self._root.tag != "system":
+                self._root = self._root.find("system")
+                if self._root == None:
+                    raise Exception("Cannot find <system> node.")
+
+    def children(self):
+        result = set()
+        for c in self._root.findall('child'):
+            result.add(ChildQuery(c))
+
+        return result
+
+class PlatformParser:
+    class PfComponent:
+        def __init__(self, xml_node):
+            self._root = xml_node
+
+        def name(self):
+            return self._root.get('name')
+
+        def comms(self):
+            names = set()
+            for r in self._root.findall('requires/comm'):
+                names.add(r.get('name'))
+
+            return names
+
+        def specs(self):
+            names = set()
+            for r in self._root.findall('provides/spec'):
+                names.add(r.get('name'))
+
+            return names
+
+        def rte(self):
+            r = self._root.find('provides/rte')
+            if r is not None:
+                return r.get('name')
+            else:
+                return 'native'
+
+
+    def __init__(self, xml_file, xsd_file):
+        XMLParser.__init__(self, xml_file, xsd_file)
+
+        if self._file is not None:
+            # find <platform>
+            if self._root.tag != "platform":
+                self._root = self._root.find("platform")
+                if self._root == None:
+                    raise Exception("Cannot find <platform> node.")
+
+        self._check()
+
+    def _check(self):
+        comms_avail = self.comm_names()
+        for c in self.pf_components():
+            for comm in c.comms():
+                assert comm in comms_avail, "requirement <comm name=\"%s\"> not available" % comm
+
+    def pf_components(self):
+        result = set()
+        for c in self._root.findall("subsystem"):
+            result.add(self.PfComponent(c))
+
+        return result
+
+    def comm_names(self):
+        names = set()
+
+        for c in self._root.findall("comm"):
+            names.add(c.get('name'))
+
+        return names
+
