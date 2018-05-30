@@ -247,7 +247,8 @@ class Repository(XMLParser):
             for c in self.xml_node.findall("component"):
                 for s in c.findall('./route/service'):
                     services = child_lookup[c].requires_services(s.get('name'), ref=s.get('ref'))
-                    assert(len(services) == 1)
+                    assert len(services) == 1, \
+                        "Cannot unambigously determine composite-internal connection of service name %s, ref %s from component %s in composite %s" % (s.get('name'), s.get('ref'), c.get('name'), self.label())
                     source_service = services[0]
 
                     if s.find('child') is not None:

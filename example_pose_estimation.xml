@@ -139,14 +139,14 @@
 			<ram quantum="8" />
 			<caps quantum="300" />
 		</requires>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-		<!--timing>
+		<timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
+		<defaults>
+			<config rom="left" />
+		</defaults>
 	</component>
 
 	<component name="rect_left">
@@ -161,14 +161,14 @@
 			<ram quantum="16" />
 			<caps quantum="400" />
 		</requires>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-		<!--timing>
+		<timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
+		<defaults>
+			<config rom="left" />
+		</defaults>
 	</component>
 
 	<component name="debay_right">
@@ -183,14 +183,14 @@
 			<ram quantum="8" />
 			<caps quantum="300" />
 		</requires>
-		<defaults>
-			<config rom="right" />
-		</defaults>
-		<!--timing>
+		<timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
+		<defaults>
+			<config rom="right" />
+		</defaults>
 	</component>
 
 	<component name="rect_right">
@@ -205,14 +205,14 @@
 			<ram quantum="16" />
 			<caps quantum="400" />
 		</requires>
-		<defaults>
-			<config rom="right" />
-		</defaults>
-		<!--timing>
+		<timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
+		<defaults>
+			<config rom="right" />
+		</defaults>
 	</component>
 
 	<component name="stereo_match">
@@ -228,11 +228,11 @@
 			<ram quantum="64" />
 			<caps quantum="500" />
 		</requires>
-		<!--timing>
+		<timing>
 			<on-signal from_ref="left">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
 	</component>
 
 	<component name="disp_to_pc">
@@ -248,11 +248,11 @@
 			<ram quantum="256" />
 			<caps quantum="500" />
 		</requires>
-		<!--timing> TODO: why does the checker fail when providing timing here?
+		<timing>
 			<on-signal from_ref="disp">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
-		</timing-->
+		</timing>
 	</component>
 
 	<component name="pose_estimation">
@@ -333,7 +333,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" function="CAMERA" ref="camleft" />
+			<service name="ROM" function="CAMERA" ref="cam" />
 			<service name="ROM" function="STEREO_MATCH" ref="out" />
 		</requires>
 
@@ -348,8 +348,8 @@
 
 			<component name="disp_to_pc">
 				<route>
-					<service name="ROM" ref="camera"><child name="rect_left" /></service>
-					<service name="ROM" ref="disp"><external ref="stereo"/></service>
+					<service name="ROM" ref="img"><child name="rect_left" /></service>
+					<service name="ROM" ref="disp"><external ref="out"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -371,8 +371,8 @@
 
 			<component name="disp_to_pc">
 				<route>
-					<service name="ROM" ref="camera"><child name="rect_right" /></service>
-					<service name="ROM" ref="disp"><external ref="stereo"/></service>
+					<service name="ROM" ref="img"><child name="rect_right" /></service>
+					<service name="ROM" ref="disp"><external ref="out"/></service>
 				</route>
 				<expose>
 					<service name="ROM" />
@@ -391,8 +391,8 @@
 		</provides>
 		<requires>
 			<service name="ROM" />
-			<service name="Nic" function="Network" ref="sender"/>
-			<service name="Nic" function="Network" ref="receiver"/>
+			<service name="Nic" function="Network" ref="from"/>
+			<service name="Nic" function="Network" ref="to"/>
 		</requires>
 
 		<pattern>
@@ -401,13 +401,13 @@
 					<service name="ROM" />
 				</expose>
 				<route>
-					<service name="Nic"><external ref="receiver" /></service>
+					<service name="Nic"><external ref="to" /></service>
 				</route>
 			</component>
 			<component name="remote_rom_server">
 				<route>
 					<service name="ROM"><external /></service>
-					<service name="Nic"><external ref="sender" /></service>
+					<service name="Nic"><external ref="from" /></service>
 				</route>
 			</component>
 		</pattern>
