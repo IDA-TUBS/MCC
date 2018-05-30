@@ -228,38 +228,47 @@
 	</composite>
 </repository>
 
-<!-- system //-->
-<system name="object_recognition"> 
-	<provides>
-		<spec name="zynq" />
-	</provides>
-
+<platform>
 	<subsystem name="zynq">
-		<child name="CAM"><function name="CAMERA" /></child>
-		
-		<child name="PP">
-			<function name="PREPROC" />
-			<dependency>
-				<child name="CAM" />
-			</dependency>
-		</child>
-
-		<child name="NIC"><function name="Network" /></child>
-
-
+		<provides>
+			<spec name="zynq" />
+		</provides>
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="zynq.config" />
 	</subsystem>
 
 	<subsystem name="pc">
-
-		<child>
-			<component name="object_recog" />
-			<route>
-				<service name="ROM"><child name="PP" /></service>
-			</route>
-		</child>
-
-		<child name="NIC"><function name="Network" /></child>
-
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="pc.config" />
 	</subsystem>
+
+	<comm name="Network" />
+</platform>
+
+<!-- system //-->
+<system name="object_recognition"> 
+	<child name="CAM" subsystem="zynq"><function name="CAMERA" /></child>
+	
+	<child name="PP" subsystem="zynq">
+		<function name="PREPROC" />
+		<dependency>
+			<child name="CAM" />
+		</dependency>
+	</child>
+
+	<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
+
+	<child subsystem="pc">
+		<component name="object_recog" />
+		<route>
+			<service name="ROM"><child name="PP" /></service>
+		</route>
+	</child>
+
+	<child name="NIC2" subsystem="pc"><function name="Network" /></child>
 </system>
 </xml>

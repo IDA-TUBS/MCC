@@ -415,15 +415,30 @@
 
 </repository>
 
+<platform>
+	<subsystem name="zynq">
+		<provides>
+			<spec name="zynq" />
+		</provides>
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="zynq.config" />
+	</subsystem>
+
+	<subsystem name="pc">
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="pc.config" />
+	</subsystem>
+
+	<comm name="Network" />
+</platform>
+
 <!-- system //-->
 <system name="pose_estimation"> 
-	<provides>
-		<spec name="zynq" />
-	</provides>
-
-	<subsystem name="zynq">
-
-		<child name="CAM">
+		<child name="CAM" subsystem="zynq">
 			<function name="CAMERA" />
 			<dependency>
 				<child name="GPIO" />
@@ -433,14 +448,14 @@
 			</dependency>
 		</child>
 		
-        <child name="STEREO">
+        <child name="STEREO" subsystem="zynq">
             <function name="STEREO_MATCH" />
             <dependency>
                 <child name="CAM" />
             </dependency>
         </child>
 
-        <child name="PC">
+        <child name="PC" subsystem="zynq">
             <function name="DISP_TO_PC" />
             <dependency>
                 <child name="CAM" />
@@ -450,25 +465,19 @@
 
 		  <!-- remark: this could be automatically inserted once we add a step 
 		               which checks and adds missing functional dependencies  //-->
-        <child name="GPIO"><function name="GPIO" /></child>
-        <child name="VDMA"><function name="VDMA" /></child>
-        <child name="I2C"><function name="I2C" /></child>
-        <child name="PL_IRQ"><function name="PL_IRQ" /></child>
-        <child name="NIC"><function name="Network" /></child>
+        <child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
+        <child name="VDMA" subsystem="zynq"><function name="VDMA" /></child>
+        <child name="I2C" subsystem="zynq"><function name="I2C" /></child>
+        <child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /></child>
+        <child name="NIC1" subsystem="zynq"><function name="Network" /></child>
 
-	</subsystem>
-
-	<subsystem name="pc">
-
-        <child>
+        <child subsystem="pc">
             <component name="pose_estimation" />
 			<route>
 				<service name="ROM"><child name="PC" /></service>
 			</route>
 		</child>
 
-        <child name="NIC"><function name="Network" /></child>
-
-	</subsystem>
+        <child name="NIC2" subsystem="pc"><function name="Network" /></child>
 </system>
 </xml>

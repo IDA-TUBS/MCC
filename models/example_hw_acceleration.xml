@@ -547,14 +547,30 @@
 	</composite>
 </repository>
 
+<platform>
+	<subsystem name="zynq">
+		<provides>
+			<spec name="zynq" />
+		</provides>
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="zynq.config" />
+	</subsystem>
+
+	<subsystem name="pc">
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="pc.config" />
+	</subsystem>
+
+	<comm name="Network" />
+</platform>
+
 <!-- system //-->
 <system name="object_recognition"> 
-	<provides>
-		<spec name="zynq" />
-	</provides>
-
-	<subsystem name="zynq">
-		<child name="CAM">
+		<child name="CAM" subsystem="zynq">
 			<function name="CAMERA_COMP" />
 			<dependency>
 				<child name="I2C" />
@@ -564,7 +580,7 @@
 			</dependency>
 		</child>
 
-		<child name="PP">
+		<child name="PP" subsystem="zynq">
 			<function name="POSE_ESTIMATION_SW" />
 			<route>
 				<service name="ROM"><child name="CAM" /></service>
@@ -583,15 +599,12 @@
 			</route>
 		</child-->
 
-		<child name="I2C"><function name="I2C" /></child>
-		<child name="GPIO"><function name="GPIO" /></child>
-		<child name="VDMA"><function name="VDMA" /></child>
-		<child name="PL_IRQ"><function name="PL_IRQ" /></child>
-		<child name="Dpr"><function name="Dpr" /></child>
-		<child name="NIC"><function name="Network" /></child>
-	</subsystem>
-
-	<subsystem name="pc">
+		<child name="I2C" subsystem="zynq"><function name="I2C" /></child>
+		<child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
+		<child name="VDMA" subsystem="zynq"><function name="VDMA" /></child>
+		<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /></child>
+		<child name="Dpr" subsystem="zynq"><function name="Dpr" /></child>
+		<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
 
 		<!--child>
 			<component name="object_recog" />
@@ -600,15 +613,13 @@
 			</route>
 		</child-->
 
-		<child>
+		<child subsystem="pc">
             <component name="pose_estimation" />
 			<route>
 				<service name="ROM"><child name="PP" /></service>
 			</route>
 		</child>
 
-		<child name="NIC"><function name="Network" /></child>
-
-	</subsystem>
+		<child name="NIC2" subsystem="pc"><function name="Network" /></child>
 </system>
 </xml>
