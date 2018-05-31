@@ -146,8 +146,7 @@
 	<component name="camera" singleton="true">
 		<function name="CAMERA" />
 		<provides>
-			<service name="ROM" ref="cam_left" />
-			<service name="ROM" ref="cam_right" />
+			<service name="ROM" />
 		</provides>
 		<requires>
 			<spec name="zynq" />
@@ -172,7 +171,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
+				<task wcet="100" bcet="80" name="task1"/>
 			</on-signal>
 		</timing>
 		<defaults>
@@ -308,8 +307,16 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="left">
-				<task wcet="100" bcet="80"/>
+				<task wcet="100" bcet="80" name="task-left" />
+				<signal junction="match" />
 			</on-signal>
+			<on-signal from_ref="right">
+				<task wcet="100" bcet="80" name="task-right" />
+				<signal junction="match" />
+			</on-signal>
+			<junction name="match" type="AND">
+				<task wcet="100" bcet="80" name="match" />
+			</junction>
 		</timing>
 	</component>
 
@@ -456,32 +463,42 @@
 		</timing>
 
 		<!--taskgraph>
-			<task name="debay_left" >
-				<function name="debay" />
-				<edge destination="cam_left" ref="in" />
-			</task>
-			<task name="debay_right" >
-				<function name="debay" />
-				<edge destination="cam_right" ref="in" />
-			</task>
-			<task name="rect_left" >
-				<function name="rect" />
-				<edge destination="debay_left" ref="in" />
-			</task>
-			<task name="rect_right" >
-				<function name="rect" />
-				<edge destination="debay_right" ref="in" />
-			</task>
-			<task name="stereo_match" >
-				<function name="stereo_match" />
-				<edge destination="rect_left" ref="left" />
-				<edge destination="rect_right" ref="right" />
-			</task>
-			<task name="disp_to_pc" >
-				<function name="disp_to_pc" />
-				<edge destination="rect_left" ref="rect_left" />
-				<edge destination="disp_to_pc" ref="disp" />
-			</task>
+			<on-signal from_ref="cam_left">
+				<task name="debay_left">
+					<component name="debay_left" task="task1" />
+					<component name="debay_left_hw" task="foobar" />
+				</task>
+				<task name="rect_left">
+					<component name="rect_left" task="task1" />
+					<component name="rect_left_hw" task="foobar" />
+				</task>
+				<task name="stereo_match>
+					<component name="stereo_match" task="task-left" />
+				</task>
+				<signal junction="match" />
+			</on-signal>
+			<on-signal from_ref="cam_right">
+				<task name="debay_right" >
+					<component name="debay_right" task="task1" />
+					<component name="debay_right_hw" />
+				</task>
+				<task name="rect_right">
+					<component name="rect_right" task="task1" />
+					<component name="rect_right_hw" task="foobar" />
+				</task>
+				<task name="stereo_match>
+					<component name="stereo_match" task="task-right" />
+				</task>
+				<signal junction="match" />
+			</on-signal>
+			<junction name="match" type="AND">
+				<task>
+					<component name="stereo_match" task="match" />
+				</task>
+				<task name="disp_to_pc" >
+					<component name="disp_to_pc" task="foobar" />
+				</task>
+			</junction>
 		</taskgraph-->
 
 		<pattern>
