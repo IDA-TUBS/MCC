@@ -212,12 +212,12 @@
 				<region id="0" />
 				<region id="1" />
 			</regions-->
-			<!--resources>
-				<flipflop quantum="123" />
-				<bram quantum="456" />
-				<cmem quantum="789" />
-			</resources-->
 		</requires>
+		<!--hw_characteristics>
+			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
+			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
+			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="in">
 				<task wcet="60" bcet="50"/>
@@ -278,12 +278,12 @@
 			<ram quantum="16" />
 			<caps quantum="400" />
 			<!--regions><region id="0" /></regions-->
-			<!--resources>
-				<flipflop quantum="123" />
-				<bram quantum="456" />
-				<cmem quantum="789" />
-			</resources-->
 		</requires>
+		<!--hw_characteristics>
+			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
+			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
+			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="in">
 				<task wcet="60" bcet="50"/>
@@ -331,12 +331,12 @@
 			<ram quantum="64" />
 			<caps quantum="500" />
 			<!--regions><region id="0" /></regions-->
-			<!--resources>
-				<flipflop quantum="123" />
-				<bram quantum="456" />
-				<cmem quantum="789" />
-			</resources-->
 		</requires>
+		<!--hw_characteristics>
+			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
+			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
+			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="left">
 				<task wcet="60" bcet="50"/>
@@ -376,12 +376,12 @@
 				<region id="0" />
 				<region id="1" />
 			</regions-->
-			<!--resources>
-				<flipflop quantum="123" />
-				<bram quantum="456" />
-				<cmem quantum="789" />
-			</resources-->
 		</requires>
+		<!--hw_characteristics>
+			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
+			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
+			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="disp">
 				<task wcet="60" bcet="40"/>
@@ -512,16 +512,21 @@
 					<service name="Dpr" ><external ref="dpr"/></service>
 				</route>
 				<config>
-					<action irq_cond1="-1" irq_cond2="-1" type="reconfigure" region="0" algorithm="debayer"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="reconfigure" region="1" algorithm="rectify_left"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="task" region="1" algorithm="rectify_left" tdest="0" src1="-1" src1_vdma="-1" src1_amount="-1" src2="-1" src2_vdma="-1" src2_amount="-1" dst="3" dst_vdma="2" dst_amount="3"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="task" region="0" algorithm="debayer" tdest="4" src1="101" src1_vdma="2" src1_amount="1" src2="-1" src2_vdma="-1" src2_amount="-1" dst="-1" dst_vdma="-1" dst_amount="1"/>
-					<action irq_cond1="0" irq_cond2="1" type="task" region="1" algorithm="rectify_right" tdest="0" src1="-1" src1_vdma="-1" src1_amount="-1" src2="-1" src2_vdma="-1" src2_amount="-1" dst="4" dst_vdma="2" dst_amount="3"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="task" region="0" algorithm="debayer" tdest="4" src1="102" src1_vdma="2" src1_amount="1" src2="-1" src2_vdma="-1" src2_amount="-1" dst="-1" dst_vdma="-1" dst_amount="1"/>
-					<action irq_cond1="0" irq_cond2="1" type="reconfigure" region="1" algorithm="stereo_matching"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="task" region="1" algorithm="stereo_matching" tdest="0" src1="3" src1_vdma="2" src1_amount="3" src2="4" src2_vdma="3" src2_amount="3" dst="5" dst_vdma="2" dst_amount="1"/>
-					<action irq_cond1="1" irq_cond2="-1" type="reconfigure" region="0" algorithm="disp2pc"/>
-					<action irq_cond1="-1" irq_cond2="-1" type="task" region="0" algorithm="disp2pc" tdest="0" src1="5" src1_vdma="2" src1_amount="1" src2="3" src2_vdma="3" src2_amount="3" dst="6" dst_vdma="2" dst_amount="16"/>
+					<action type="waitfor_irq" src1_name="img_left"/>
+					<action type="waitfor_irq" src1_name="img_right"/>
+					<action type="reconfigure" region="0" algorithm="debayer"/>
+					<action type="reconfigure" region="1" algorithm="rectify"/>
+					<action type="task" region="1" algorithm="rectify" config="left" dst_name="img_rectified_left" dst_amount="3" tdest="0" />
+					<action type="task" region="0" algorithm="debayer" src1_name="img_left" src1_vdma="2" src1_amount="1" tdest="4"/>
+					<action type="waitfor_irq" region="0"/>
+					<action type="waitfor_irq" region="1"/>
+					<action type="task" region="1" algorithm="rectify" config="right" dst_name="img_rectified_right" dst_amount="3" tdest="0"/>
+					<action type="task" region="0" algorithm="debayer" src1_name="img_right" src1_vdma="2" src1_amount="1" tdest="4"/>
+					<action type="waitfor_irq" region="0"/>
+					<action type="waitfor_irq" region="1"/>
+					<action type="reconfigure" region="1" algorithm="stereo_matching"/>
+					<action type="task" region="1" algorithm="stereo_matching" src1_name="img_rectified_left" src1_vdma="2" src1_amount="3" src2_name="img_rectified_right" src2_vdma="3" src2_amount="3" dst_name="img_disparity" dst_amount="1" tdest="0"/>
+					<action type="waitfor_irq" region="1"/>
 				</config>
 				<expose ref="out">
 					<service name="ROM"/>
