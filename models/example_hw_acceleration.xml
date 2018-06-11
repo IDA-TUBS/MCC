@@ -512,20 +512,33 @@
 					<service name="Dpr" ><external ref="dpr"/></service>
 				</route>
 				<config>
-					<action type="waitfor_irq" src1_name="img_left"/>
-					<action type="waitfor_irq" src1_name="img_right"/>
+					<action type="waitfor_irq" src="img_left"/>
+					<action type="waitfor_irq" src="img_right"/>
+					</action>
 					<action type="reconfigure" region="0" algorithm="debayer"/>
 					<action type="reconfigure" region="1" algorithm="rectify"/>
-					<action type="task" region="1" algorithm="rectify" config="left" dst_name="img_rectified_left" dst_amount="3" tdest="0" />
-					<action type="task" region="0" algorithm="debayer" src1_name="img_left" src1_vdma="2" src1_amount="1" tdest="4"/>
+					<action type="task" region="1" algorithm="rectify" config="left" tdest="0">
+						<dst name="img_rectified_left" amount="3"/>
+					</action>
+					<action type="task" region="0" algorithm="debayer" tdest="4">
+						<src name="img_left" vdma="2" mount="1"/>
+					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
-					<action type="task" region="1" algorithm="rectify" config="right" dst_name="img_rectified_right" dst_amount="3" tdest="0"/>
-					<action type="task" region="0" algorithm="debayer" src1_name="img_right" src1_vdma="2" src1_amount="1" tdest="4"/>
+					<action type="task" region="1" algorithm="rectify" config="right" tdest="0">
+						<dst name="img_rectified_right" amount="3"/>
+					</action>
+					<action type="task" region="0" algorithm="debayer" tdest="4">
+						<src name="img_right" vdma="2" amount="1"/>
+					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
-					<action type="reconfigure" region="1" algorithm="stereo_matching"/>
-					<action type="task" region="1" algorithm="stereo_matching" src1_name="img_rectified_left" src1_vdma="2" src1_amount="3" src2_name="img_rectified_right" src2_vdma="3" src2_amount="3" dst_name="img_disparity" dst_amount="1" tdest="0"/>
+					<action type="reconfigure" region="1" algorithm="stereo_matching" tdest="0">
+					<action type="task" region="1" algorithm="stereo_matching">
+						<src name="img_rectified_left" vdma="2" amount="3"/>
+						<src name="img_rectified_right" vdma="3" amount="3"/>
+						<dst name="img_disparity" amount="1"/>
+					</action>
 					<action type="waitfor_irq" region="1"/>
 				</config>
 				<expose ref="out">
@@ -619,11 +632,8 @@
 				<region id="0" reconf_time="123" />
 				<region id="1" reconf_time="456" />
 			</regions>
-			<vdmas>
-				<vdma id="0" />
-				<vdma id="1" />
-			</vdmas-->
-		</provides>
+			<vdmas quantum="2" />
+		</provides-->
 		<requires>
 			<comm name="Network" />
 		</requires>
