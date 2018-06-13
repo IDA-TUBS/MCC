@@ -512,34 +512,34 @@
 					<service name="Dpr" ><external ref="dpr"/></service>
 				</route>
 				<config>
-					<action type="waitfor_irq" src="img_left"/>
-					<action type="waitfor_irq" src="img_right"/>
-					</action>
+					<action type="waitfor_irq" src_name="img_left"/>
+					<action type="waitfor_irq" src_name="img_right"/>
 					<action type="reconfigure" region="0" algorithm="debayer"/>
 					<action type="reconfigure" region="1" algorithm="rectify"/>
-					<action type="task" region="1" algorithm="rectify" config="left" tdest="0">
+					<action type="task" region="1" config="left" tdest="0">
 						<dst name="img_rectified_left" amount="3"/>
 					</action>
-					<action type="task" region="0" algorithm="debayer" tdest="4">
-						<src name="img_left" vdma="2" mount="1"/>
+					<action type="task" region="0" tdest="4">
+						<src1 name="img_left" vdma="2" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
-					<action type="task" region="1" algorithm="rectify" config="right" tdest="0">
+					<action type="task" region="1" config="right" tdest="0">
 						<dst name="img_rectified_right" amount="3"/>
 					</action>
-					<action type="task" region="0" algorithm="debayer" tdest="4">
-						<src name="img_right" vdma="2" amount="1"/>
+					<action type="task" region="0" tdest="4">
+						<src1 name="img_right" vdma="2" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
-					<action type="reconfigure" region="1" algorithm="stereo_matching" tdest="0">
-					<action type="task" region="1" algorithm="stereo_matching">
-						<src name="img_rectified_left" vdma="2" amount="3"/>
-						<src name="img_rectified_right" vdma="3" amount="3"/>
+					<action type="reconfigure" region="1" algorithm="stereo_matching"/>
+					<action type="task" region="1" tdest="0">
+						<src1 name="img_rectified_left" vdma="2" amount="3"/>
+						<src2 name="img_rectified_right" vdma="3" amount="3"/>
 						<dst name="img_disparity" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="1"/>
+					<action type="reconfigure" region="0" algorithm="disp2pc"/>
 				</config>
 				<expose ref="out">
 					<service name="ROM"/>
