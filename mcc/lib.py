@@ -11,6 +11,7 @@ Implements variants of the MCC by composing cross-layer models, analysis engines
 from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
+from mcc.importexport import *
 
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
@@ -246,5 +247,17 @@ class SimpleMcc(MccBase):
         if outpath is not None:
             model.write_dot(outpath+'mcc.dot')
         model.execute()
+
+        export = PickleExporter(model, { model.by_name['func_arch'] : { 'reads' : ['mapping', 'service'] },
+                                         model.by_name['comm_arch'] : { 'reads' : ['mapping', 'service'] } })
+        export.write(outpath+'func_arch.gpickle')
+
+        model = SystemModel(self.repo, pf_model, dotpath=outpath)
+
+        importer = PickleImporter(model)
+        importer.read(outpath+'func_arch.gpickle')
+
+        model._output_layer(model.by_name['func_arch'], 'asdf')
+        model._output_layer(model.by_name['comm_arch'], 'asdf')
 
         return True

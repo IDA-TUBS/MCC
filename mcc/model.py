@@ -537,7 +537,8 @@ class SystemModel(Registry):
                 # add components of this subsystem
                 for comp in layer.graph.nodes():
                     # only process children in this subsystem
-                    if sub is not layer._get_param_value('mapping', comp):
+                    if layer._get_param_value('mapping', comp) is not None \
+                       and sub.name() != layer._get_param_value('mapping', comp).name():
                         continue
 
                     layer.graph.node_attributes(comp)['id'] = "c%d" % n
