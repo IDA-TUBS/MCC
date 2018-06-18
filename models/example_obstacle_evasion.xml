@@ -98,19 +98,7 @@
 			<spec name="legacy_pc" />
 		</requires>
 	</component>
-<!--	
-	<component name="sensor_data_prep">
-		<function name="SENSOR_DATA_PREP" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" />
-			<spec name="legacy_pc" />
-		</requires>
-	</component> //-->
 	
-	<!-- sensor data preprocessing //-->	
 	<component name="stream_splitter">
 		<provides>
 			<service name="ROM" />
@@ -190,7 +178,7 @@
 			<remove tag="stixel" />
 		</filter>
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref="free_range" />
 		</provides>
 		<requires>
 			<service name="ROM" filter="pointcloud stixel !horizontal_seg !curbs !vertical_seg !contour" />
@@ -202,7 +190,7 @@
 			<add tag="contrast" />
 		</filter>
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref="contrast" />
 		</provides>
 		<requires>
 			<service name="ROM" filter="pointcloud" />
@@ -255,7 +243,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" label="pointcloud free_range" />
+			<service name="ROM" label="pointcloud contrast" ref="free_range" />
 		</requires>
 	</component>
 	
@@ -404,11 +392,11 @@
 	
 	
 	<!--	functional composites	//-->
-	<composite>
+	<composite name="SENSOR_DATA_PREP">
 		<function name="SENSOR_DATA_PREP" />
 		<provides>
 			<service name="ROM" ref="free_range" />
-			<!-- <service name="ROM" ref="contrast" /> //-->
+			<service name="ROM" ref="contrast" /> 
 		</provides>
 		<requires>
 			<service name="ROM" function="SENSOR_DATA_AQ" />
@@ -423,7 +411,7 @@
 			</component>
 			<component name="contrast_enhancement">
 				<route><service name="ROM"><child name="stream_splitter" /></service></route>
-				<!-- <expose><service name="ROM" ref="contrast"/></expose>	//-->
+				<expose ref="contrast"><service name="ROM" /></expose>	
 			</component>
 			<component name="vertical_segmentation">
 				<route><service name="ROM"><child name="stream_splitter" /></service></route>
@@ -473,12 +461,12 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" function="SENSOR_DATA_PREP" ref="free_range" />
+			<service name="ROM" function="SENSOR_DATA_PREP" ref="contrast" />
 		</requires>
 		
 		<pattern>
 			<component name="img_updater_reflectance">
-				<route><service name="ROM"><external  ref="free_range" /></service></route>
+				<route><service name="ROM"><external  ref="contrast" /></service></route>
 			</component>
 			<component name="cell_updater_reflectance">
 				<route><service name="ROM"><child name="img_updater_reflectance" /></service></route>

@@ -146,31 +146,6 @@ class Graph:
     def __getstate__(self):
         return GraphExporter(self, self._node_params, self._edge_params).__dict__
 
-#    def __getstate__(self):
-#        node_attrs = dict()
-#        edge_attrs = dict()
-#        for node in self.nodes():
-#            node_attrs[node] = self.node_attributes(node, self.node_params_filter)
-#        for edge in self.edges():
-#            edge_attrs[edge] = self.edge_attributes(edge, self.edge_params_filter)
-#
-#        return { 'nodes' : self.nodes(),
-#                 'edges' : self.graph.edges(keys=True),
-#                 'node_attributes' : node_attrs,
-#                 'edge_attributes' : edge_attrs}
-#
-#    def __setstate__(self, state):
-#        self.graph = MultiDiGraph()
-#        self.graph.add_nodes_from(state['nodes'])
-#        self.graph.add_edges_from(state['edges'])
-#
-#        for node, attrs in state['node_attributes'].items():
-#            for attr, aval in attrs.items():
-#                self.node_attributes(node)[attr] = aval
-#
-#        for edge, attrs in state['edge_attributes'].items():
-#            for attr, aval in attrs.items():
-#                self.edge_attributes(edge)[attr] = aval
 
 class GraphExporter(Graph):
     def __init__(self, graph, node_params, edge_params):

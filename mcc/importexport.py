@@ -34,39 +34,8 @@ class Importer:
     def read(self):
         raise NotImplementedError
 
-#class GraphPickler(pickle.Pickler):
-#
-#def __init__(self, file):
-#    pickle.Pickler.__init__(self, file)
-#    self._mcc_objs = set()
-#
-#def _is_mcc_obj(self, obj):
-#    if type(obj).__module__.startswith('mcc'):
-#        return True
-#
-#    return False
-#
-#def persistent_id(self, obj):
-#
-#    if self._is_mcc_obj(obj):
-#        if obj in self._mcc_objs:
-#            return id(obj)
-#        else:
-#            self._mcc_objs.add(obj)
-#
-#    return None
-
 class GraphUnpickler(pickle.Unpickler):
 
-#    def __init__(self, file):
-#        pickle.Pickler.__init__(self, file)
-#        self._mcc_objs = dict()
-#
-#    def persistent_load(self, pid):
-#        if pid in self._mcc_objs:
-#
-#        raise pickle.UnpicklingError("unsupported persistent object")
-#
     def find_class(self, module, name):
         import sys
         hierarchy = name.split('.')
