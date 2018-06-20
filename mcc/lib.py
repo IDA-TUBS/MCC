@@ -177,7 +177,6 @@ class MccBase:
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
 
-
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
@@ -185,7 +184,7 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
-    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None):
+    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -246,18 +245,14 @@ class SimpleMcc(MccBase):
         model.print_steps()
         if outpath is not None:
             model.write_dot(outpath+'mcc.dot')
-        model.execute()
 
-#        export = PickleExporter(model, { model.by_name['func_arch'] : { 'reads' : ['mapping', 'service'] },
-#                                         model.by_name['comm_arch'] : { 'reads' : ['mapping', 'service'] } })
-#        export.write(outpath+'func_arch.gpickle')
-#
-#        model = SystemModel(self.repo, pf_model, dotpath=outpath)
-#
-#        importer = PickleImporter(model)
-#        importer.read(outpath+'func_arch.gpickle')
-#
-#        model._output_layer(model.by_name['func_arch'], 'asdf')
-#        model._output_layer(model.by_name['comm_arch'], 'asdf')
+        if with_da:
+            from mcc import extern
+            da_engine = extern.DependencyAnalysisEngine(model, model.by_order, outpath+'model.pickle', outpath+'query.xml', outpath+'result.xml')
+            da_step = NodeStep(BatchMap(da_engine))
+            da_step.add_operation(BatchAssign(da_engine))
+            model.add_step_unsafe(da_step)
+
+        model.execute()
 
         return True

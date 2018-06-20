@@ -42,6 +42,9 @@ class GraphUnpickler(pickle.Unpickler):
         if module == "mcc.parser":
             module = "mcc.noparser"
 
+        if module not in sys.modules:
+            __import__(module)
+
         current = getattr(sys.modules[module], hierarchy[0])
         for c in hierarchy[1:]:
             current = getattr(current, c)
