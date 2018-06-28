@@ -21,6 +21,7 @@ class Registry:
         self.by_order  = list()
         self.by_name   = dict()
         self.steps     = list()
+        self.dep_graph = Graph()
 
     @staticmethod
     def _same_layers(step1, step2):
@@ -216,6 +217,7 @@ class Registry:
     def execute(self):
         """ Executes the registered steps sequentially.
         """
+
         print()
         for step in self.steps:
             previous_step = self._previous_step(step)
@@ -237,6 +239,65 @@ class Registry:
         """
         logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
         return
+
+    def write_analysis_engine_dependency_graph(self):
+        analysis_engines = set()
+        edges   = set()
+        layers  = set()
+        engines = set()
+
+        for step in self.steps:
+            for op in step.operations:
+                analysis_engines.update(op.analysis_engines)
+        print()
+        for ae in analysis_engines:
+            en = '{}'.format(type(ae).__name__)
+            engines.add(en)
+            if en not in self.dep_graph.nodes():
+                self.dep_graph.add_node(en)
+
+            for layer in ae.acl:
+                layer = str(layer)
+                layers.add(layer)
+                if layer not in self.dep_graph.nodes():
+                    self.dep_graph.add_node(layer)
+
+                e = Edge(en, layer)
+                edges.add((e.source, e.target))
+                # self.dep_graph.add_edge(e)
+
+
+        for (s, t) in edges:
+            self.dep_graph.create_edge(s, t)
+        print(self.dep_graph.edges())
+        print(en)
+        print(ae.acl_string())
+
+        with open('AeDepGraph.dot', 'w') as file:
+            file.write('digraph {\n')
+            nodes = set()
+            for n in self.dep_graph.nodes():
+                ns = n.replace('-', '_')
+                print(n)
+
+                nodes.add(n)
+                node = ''
+                if n in engines:
+                    node = '{0} [label="<{0}>",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n'.format(ns)
+                elif n in layers:
+                    node = '{0} [label="<{0}>",shape=parallelogram,colorscheme=set39, fillcolor=5,style=filled];\n'.format(ns)
+
+                file.write(node)
+            for e in self.dep_graph.edges():
+                source = e.source
+                target = e.target
+                source = source.replace('-', '_')
+                target = target.replace('-', '_')
+                edge = '{} -> {}\n'.format(source, target)
+                file.write(edge)
+
+            file.write('}\n')
+
 
 class Layer:
     """ Implementation of a single layer in the cross-layer model.
