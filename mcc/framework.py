@@ -242,58 +242,61 @@ class Registry:
 
     def write_analysis_engine_dependency_graph(self):
         analysis_engines = set()
-        edges   = set()
-        layers  = set()
-        engines = set()
+        engines_id       = set()
+        layers           = set()
+        params           = set()
 
         for step in self.steps:
             for op in step.operations:
                 analysis_engines.update(op.analysis_engines)
+
         print()
+
         for ae in analysis_engines:
             en = '{}'.format(type(ae).__name__)
-            engines.add(en)
-            if en not in self.dep_graph.nodes():
-                self.dep_graph.add_node(en)
+            engines_id.add(en)
 
             for layer in ae.acl:
-                layer = str(layer)
-                layers.add(layer)
-                if layer not in self.dep_graph.nodes():
-                    self.dep_graph.add_node(layer)
+                la = str(layer).replace('-', '_')
+                layers.add(la)
+                if 'reads' in ae.acl[layer]:
+                    for param in ae.acl[layer]['reads']:
+                        if param == None:
+                            continue
+                        params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
 
-                e = Edge(en, layer)
-                edges.add((e.source, e.target))
-                # self.dep_graph.add_edge(e)
-
-
-        for (s, t) in edges:
-            self.dep_graph.create_edge(s, t)
-        print(self.dep_graph.edges())
-        print(en)
-        print(ae.acl_string())
+                if 'writes'in ae.acl[layer]:
+                    for param in ae.acl[layer]['writes']:
+                        if param == None:
+                            continue
+                        params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
 
         with open('AeDepGraph.dot', 'w') as file:
             file.write('digraph {\n')
-            nodes = set()
-            for n in self.dep_graph.nodes():
-                ns = n.replace('-', '_')
-                print(n)
 
-                nodes.add(n)
-                node = ''
-                if n in engines:
-                    node = '{0} [label="<{0}>",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n'.format(ns)
-                elif n in layers:
-                    node = '{0} [label="<{0}>",shape=parallelogram,colorscheme=set39, fillcolor=5,style=filled];\n'.format(ns)
-
+            for e in engines_id:
+                e = e.replace('-', '_')
+                node = '{0} [label="<{0}>",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n'.format(e)
                 file.write(node)
-            for e in self.dep_graph.edges():
-                source = e.source
-                target = e.target
-                source = source.replace('-', '_')
-                target = target.replace('-', '_')
-                edge = '{} -> {}\n'.format(source, target)
+
+            for l in layers:
+                l = l.replace('-', '_')
+                node = '{0} [label="<{0}>",shape=parallelogram,colorscheme=set39, fillcolor=5,style=filled];\n'.format(l)
+                file.write(node)
+
+            # add params as nodes
+            for (param_id, param_label) in {(param+layer, param) for (ae, layer, param) in params}:
+                node = '{0} [label="{1}", shape=oval]\n'.format(param_id, param_label)
+                file.write(node)
+
+            # edge AnalysisEngine to parameter e.g. CopyeEnine -> mapping
+            for (ae, param_id) in {(ae, param+layer) for (ae, layer, param) in params}:
+                edge = '{0} -> {1}\n'.format(ae, param_id)
+                file.write(edge)
+
+            # edge param -> Layer
+            for (layer, param) in {(layer, param) for (ae, layer, param) in params}:
+                edge = '{0}{1} -> {1}\n'.format(param, layer)
                 file.write(edge)
 
             file.write('}\n')
