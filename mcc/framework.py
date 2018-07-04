@@ -17,11 +17,42 @@ class Registry:
 
     Layers and transformation steps are stored, managed, and executed by this class.
     """
+
+    class Node():
+        """Represents a Node in the Dependency Graph"""
+        def __init__(self):
+            pass
+
+    class MapNode(Node):
+        def __init__(self, layer, param, value):
+            self.layer = layer
+            self.param = param
+            self.value = value
+
+    class AssignNode(Node):
+        """description"""
+        def __init__(self, layer, param, value, match=None):
+            self.layer = layer
+            self.param = param
+            self.value = value
+            self.match = match
+
+    class DependNode(Node):
+        """description"""
+        def __init__(self, layer, param, dep):
+            self.layer = layer
+            self.param = param
+            self.dep   = dep
+
+
     def __init__(self):
         self.by_order  = list()
         self.by_name   = dict()
         self.steps     = list()
+
         self.dep_graph = Graph()
+        #the latest node added to the graph
+        self.dep_current = None
 
     @staticmethod
     def _same_layers(step1, step2):
@@ -220,6 +251,7 @@ class Registry:
 
         print()
         for step in self.steps:
+
             previous_step = self._previous_step(step)
             if not Registry._same_layers(previous_step, step):
                 logging.info("Creating layer %s" % step.target_layer)
@@ -824,7 +856,7 @@ class Operation:
 
         return True
 
-    def execute(self, iterable):
+    def execute(self, iterable, dep_graph=None):
         raise NotImplementedError()
 
     def __repr__(self):
@@ -847,7 +879,7 @@ class Map(Operation):
         """
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -902,7 +934,7 @@ class Assign(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -971,7 +1003,7 @@ class Transform(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -1049,7 +1081,7 @@ class Step:
     def __repr__(self):
         return type(self).__name__ + ': \n    ' + '\n    '.join([str(op) for op in self.operations])
 
-    def execute(self):
+    def execute(self, dep_graph=None):
         """ Must be implemented by derived classes.
 
         Raises:
@@ -1060,10 +1092,15 @@ class Step:
 class NodeStep(Step):
     """ Implements model transformation step on nodes.
     """
-    def execute(self):
+    def execute(self, dep_graph=None):
         """ For every operation, calls :func:`Operation.execute()` for every node in the layer.
         """
         for op in self.operations:
+            if isinstance(op, Map):
+                print('MAP OP')
+            if isinstance(op, Assign):
+                print('Assign OP')
+
             if not op.execute(self.source_layer.graph.nodes()):
                 raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                 return False
@@ -1073,10 +1110,15 @@ class NodeStep(Step):
 class EdgeStep(Step):
     """ Implements model transformation step on edges.
     """
-    def execute(self):
+    def execute(self, dep_graph=None):
         """ For every operation, calls :func:`Operation.execute()` for every edge in the layer.
         """
         for op in self.operations:
+            if isinstance(op, Map):
+                print('MAP OP')
+            if isinstance(op, Assign):
+                print('Assign OP')
+
             if not op.execute(self.source_layer.graph.edges()):
                 raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                 return False

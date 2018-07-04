@@ -242,5 +242,5 @@ class SimpleMcc(MccBase):
         model.write_dot('mcc.dot')
         model.execute()
 
-        model.write_analysis_engine_dependency_graph()
+        # model.write_analysis_engine_dependency_graph()
         return True
