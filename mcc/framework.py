@@ -18,39 +18,12 @@ class Registry:
     Layers and transformation steps are stored, managed, and executed by this class.
     """
 
-    class Node():
-        """Represents a Node in the Dependency Graph"""
-        def __init__(self):
-            pass
-
-    class MapNode(Node):
-        def __init__(self, layer, param, value):
-            self.layer = layer
-            self.param = param
-            self.value = value
-
-    class AssignNode(Node):
-        """description"""
-        def __init__(self, layer, param, value, match=None):
-            self.layer = layer
-            self.param = param
-            self.value = value
-            self.match = match
-
-    class DependNode(Node):
-        """description"""
-        def __init__(self, layer, param, dep):
-            self.layer = layer
-            self.param = param
-            self.dep   = dep
-
-
     def __init__(self):
         self.by_order  = list()
         self.by_name   = dict()
         self.steps     = list()
 
-        self.dep_graph = Graph()
+        self.dep_graph = DependencyGraph()
         #the latest node added to the graph
         self.dep_current = None
 
@@ -259,12 +232,13 @@ class Registry:
                     self._output_layer(previous_step.target_layer)
 
             try:
-                step.execute()
+                step.execute(self.dep_graph)
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
 
         self._output_layer(self.steps[-1].target_layer)
+        self.dep_graph.write_dot()
 
     def _output_layer(self, layer, suffix):
         """ Must be implemented by derived classes.
@@ -886,7 +860,8 @@ class Map(Operation):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
+            param_value = self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj)
+            if param_value is not None:
                 continue
 
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
@@ -905,6 +880,13 @@ class Map(Operation):
 
             # update candidates for this parameter in layer object
             assert(candidates is not None)
+            if dep_graph is not None:
+                map_node = MapNode(self.source_layer, self.param, candidates, obj)
+                dep_graph.append_node(map_node)
+                #TODO: hinzufuegen
+                dep_node = DependNode(self.source_layer, self.param,
+                        param_value)
+
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
         return True
@@ -950,6 +932,11 @@ class Assign(Operation):
 
             result = self.analysis_engines[0].assign(obj, candidates)
             assert(result in candidates)
+
+            if dep_graph is not None:
+                if result is not None:
+                    assign_node = AssignNode(self.source_layer, self.param, obj, result)
+                    dep_graph.append_node(assign_node)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
@@ -1033,7 +1020,7 @@ class Check(Operation):
     def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for ae in self.analysis_engines:
@@ -1096,12 +1083,7 @@ class NodeStep(Step):
         """ For every operation, calls :func:`Operation.execute()` for every node in the layer.
         """
         for op in self.operations:
-            if isinstance(op, Map):
-                print('MAP OP')
-            if isinstance(op, Assign):
-                print('Assign OP')
-
-            if not op.execute(self.source_layer.graph.nodes()):
+            if not op.execute(self.source_layer.graph.nodes(), dep_graph):
                 raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                 return False
 
@@ -1114,12 +1096,7 @@ class EdgeStep(Step):
         """ For every operation, calls :func:`Operation.execute()` for every edge in the layer.
         """
         for op in self.operations:
-            if isinstance(op, Map):
-                print('MAP OP')
-            if isinstance(op, Assign):
-                print('Assign OP')
-
-            if not op.execute(self.source_layer.graph.edges()):
+            if not op.execute(self.source_layer.graph.edges(), dep_graph):
                 raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                 return False
 

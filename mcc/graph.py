@@ -110,3 +110,93 @@ class Graph:
 
     def nodes(self):
         return self.graph.node.keys()
+
+class Node():
+    """Represents a Node in the Dependency Graph"""
+    def __init__(self):
+        pass
+
+class MapNode(Node):
+    def __init__(self, layer, param, candidates, value):
+        self.layer = layer
+        self.param = param
+        self.value = value
+    def __str__(self):
+        return '{}, {}, {}'.format(self.layer, self.param, self.value)
+
+class AssignNode(Node):
+    """description"""
+    def __init__(self, layer, param, value, match=None):
+        self.layer = layer
+        self.param = param
+        self.value = value
+        self.match = match
+
+    def __str__(self):
+        return '{}, {}, {}, {}'.format(self.layer, self.param, self.value,
+                self.match)
+
+class DependNode(Node):
+    """description"""
+    def __init__(self, layer, param, dep):
+        self.layer = layer
+        self.param = param
+        self.dep   = dep
+
+    def __str__(self):
+        return '{}, {}, {}'.format(self.layer, self.param, dep)
+
+class DependencyGraph(Graph):
+    def __init__(self):
+        # the current node in the path
+        super().__init__()
+        self.current = None
+
+    def add_node(self, obj):
+        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode))
+
+        if isinstance(obj, DependNode):
+            super.add_node(obj)
+            return
+
+        self.current = obj
+        super().add_node(obj)
+
+    def append_node(self, node):
+        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode))
+
+        current = self.current
+        self.add_node(node)
+        # TODO: wie kann es sein, dass wir ohne das if 190-210 kanten zu None haben ?
+        if current is None:
+            return
+        edge = Edge(current, node)
+        self.add_edge(edge)
+
+    def write_dot(self):
+
+        with open('DependencyGraph.dot', 'w') as file:
+            file.write('digraph {\n')
+
+            nodes = [node for node in self.graph.nodes()]
+
+            for node in nodes:
+                if node is None:
+                    print('Node is none')
+                node_str = ''
+                if isinstance(node, MapNode):
+                    node_str = '"{0}" [label="{0}", shape=hexagon]\n'.format(nodes.index(node))
+                elif isinstance(node, AssignNode):
+                    node_str = '"{0}" [label="{0}", shape=circle]\n'.format(nodes.index(node))
+                elif isinstance(node, DependNode):
+                    node_str = '"{0}" [label="{0}", shape=triangle]\n'.format(nodes.index(node))
+
+                file.write(node_str)
+
+            for (source, target) in self.graph.edges():
+                edge = '{} -> {}\n'.format(nodes.index(source), nodes.index(target))
+                file.write(edge)
+
+                pass
+            file.write('}\n')
+
