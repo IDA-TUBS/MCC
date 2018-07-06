@@ -184,7 +184,7 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
-    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False):
+    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -248,7 +248,11 @@ class SimpleMcc(MccBase):
 
         if with_da:
             from mcc import extern
-            da_engine = extern.DependencyAnalysisEngine(model, model.by_order, outpath+'model.pickle', outpath+'query.xml', outpath+'result.xml')
+
+            if da_path is None:
+                da_path = outpath
+
+            da_engine = extern.DependencyAnalysisEngine(model, model.by_order, outpath+'model.pickle', outpath+'query.xml', da_path+'response.xml')
             da_step = NodeStep(BatchMap(da_engine))
             da_step.add_operation(BatchAssign(da_engine))
             model.add_step_unsafe(da_step)

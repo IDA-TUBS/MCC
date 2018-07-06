@@ -48,6 +48,3 @@ if __name__ == '__main__':
 
     mcc = lib.SimpleMcc(repo=cfg)
     mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath, with_da=args.dependency_analysis)
-#
-#    mcc = lib.ExternalMccTest(repo=cfg)
-#    mcc.run_test(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath)

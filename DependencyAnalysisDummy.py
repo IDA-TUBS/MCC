@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--modelfile', type=str, default="/tmp/testmodel.pickle")
 parser.add_argument('--queryfile', type=str, default="/tmp/testquery.xml")
-parser.add_argument('--resultfile', type=str, default="/tmp/testresult.xml")
+parser.add_argument('--responsefile', type=str, default="/tmp/testresponse.xml")
 
 args = parser.parse_args()
 
@@ -67,5 +67,5 @@ if __name__ == '__main__':
     # read query file
     query = QueryParser(args.queryfile)
 
-    # write result file
-    query.write_dummy_result(args.resultfile)
+    # write response file
+    query.write_dummy_result(args.responsefile)

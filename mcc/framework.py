@@ -635,7 +635,14 @@ class ExternalAnalysisEngine(AnalysisEngine):
     def _wait_for_file(self, filename):
         import os
         import time
+        if not os.path.exists(filename):
+            print("Waiting for file %s", filename)
         while not os.path.exists(filename):
+            time.sleep(1)
+
+        if os.path.getsize(filename) == 0:
+            print("Waiting for file %s not empty" % filename)
+        while os.path.getsize(filename) == 0:
             time.sleep(1)
 
     def _state_check_READY(self):
