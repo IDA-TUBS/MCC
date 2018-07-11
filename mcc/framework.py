@@ -23,10 +23,6 @@ class Registry:
         self.by_name   = dict()
         self.steps     = list()
 
-        self.dep_graph = DependencyGraph()
-        #the latest node added to the graph
-        self.dep_current = None
-
     @staticmethod
     def _same_layers(step1, step2):
         if step1 == None or step2 == None:
@@ -232,6 +228,39 @@ class Registry:
                     self._output_layer(previous_step.target_layer)
 
             try:
+                step.execute()
+            except Exception as ex:
+                self._output_layer(step.target_layer, suffix='-error')
+                raise(ex)
+
+        self._output_layer(self.steps[-1].target_layer)
+
+    def _output_layer(self, layer, suffix):
+        """ Must be implemented by derived classes.
+        """
+        logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
+        return
+
+
+class BacktrackRegistry(Registry):
+    def __init__(self):
+        super().__init__()
+        self.dep_graph = DependencyGraph()
+
+    def execute(self):
+        """ Executes the registered steps sequentially.
+        """
+
+        print()
+        for step in self.steps:
+
+            previous_step = self._previous_step(step)
+            if not Registry._same_layers(previous_step, step):
+                logging.info("Creating layer %s" % step.target_layer)
+                if previous_step is not None:
+                    self._output_layer(previous_step.target_layer)
+
+            try:
                 step.execute(self.dep_graph)
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
@@ -239,12 +268,6 @@ class Registry:
 
         self._output_layer(self.steps[-1].target_layer)
         self.dep_graph.write_dot()
-
-    def _output_layer(self, layer, suffix):
-        """ Must be implemented by derived classes.
-        """
-        logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
-        return
 
     def write_analysis_engine_dependency_graph(self):
         analysis_engines = set()
@@ -307,7 +330,6 @@ class Registry:
 
             file.write('}\n')
 
-
 class Layer:
     """ Implementation of a single layer in the cross-layer model.
     """
@@ -322,6 +344,7 @@ class Layer:
         self.graph = Graph()
         self.name = name
         self._nodetypes = nodetypes
+        self.used_params = set()
 
     def node_types(self):
         """
@@ -337,6 +360,9 @@ class Layer:
         """ Clears the layer.
         """
         self.graph = Graph()
+
+    def reset_tracking(self):
+        self.used_params = set()
 
     def _set_params(self, obj, params):
         for name, value in params.items():
@@ -422,6 +448,9 @@ class Layer:
 
         params = self._get_params(obj)
 
+        if param is not None:
+            self.used_params.add(param)
+
         if param in params:
             return params[param]['candidates']
         else:
@@ -498,6 +527,7 @@ class Layer:
             params[param] = { 'value' : None, 'candidates' : set() }
 
         params[param]['value'] = value
+
 
 class AnalysisEngine:
     """ Base class for analysis engines.
@@ -788,7 +818,7 @@ class Operation:
                 if issubclass(has, t):
                     found = True
                     break
-                
+
             if not found:
                 checked = False
                 break
@@ -883,12 +913,15 @@ class Map(Operation):
             if dep_graph is not None:
                 map_node = MapNode(self.source_layer, self.param, candidates, obj)
                 dep_graph.append_node(map_node)
-                #TODO: hinzufuegen
-                dep_node = DependNode(self.source_layer, self.param,
-                        param_value)
+
+                dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
+                dep_graph.add_node(dep_node)
+                edge = Edge(dep_node, map_node)
+                dep_graph.add_edge(edge)
 
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
+        self.source_layer.reset_tracking()
         return True
 
 class Assign(Operation):
@@ -933,10 +966,9 @@ class Assign(Operation):
             result = self.analysis_engines[0].assign(obj, candidates)
             assert(result in candidates)
 
-            if dep_graph is not None:
-                if result is not None:
-                    assign_node = AssignNode(self.source_layer, self.param, obj, result)
-                    dep_graph.append_node(assign_node)
+            if dep_graph is not None and result is not None:
+                assign_node = AssignNode(self.source_layer, self.param, obj, result)
+                dep_graph.append_node(assign_node)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 

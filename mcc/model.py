@@ -259,11 +259,11 @@ class SubsystemModel(PlatformModel, QueryModel):
             # here, we assume subsystems are connected via network
             return False, 'Nic', 'Network'
 
-class SystemModel(Registry):
+class SystemModel(BacktrackRegistry):
     """ Our cross-layer model.
     """
     def __init__(self, repo, platform, dotpath=None):
-        Registry.__init__(self)
+        super().__init__()
         self.add_layer(Layer('func_arch', nodetypes={Subsystem.Child}))
         self.add_layer(Layer('comm_arch', nodetypes={Subsystem.Child,Proxy}))
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))

@@ -138,10 +138,10 @@ class AssignNode(Node):
 
 class DependNode(Node):
     """description"""
-    def __init__(self, layer, param, dep):
-        self.layer = layer
-        self.param = param
-        self.dep   = dep
+    def __init__(self, layer, params, dep):
+        self.layer  = layer
+        self.params = params
+        self.dep    = dep
 
     def __str__(self):
         return '{}, {}, {}'.format(self.layer, self.param, dep)
@@ -156,7 +156,7 @@ class DependencyGraph(Graph):
         assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode))
 
         if isinstance(obj, DependNode):
-            super.add_node(obj)
+            super().add_node(obj)
             return
 
         self.current = obj
