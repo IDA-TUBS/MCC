@@ -265,9 +265,26 @@ class BacktrackRegistry(Registry):
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
+            except ConstraintNotStatisfied as cns:
+                # no config found try next
+                self._backtrack(self, cns.layer, cns.param, cns.obj)
+                head = _mark_subtree_as_bad(self, layer, param, obj)
+
+                self.reset()
+                self.execute()
+                return
 
         self._output_layer(self.steps[-1].target_layer)
         self.dep_graph.write_dot()
+
+    def _mark_subtree_as_bad(self, layer, param, obj):
+        for node in self.dep_graph.valid_nodes().reverse():
+            if not isinstance(node, AssignNode):
+                continue
+            if node.layer == layer and node.param == param and node.value == obj:
+                node.valid = False
+                self.dep_graph.mark_subtree_bad(node)
+                return node
 
     def write_analysis_engine_dependency_graph(self):
         analysis_engines = set()
@@ -345,6 +362,7 @@ class Layer:
         self.name = name
         self._nodetypes = nodetypes
         self.used_params = set()
+        self.tracking = False
 
     def node_types(self):
         """
@@ -361,7 +379,11 @@ class Layer:
         """
         self.graph = Graph()
 
-    def reset_tracking(self):
+    def start_tracking(self):
+        self.traking = True
+
+    def stop_tracking(self):
+        self.tracking = False
         self.used_params = set()
 
     def _set_params(self, obj, params):
@@ -448,7 +470,7 @@ class Layer:
 
         params = self._get_params(obj)
 
-        if param is not None:
+        if self.tracking and param is not None:
             self.used_params.add(param)
 
         if param in params:
@@ -898,6 +920,7 @@ class Map(Operation):
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
+            self.source_layer.start_tracking()
             for ae in self.analysis_engines:
 
                 if candidates is None:
@@ -919,9 +942,9 @@ class Map(Operation):
                 edge = Edge(dep_node, map_node)
                 dep_graph.add_edge(edge)
 
+            self.source_layer.stop_tracking()
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
-        self.source_layer.reset_tracking()
         return True
 
 class Assign(Operation):
@@ -949,7 +972,7 @@ class Assign(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dep_graph=None):
+    def execute(self, iterable, dep_graph):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -959,7 +982,36 @@ class Assign(Operation):
             if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
                 continue
 
+            current = dep_graph.current
+
+            # node valid -> just write the result into the layers
+            if isinstance(current, AssignNode) and current.layer == self.source_layer and self.param == current.param and obj == current.value:
+                self.source_layer.set_param_value(self.analysis_engines[0],
+                        self.param, obj, current.match)
+
+                dep_graph.set_next_legal_node()
+                continue
+            # check if current node has invalid out edges and check if match
+            # with the current object, if so pick a previous unused candidate
+            used_candidates = set()
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+
+            # candidates = set(candidates)
+
+            for edge in dep_graph.out_edges(current):
+                target = edge.target
+                if isinstance(target, AssignNode) and target.layer == self.source_layer and target.param and self.param and target.value == obj:
+                    used_candidates.add(target.match)
+                else:
+                    break
+
+            #TODO: fix me please, ServiceEngine, connection uses list instead of
+            # sets, result type is  a set :(
+            # maybe just check if self == ServiceEngine ?
+            if len(candidates) != 1:
+                candidates  = {*candidates[0]}
+                candidates -= used_candidates
+
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
 
@@ -1060,9 +1112,16 @@ class Check(Operation):
                 assert(self.check_source_type(obj))
 
                 if not ae.check(obj):
-                    return False
+                    raise ConstraintNotStatisfied(ae.layer, ae.param, obj)
 
         return True
+
+class ConstraintNotStatisfied(Exception):
+    def __init__(self, layer, param, obj):
+        super().__init__()
+        self.layer = layer
+        self.param = param
+        self.obj = obj
 
 class Step:
     """ Implements model transformation step.

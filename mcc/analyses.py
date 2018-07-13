@@ -181,7 +181,8 @@ class ServiceEngine(AnalysisEngine):
     def assign(self, obj, candidates):
         assert(isinstance(obj, Edge))
 
-        assert(len(candidates) == 1)
+        #TODO: is this important ?
+        # assert(len(candidates) == 1)
 
         return list(candidates)[0]
 
