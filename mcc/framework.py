@@ -1008,8 +1008,8 @@ class Assign(Operation):
             #TODO: fix me please, ServiceEngine, connection uses list instead of
             # sets, result type is  a set :(
             # maybe just check if self == ServiceEngine ?
-            if len(candidates) != 1:
-                candidates  = {*candidates[0]}
+            if self.analysis_engines[0].__class__.__name__ != 'ServiceEngine':
+                #candidates  = {*candidates[0]}
                 candidates -= used_candidates
 
             if len(candidates) == 0:
