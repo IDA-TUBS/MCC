@@ -184,6 +184,23 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
+    def insert_random_backtracking_engine(self, model, failure_rate=0.0):
+        assert(0 <= failure_rate <= 1.0)
+
+        from random import Random
+        rand = Random()
+
+        r = rand.randint(0, len(model.steps)-1)
+        source_layer = None
+
+        if r == 0:
+            source_layer = model.steps[0].source_layer
+
+        source_layer = model.steps[r-1].source_layer;
+        # target_layer = self.ste[r-1].target_layer;
+        bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate)
+        model.steps.insert(r, NodeStep(Check(bt, 'BackTrackingTest')))
+
     def search_config(self, subsystem_xml, xsd_file, args):
         """ Searches a system configuration for the given query.
 
@@ -238,6 +255,7 @@ class SimpleMcc(MccBase):
 
         # TODO implement backtracking
 
+        self.insert_random_backtracking_engine(model, 0.0)
         model.print_steps()
         model.write_dot('mcc.dot')
         model.execute()

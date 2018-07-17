@@ -121,11 +121,13 @@ class Node():
 
 class MapNode(Node):
     def __init__(self, layer, param, candidates, value):
-        self.layer = layer
-        self.param = param
-        self.value = value
+        self.layer      = layer
+        self.param      = param
+        self.value      = value
+        self.candidates = candidates
+
     def __str__(self):
-        return '{}, {}, {}'.format(self.layer, self.param, self.value)
+        return 'Layer={}, Param={}, value={}, candidates={}'.format(self.layer, self.param, self.value, self.candidates)
 
 class AssignNode(Node):
     """description"""
@@ -136,7 +138,7 @@ class AssignNode(Node):
         self.match = match
 
     def __str__(self):
-        return '{}, {}, {}, {}'.format(self.layer, self.param, self.value,
+        return 'Layer= {}, Param={}, value={}, match={}'.format(self.layer, self.param, self.value,
                 self.match)
 
 class DependNode(Node):
@@ -147,7 +149,7 @@ class DependNode(Node):
         self.dep    = dep
 
     def __str__(self):
-        return '{}, {}, {}'.format(self.layer, self.param, dep)
+        return 'Layer={}, Param={}, Dependencies={}'.format(self.layer, self.param, dep)
 
 class DependencyGraph(Graph):
     def __init__(self):
@@ -176,12 +178,12 @@ class DependencyGraph(Graph):
                 current = t
                 return
 
-
     def append_node(self, node):
         assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode))
 
         current = self.current
         self.add_node(node)
+
         # TODO: wie kann es sein, dass wir ohne das if 190-210 kanten zu None haben ?
         if current is None:
             return
@@ -198,7 +200,7 @@ class DependencyGraph(Graph):
                     return node
         return None
 
-    def mark_subtree_bad(self, node):
+    def mark_subtree_as_bad(self, node):
         for (s, t, e) in self.graph.out_edges(node, keys=True):
             t.valid = False
             self.mark_subtree_bad(t)

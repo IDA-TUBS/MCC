@@ -181,8 +181,7 @@ class ServiceEngine(AnalysisEngine):
     def assign(self, obj, candidates):
         assert(isinstance(obj, Edge))
 
-        #TODO: is this important ?
-        # assert(len(candidates) == 1)
+        assert(len(candidates) == 1)
 
         return list(candidates)[0]
 
@@ -605,3 +604,23 @@ class GenodeSubsystemEngine(AnalysisEngine):
 
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
+
+class BacktrackingTestEngine(AnalysisEngine):
+    def __init__(self, layer, param, failure_rate=0.0):
+        super().__init__(layer, param)
+
+        assert(0.0 <= failure_rate <= 1.0)
+        self.failre_rate = failure_rate
+
+        from random import Random
+        self.random = Random()
+
+    def check(self, obj):
+        r = self.random.random()
+        if r < self.failre_rate:
+            return False
+
+        return True
+
+    def node_types(self):
+        return []

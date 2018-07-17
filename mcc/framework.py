@@ -88,6 +88,9 @@ class Registry:
 
         self.steps.append(step)
 
+    def add_testing_step(self, step):
+        self.steps.append(step)
+
     def write_dot(self, filename):
         """ Produces a DOT file illustrating the registered steps and layers.
         """
@@ -267,8 +270,22 @@ class BacktrackRegistry(Registry):
                 raise(ex)
             except ConstraintNotStatisfied as cns:
                 # no config found try next
-                self._backtrack(self, cns.layer, cns.param, cns.obj)
                 head = _mark_subtree_as_bad(self, layer, param, obj)
+                #TODO: check if head->prev has candidates
+                map_node = self.dep_graph.find_map_node_from_assign_node(head)
+                # can't have a assign without map
+                assert(map_node is not None) 
+                candidates = map_node.candidates
+
+                prev = self.dep_graph.in_edges(head)[0]
+                # get all candidates
+                used_candidates = set()
+                for node in self.dep_graph.out_edges(prev):
+                    used_candidates.add(node.match)
+
+                if candidates == used_candidates:
+                    prev.valid = False
+                    self.dep_graph.mark_subtree_as_bad(prev)
 
                 self.reset()
                 self.execute()
@@ -277,13 +294,15 @@ class BacktrackRegistry(Registry):
         self._output_layer(self.steps[-1].target_layer)
         self.dep_graph.write_dot()
 
-    def _mark_subtree_as_bad(self, layer, param, obj):
+    def _mark_subtree_as_bad(self, layer, param, culprit):
+        # look for the last assign node that assings the culprit
         for node in self.dep_graph.valid_nodes().reverse():
             if not isinstance(node, AssignNode):
                 continue
-            if node.layer == layer and node.param == param and node.value == obj:
+
+            if node.value == culprit:
                 node.valid = False
-                self.dep_graph.mark_subtree_bad(node)
+                self.dep_graph.mark_subtree_as_bad(node)
                 return node
 
     def write_analysis_engine_dependency_graph(self):
@@ -358,11 +377,11 @@ class Layer:
             :param nodetypes: (optional) Possible node types (base classes).
             :type  nodetypes: set
         """
-        self.graph = Graph()
-        self.name = name
-        self._nodetypes = nodetypes
+        self.graph       = Graph()
+        self.name        = name
+        self._nodetypes  = nodetypes
         self.used_params = set()
-        self.tracking = False
+        self.tracking    = False
 
     def node_types(self):
         """
@@ -573,6 +592,7 @@ class AnalysisEngine:
         self.layer = layer
         self.param = param
         self.name = name
+
         if self.name is None:
             self.name = type(self).__name__
 
@@ -916,6 +936,16 @@ class Map(Operation):
             if param_value is not None:
                 continue
 
+            # check if we can reuse the dep_graph node results
+            if dep_graph is not None and isinstance(dep_graph, MapNode):
+                if dep_graph.current.layer == self.source_layer and dep_graph.current.param == self.param and dep_graph.current.obj == obj: 
+
+                    self.source_layer.set_param_candidates(self.analysis_engines[0],
+                            self.param, obj, node.candidates)
+
+                    dep_graph.set_next_legal_node()
+                    continue
+
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
@@ -972,7 +1002,7 @@ class Assign(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dep_graph):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -985,7 +1015,10 @@ class Assign(Operation):
             current = dep_graph.current
 
             # node valid -> just write the result into the layers
-            if isinstance(current, AssignNode) and current.layer == self.source_layer and self.param == current.param and obj == current.value:
+            if isinstance(current, AssignNode) \
+                    and current.layer == self.source_layer \
+                    and self.param == current.param \
+                    and obj == current.value:
                 self.source_layer.set_param_value(self.analysis_engines[0],
                         self.param, obj, current.match)
 
@@ -998,9 +1031,14 @@ class Assign(Operation):
 
             # candidates = set(candidates)
 
+            # check if we already made it to this point
+            # and if so remember used candidates
             for edge in dep_graph.out_edges(current):
                 target = edge.target
-                if isinstance(target, AssignNode) and target.layer == self.source_layer and target.param and self.param and target.value == obj:
+                if isinstance(target, AssignNode) \
+                        and target.layer == self.source_layer \
+                        and target.param and self.param \
+                        and target.value == obj:
                     used_candidates.add(target.match)
                 else:
                     break
@@ -1011,6 +1049,9 @@ class Assign(Operation):
             if self.analysis_engines[0].__class__.__name__ != 'ServiceEngine':
                 #candidates  = {*candidates[0]}
                 candidates -= used_candidates
+
+                if len(candidates) > 0 and len(candidates) == len(used_candidates):
+                    raise ConstraintNotStatisfied(self.source_layer, self.param, obj)
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
@@ -1089,7 +1130,7 @@ class Transform(Operation):
                     if not isinstance(o, self.target_layer.node_types()):
                         print(type(o))
                         print(self.target_layer.node_types())
-                            
+
                     assert(isinstance(o, self.target_layer.node_types()))
 
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
