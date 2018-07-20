@@ -236,12 +236,18 @@ class DependencyGraph(Graph):
                 if node is None:
                     print('Node is none')
                 node_str = ''
+                not_valid = ']\n'
+
+                if not node.valid:
+                    not_valid = ', colorscheme=set39,fillcolor=5, style=filled]\n'
                 if isinstance(node, MapNode):
-                    node_str = '"{0}" [label="{0}", shape=hexagon]\n'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{0}", shape=hexagon'.format(nodes.index(node))
                 elif isinstance(node, AssignNode):
-                    node_str = '"{0}" [label="{0}", shape=circle]\n'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{0}", shape=circle'.format(nodes.index(node))
                 elif isinstance(node, DependNode):
-                    node_str = '"{0}" [label="{0}", shape=triangle]\n'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{0}", shape=triangle'.format(nodes.index(node))
+
+                node_str += not_valid
 
                 file.write(node_str)
 
