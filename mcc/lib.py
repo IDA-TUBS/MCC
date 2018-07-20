@@ -255,7 +255,7 @@ class SimpleMcc(MccBase):
 
         # TODO implement backtracking
 
-        self.insert_random_backtracking_engine(model, 0.0)
+        self.insert_random_backtracking_engine(model, 0.10)
         model.print_steps()
         model.write_dot('mcc.dot')
         model.execute()

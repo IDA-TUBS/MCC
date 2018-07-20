@@ -111,8 +111,6 @@ class Graph:
     def nodes(self):
         return self.graph.node.keys()
 
-    def valid_nodes(self):
-        return self.nodes().filter(lambda x: x.valid)
 
 class Node():
     """Represents a Node in the Dependency Graph"""
@@ -121,6 +119,7 @@ class Node():
 
 class MapNode(Node):
     def __init__(self, layer, param, candidates, value):
+        super().__init__()
         self.layer      = layer
         self.param      = param
         self.value      = value
@@ -132,6 +131,7 @@ class MapNode(Node):
 class AssignNode(Node):
     """description"""
     def __init__(self, layer, param, value, match=None):
+        super().__init__()
         self.layer = layer
         self.param = param
         self.value = value
@@ -144,6 +144,7 @@ class AssignNode(Node):
 class DependNode(Node):
     """description"""
     def __init__(self, layer, params, dep):
+        super().__init__()
         self.layer  = layer
         self.params = params
         self.dep    = dep
@@ -156,6 +157,7 @@ class DependencyGraph(Graph):
         # the current node in the path
         super().__init__()
         self.current = None
+        self.root = None
 
     def add_node(self, obj):
         assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode))
@@ -164,17 +166,34 @@ class DependencyGraph(Graph):
             super().add_node(obj)
             return
 
+        if self.root is None:
+            self.root = obj
+
         self.current = obj
         super().add_node(obj)
 
-    def next_legal_node(self):
-        for node in self.graph.out_edges(self.current):
-            if isinstance(node, DependNode):
-                continue
+    # def next_legal_node(self):
+        # for node in self.out_edges(self.current):
+            # if isinstance(node, DependNode):
+                # continue
+            # if node.target.valid:
+                # current = node.target
+                # return
+
+    def valid_nodes(self):
+        nodes = []
+        for node in self.nodes():
+            if node.valid:
+                nodes.append(node)
+        return nodes
+
+    def reset_head(self):
+        self.current = self.root
 
     def set_next_legal_node(self):
         for (s, t, e) in self.graph.out_edges(current, keys=True):
-            if t.valid:
+            #TODO: DependNode an Option ?
+            if t.valid and not isinstance(t, DependNode):
                 current = t
                 return
 
@@ -191,11 +210,11 @@ class DependencyGraph(Graph):
         self.add_edge(edge)
 
     def find_map_node_from_assign_node(self, anode):
-        for node in self.dep_graph.nodes():
+        for node in self.nodes():
             if not isinstance(node, MapNode) or not node.valid:
                 continue
 
-            if node.layer == bnode.layer and node.param == bnode.param and node.obj == bnode.obj:
+            if node.layer == anode.layer and node.param == anode.param and node.value == anode.value:
                 if node.valid:
                     return node
         return None
@@ -203,7 +222,7 @@ class DependencyGraph(Graph):
     def mark_subtree_as_bad(self, node):
         for (s, t, e) in self.graph.out_edges(node, keys=True):
             t.valid = False
-            self.mark_subtree_bad(t)
+            self.mark_subtree_as_bad(t)
 
 
     def write_dot(self):
