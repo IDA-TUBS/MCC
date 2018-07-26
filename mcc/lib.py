@@ -190,11 +190,19 @@ class SimpleMcc(MccBase):
         from random import Random
         rand = Random()
 
-        r = rand.randint(0, len(model.steps)-1)
         source_layer = None
+        r = 0
+        rand_found = False
+        while not rand_found:
+            r = rand.randint(1, len(model.steps)-1)
 
-        if r == 0:
-            source_layer = model.steps[0].source_layer
+            print(model.steps)
+            for op in model.steps[r].operations:
+                if isinstance(op, Assign):
+                    r += 1
+                    rand_found = True
+                    break;
+
 
         source_layer = model.steps[r-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
@@ -255,7 +263,7 @@ class SimpleMcc(MccBase):
 
         # TODO implement backtracking
 
-        self.insert_random_backtracking_engine(model, 0.10)
+        self.insert_random_backtracking_engine(model, 0.05)
         model.print_steps()
         model.write_dot('mcc.dot')
         model.execute()

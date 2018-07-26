@@ -255,14 +255,8 @@ class BacktrackRegistry(Registry):
         """ Executes the registered steps sequentially.
         """
 
-        
-        import copy
-        steps_copy = copy.deepcopy(self.steps)
         while not self._backtrack_execute():
-            self.backtracking_try += 1
-            self.steps = copy.deepcopy(steps_copy)
-            if self.backtracking_try > 2:
-                break
+            pass
 
         self._output_layer(self.steps[-1].target_layer)
         self.dep_graph.write_dot()
@@ -270,8 +264,16 @@ class BacktrackRegistry(Registry):
     def _backtrack_execute(self):
         print()
 
+        self.backtracking_try += 1
+
         print('Try: {}'.format(self.backtracking_try))
-        for step in self.steps:
+
+        last_step = 0
+        if self.dep_graph.current is not None:
+            last_step = self.dep_graph.last_step_index
+
+        print('Last step {}'.format(last_step))
+        for step in self.steps[last_step:]:
 
             previous_step = self._previous_step(step)
             if not Registry._same_layers(previous_step, step):
@@ -280,40 +282,89 @@ class BacktrackRegistry(Registry):
                     self._output_layer(previous_step.target_layer)
 
             try:
-                step.execute(self.dep_graph, self.backtracking_try)
+                step.execute(self.dep_graph)
+
             except ConstraintNotStatisfied as cns:
-                # no config found try next
-                head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
+                print()
                 print('{} failed:'.format(cns.obj))
-                #TODO: check if head->prev has candidates
-                # map_node = self.dep_graph.find_map_node_from_assign_node(head)
-                # # can't have a assign without map
-                # assert(map_node is not None) 
-                # candidates = map_node.candidates
+                print()
 
-                #TODO: dependNode ?
-                # prev = list(self.dep_graph.in_edges(head))[0]
-                # prev = prev.source
+                #TODO: noch operationen überspringen
+                step_index = self.steps.index(step)
+                op_index   = cns.op_index
+                current    = self.dep_graph.current
 
-                #TODO: traverse back further to avoid unnecessacry tries
-                # get all candidates
-                # used_candidates = set()
-                # for node in self.dep_graph.out_edges(prev):
-                    # used_candidates.add(node.target.match)
+                self.dep_graph.last_step_index = step_index
+                self.dep_graph.last_step = step
+                self.dep_graph.last_step_index = self.steps.index(step)
 
-                # if candidates == used_candidates:
-                    # prev.valid = False
-                    # self.dep_graph.mark_subtree_as_bad(prev)
+                head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
+                if head is None:
+                    current = self.dep_graph.current
+                    head = self._get_last_valid_assign(current)
+                    if head is None:
+                        raise Exception('No config could be found')
 
-                self.reset()
-                self.dep_graph.reset_head()
+                    self._mark_subtree_as_bad(head.layer, head.param, head.value)
 
+                self._revert_subtree(head, current)
+
+                # reset the pointer at the dependency tree that points to the
+                # leaf in the current path
+                self.dep_graph.current = head
                 return False
 
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
         return True
+
+    def _get_last_valid_assign(self, start):
+        for edge in self.dep_graph.in_edges(start):
+            if edge.source.valid:
+                if not isinstance(edge.source, AssignNode):
+                    return self._get_last_valid_assign(edge.source)
+
+                used_candidates = self.dep_graph.get_used_candidatens(edge.source)
+
+                params = edge.source.layer._get_params(start.value)
+                candidates = params[edge.source.param]['candidates']
+
+                if candidates == used_candidates:
+                    return self._get_last_valid_assign(edge.source)
+
+                return edge.source
+
+        return None
+
+    def _revert_subtree(self, start, end):
+        if isinstance(start, AssignNode) and start.layer == end.layer and start.param == end.param and start.value == end.value:
+            return
+        if start is None:
+            return
+
+        #TODO: should we delete the param ?
+        if isinstance(start, AssignNode):
+            node = start
+            node.layer._set_param_value(node.param, node.value, None) # oder set() ?
+        elif isinstance(start, MapNode):
+            node = start
+            node.layer._set_param_candidates(node.param, node.value, set())
+        elif isinstance(start, Transform):
+            node = start
+            node.source_layer._set_param_value(node.target_layer.name, node.value, set())
+
+            for o in node.inserted:
+                node.target_layer._set_param_value(node.source_layer.name, o, None)
+
+        next_node = None
+        for edge in self.dep_graph.in_edges(start):
+            if isinstance(edge.source, DependNode) or not edge.source.valid:
+                continue
+            next_node = edge.source
+            break
+
+        self._revert_subtree(next_node, end)
 
     def _mark_subtree_as_bad(self, layer, param, culprit):
         # look for the last assign node that assings the culprit
@@ -326,6 +377,8 @@ class BacktrackRegistry(Registry):
                 node.valid = False
                 self.dep_graph.mark_subtree_as_bad(node)
                 return node
+
+        return None
 
     def write_analysis_engine_dependency_graph(self):
         analysis_engines = set()
@@ -924,7 +977,7 @@ class Operation:
 
         return True
 
-    def execute(self, iterable, dep_graph=None, backtracking_try=1):
+    def execute(self, iterable, dep_graph=None):
         raise NotImplementedError()
 
     def __repr__(self):
@@ -947,7 +1000,7 @@ class Map(Operation):
         """
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable, dep_graph=None, backtracking_try = 0):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -959,11 +1012,6 @@ class Map(Operation):
                 continue
 
             # check if we can resue old results
-            if backtracking_try > 0:
-                current = dep_graph.current
-                print('Dep    : Layer {}, Param {}, Obj {}'.format(current.layer, current.param, current.value))
-                print('Current: Layer {}, Param {}, Obj {}'.format(self.source_layer, self.param, obj))
-                print()
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
@@ -982,7 +1030,7 @@ class Map(Operation):
             # update candidates for this parameter in layer object
             assert(candidates is not None)
             if dep_graph is not None:
-                map_node = MapNode(self.source_layer, self.param, candidates, obj)
+                map_node = MapNode(self.source_layer, self.param, obj, candidates)
                 dep_graph.append_node(map_node)
 
                 dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
@@ -1020,7 +1068,7 @@ class Assign(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dep_graph=None, backtracking_try=0):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -1030,47 +1078,7 @@ class Assign(Operation):
             if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
                 continue
 
-
-            # node valid -> just write the result into the layers
-            if backtracking_try > 0:
-                current = dep_graph.current
-                if isinstance(current, AssignNode) \
-                        and current.layer == self.source_layer \
-                        and self.param == current.param \
-                        and obj == current.value:
-                    self.source_layer.set_param_value(self.analysis_engines[0],
-                            self.param, obj, current.match)
-
-                    dep_graph.set_next_legal_node()
-                    continue
-            # check if current node has invalid out edges and check if match
-            # with the current object, if so pick a previous unused candidate
-            used_candidates = set()
             candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-
-            # candidates = set(candidates)
-
-            # check if we already made it to this point
-            # and if so remember used candidates
-            # for edge in dep_graph.out_edges(current):
-                # target = edge.target
-                # if isinstance(target, AssignNode) \
-                        # and target.layer == self.source_layer \
-                        # and target.param and self.param \
-                        # and target.value == obj:
-                    # used_candidates.add(target.match)
-                # else:
-                    # break
-
-            #TODO: fix me please, ServiceEngine, connection uses list instead of
-            # sets, result type is  a set :(
-            # maybe just check if self == ServiceEngine ?
-            if self.analysis_engines[0].__class__.__name__ != 'ServiceEngine':
-                #candidates  = {*candidates[0]}
-                candidates -= used_candidates
-
-                if len(candidates) > 0 and len(candidates) == len(used_candidates):
-                    raise ConstraintNotStatisfied(self.source_layer, self.param, obj)
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
@@ -1078,7 +1086,7 @@ class Assign(Operation):
             result = self.analysis_engines[0].assign(obj, candidates)
             assert(result in candidates)
 
-            if dep_graph is not None and result is not None:
+            if dep_graph is not None:
                 assign_node = AssignNode(self.source_layer, self.param, obj, result)
                 dep_graph.append_node(assign_node)
 
@@ -1134,7 +1142,7 @@ class Transform(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dep_graph=None, backtracking_try=1):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for obj in iterable:
@@ -1152,6 +1160,9 @@ class Transform(Operation):
 
                     assert(isinstance(o, self.target_layer.node_types()))
 
+            if dep_graph is not None:
+                dep_graph.append_node(TransformNode(self.source_layer, self.target_layer, obj, inserted))
+
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
                 self.target_layer._set_param_value(self.source_layer.name, o, obj)
@@ -1164,7 +1175,7 @@ class Check(Operation):
     def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable, dep_graph=None, backtracking_try=1):
+    def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
         for ae in self.analysis_engines:
@@ -1177,11 +1188,12 @@ class Check(Operation):
         return True
 
 class ConstraintNotStatisfied(Exception):
-    def __init__(self, layer, param, obj):
+    def __init__(self, layer, param, obj, op_index=0):
         super().__init__()
-        self.layer = layer
-        self.param = param
-        self.obj = obj
+        self.layer    = layer
+        self.param    = param
+        self.obj      = obj
+        self.op_index = op_index
 
 class Step:
     """ Implements model transformation step.
@@ -1219,7 +1231,7 @@ class Step:
     def __repr__(self):
         return type(self).__name__ + ': \n    ' + '\n    '.join([str(op) for op in self.operations])
 
-    def execute(self, dep_graph=None, backtracking_try=1):
+    def execute(self, dep_graph=None):
         """ Must be implemented by derived classes.
 
         Raises:
@@ -1230,26 +1242,50 @@ class Step:
 class NodeStep(Step):
     """ Implements model transformation step on nodes.
     """
-    def execute(self, dep_graph=None, backtracking_try=1):
+    def execute(self, dep_graph=None):
         """ For every operation, calls :func:`Operation.execute()` for every node in the layer.
         """
-        for op in self.operations:
-            if not op.execute(self.source_layer.graph.nodes(), dep_graph, backtracking_try):
-                raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
-                return False
+        last_index = 0
+        if dep_graph is not None:
+            current = dep_graph.current
+            if dep_graph.last_step == self:
+                last_index = dep_graph.last_op_index
+
+        for op in self.operations[last_index:]:
+            try:
+                dep_graph.set_operation_index(self.operations.index(op))
+                if not op.execute(self.source_layer.graph.nodes(), dep_graph):
+                    raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
+                    return False
+            except ConstraintNotStatisfied as cns:
+                cns.op_index = self.operations.index(op)
+                cns.last_step = self
+                raise cns
 
         return True
 
 class EdgeStep(Step):
     """ Implements model transformation step on edges.
     """
-    def execute(self, dep_graph=None, backtracking_try=1):
+    def execute(self, dep_graph=None):
         """ For every operation, calls :func:`Operation.execute()` for every edge in the layer.
         """
-        for op in self.operations:
-            if not op.execute(self.source_layer.graph.edges(), dep_graph, backtracking_try):
-                raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
-                return False
+        last_index = 0
+        if dep_graph is not None:
+            current = dep_graph.current
+            if dep_graph.last_step == self:
+                last_index = dep_graph.last_op_index
+
+        for op in self.operations[last_index:]:
+            try:
+                dep_graph.set_operation_index(self.operations.index(op))
+                if not op.execute(self.source_layer.graph.edges(), dep_graph):
+                    raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
+                    return False
+            except ConstraintNotStatisfied as cns:
+                cns.op_index = self.operations.index(op)
+                cns.last_step = self
+                raise cns
 
         return True
 

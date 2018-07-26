@@ -118,7 +118,7 @@ class Node():
         self.valid = True
 
 class MapNode(Node):
-    def __init__(self, layer, param, candidates, value):
+    def __init__(self, layer, param, value, candidates):
         super().__init__()
         self.layer      = layer
         self.param      = param
@@ -130,7 +130,7 @@ class MapNode(Node):
 
 class AssignNode(Node):
     """description"""
-    def __init__(self, layer, param, value, match=None):
+    def __init__(self, layer, param, value, match):
         super().__init__()
         self.layer = layer
         self.param = param
@@ -138,8 +138,7 @@ class AssignNode(Node):
         self.match = match
 
     def __str__(self):
-        return 'Layer= {}, Param={}, value={}, match={}'.format(self.layer, self.param, self.value,
-                self.match)
+        return 'Layer= {}, Params={}, value={}, match={}'.format(self.layer, self.param, self.value, self.match)
 
 class DependNode(Node):
     """description"""
@@ -150,17 +149,34 @@ class DependNode(Node):
         self.dep    = dep
 
     def __str__(self):
-        return 'Layer={}, Param={}, Dependencies={}'.format(self.layer, self.param, dep)
+        return 'Layer={}, Params={}, Dependencies={}'.format(self.layer, self.params, self.dep)
+
+class TransformNode(Node):
+    def __init__(self, source_layer, target_layer, value, inserted):
+        super().__init__()
+        self.source_layer = source_layer
+        self.target_layer = target_layer
+        self.value        = value
+        self.inserted     = inserted
+
+        # self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
+        # for o in inserted:
+            # self.target_layer._set_param_value(self.source_layer.name, o, obj)
+        def __str__(self):
+            return 'source_layer {}, Target_layer {}, value {}, inserted {}'.format(self.source_layer, self.target_layer, self.value, self.inserted)
 
 class DependencyGraph(Graph):
     def __init__(self):
         # the current node in the path
         super().__init__()
-        self.current = None
-        self.root = None
+        self.current         = None
+        self.root            = None
+        self.last_op_index   = 0
+        self.last_step_index = 0
+        self.last_step       = None
 
     def add_node(self, obj):
-        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode))
+        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode) or isinstance(obj, TransformNode))
 
         if isinstance(obj, DependNode):
             super().add_node(obj)
@@ -171,6 +187,9 @@ class DependencyGraph(Graph):
 
         self.current = obj
         super().add_node(obj)
+
+    def set_operation_index(self, operation_index):
+        self.operation_index = operation_index
 
     # def next_legal_node(self):
         # for node in self.out_edges(self.current):
@@ -192,13 +211,28 @@ class DependencyGraph(Graph):
 
     def set_next_legal_node(self):
         for (s, t, e) in self.graph.out_edges(current, keys=True):
-            #TODO: DependNode an Option ?
             if t.valid and not isinstance(t, DependNode):
                 current = t
                 return
 
+    def get_used_candidatens(self, anode):
+        aprev = None
+        for edge in self.in_edges(anode):
+            if edge.source.valid:
+                aprev = edge.source
+                break
+
+        used_candidates = set()
+
+        for edge in self.out_edges(aprev):
+            if not isinstance(edge.source, AssignNode):
+                continue
+            used_candidates.add(edge.source.match)
+
+        return used_candidates
+
     def append_node(self, node):
-        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode))
+        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode) or isinstance(node, TransformNode))
 
         current = self.current
         self.add_node(node)
@@ -241,11 +275,13 @@ class DependencyGraph(Graph):
                 if not node.valid:
                     not_valid = ', colorscheme=set39,fillcolor=5, style=filled]\n'
                 if isinstance(node, MapNode):
-                    node_str = '"{0}" [label="{0}", shape=hexagon'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=hexagon'.format(nodes.index(node), nodes.index(node))
                 elif isinstance(node, AssignNode):
-                    node_str = '"{0}" [label="{0}", shape=circle'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=circle'.format(nodes.index(node), nodes.index(node))
                 elif isinstance(node, DependNode):
-                    node_str = '"{0}" [label="{0}", shape=triangle'.format(nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=triangle'.format(nodes.index(node), nodes.index(node))
+                elif isinstance(node, TransformNode):
+                    node_str = '"{0}" [label="{1}", shape=egg'.format(nodes.index(node), nodes.index(node))
 
                 node_str += not_valid
 
