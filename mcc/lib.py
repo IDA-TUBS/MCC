@@ -206,7 +206,7 @@ class SimpleMcc(MccBase):
 
         source_layer = model.steps[r-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate)
+        bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate, fail_once=True)
         model.steps.insert(r, NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, subsystem_xml, xsd_file, args):

@@ -606,7 +606,7 @@ class GenodeSubsystemEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
 
 class BacktrackingTestEngine(AnalysisEngine):
-    def __init__(self, layer, param, failure_rate=0.0):
+    def __init__(self, layer, param, failure_rate=0.0, fail_once=False):
         super().__init__(layer, param)
 
         assert(0.0 <= failure_rate <= 1.0)
@@ -614,10 +614,17 @@ class BacktrackingTestEngine(AnalysisEngine):
 
         from random import Random
         self.random = Random()
+        self.fail_once = fail_once
+        self.failed = False
 
     def check(self, obj):
+        if self.failed:
+            return True
+
         r = self.random.random()
         if r < self.failre_rate:
+            if self.fail_once:
+                self.failed = True
             return False
 
         return True

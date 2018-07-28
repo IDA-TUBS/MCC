@@ -116,6 +116,8 @@ class Node():
     """Represents a Node in the Dependency Graph"""
     def __init__(self):
         self.valid = True
+        self.step_index = 0
+        self.operation_index = 0
 
 class MapNode(Node):
     def __init__(self, layer, param, value, candidates):
@@ -171,9 +173,11 @@ class DependencyGraph(Graph):
         super().__init__()
         self.current         = None
         self.root            = None
-        self.last_op_index   = 0
-        self.last_step_index = 0
-        self.last_step       = None
+
+        self.last_operation_index = 0
+        self.last_operation       = None
+        self.last_step_index      = 0
+        self.last_step            = None
 
     def add_node(self, obj):
         assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode) or isinstance(obj, TransformNode))
@@ -189,15 +193,13 @@ class DependencyGraph(Graph):
         super().add_node(obj)
 
     def set_operation_index(self, operation_index):
-        self.operation_index = operation_index
+        self.last_operation_index = operation_index
 
-    # def next_legal_node(self):
-        # for node in self.out_edges(self.current):
-            # if isinstance(node, DependNode):
-                # continue
-            # if node.target.valid:
-                # current = node.target
-                # return
+    def set_step_index(self, step_index):
+        self.last_step_index = step_index
+
+    def set_step(self, step):
+        self.last_step = step
 
     def valid_nodes(self):
         nodes = []
@@ -234,7 +236,10 @@ class DependencyGraph(Graph):
     def append_node(self, node):
         assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode) or isinstance(node, TransformNode))
 
-        current = self.current
+        current              = self.current
+        node.step_index      = self.last_step_index
+        node.operation_index = self.last_operation_index
+
         self.add_node(node)
 
         # TODO: wie kann es sein, dass wir ohne das if 190-210 kanten zu None haben ?

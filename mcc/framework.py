@@ -269,7 +269,7 @@ class BacktrackRegistry(Registry):
         print('Try: {}'.format(self.backtracking_try))
 
         last_step = 0
-        if self.dep_graph.current is not None:
+        if self.backtracking_try > 1:
             last_step = self.dep_graph.last_step_index
 
         print('Last step {}'.format(last_step))
@@ -282,6 +282,7 @@ class BacktrackRegistry(Registry):
                     self._output_layer(previous_step.target_layer)
 
             try:
+                self.dep_graph.set_step_index(self.steps.index(step))
                 step.execute(self.dep_graph)
 
             except ConstraintNotStatisfied as cns:
@@ -289,14 +290,7 @@ class BacktrackRegistry(Registry):
                 print('{} failed:'.format(cns.obj))
                 print()
 
-                #TODO: noch operationen überspringen
-                step_index = self.steps.index(step)
-                op_index   = cns.op_index
                 current    = self.dep_graph.current
-
-                self.dep_graph.last_step_index = step_index
-                self.dep_graph.last_step = step
-                self.dep_graph.last_step_index = self.steps.index(step)
 
                 head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
                 if head is None:
@@ -308,6 +302,8 @@ class BacktrackRegistry(Registry):
                     self._mark_subtree_as_bad(head.layer, head.param, head.value)
 
                 self._revert_subtree(head, current)
+                self.dep_graph.set_operation_index(head.operation_index)
+                self.dep_graph.set_step_index(head.step_index)
 
                 # reset the pointer at the dependency tree that points to the
                 # leaf in the current path
@@ -1188,12 +1184,11 @@ class Check(Operation):
         return True
 
 class ConstraintNotStatisfied(Exception):
-    def __init__(self, layer, param, obj, op_index=0):
+    def __init__(self, layer, param, obj):
         super().__init__()
         self.layer    = layer
         self.param    = param
         self.obj      = obj
-        self.op_index = op_index
 
 class Step:
     """ Implements model transformation step.
@@ -1247,19 +1242,19 @@ class NodeStep(Step):
         """
         last_index = 0
         if dep_graph is not None:
-            current = dep_graph.current
             if dep_graph.last_step == self:
-                last_index = dep_graph.last_op_index
+                last_index = dep_graph.last_operation_index
 
         for op in self.operations[last_index:]:
             try:
-                dep_graph.set_operation_index(self.operations.index(op))
+                if dep_graph is not None:
+                    dep_graph.set_operation_index(self.operations.index(op))
+                    dep_graph.set_step(self)
+
                 if not op.execute(self.source_layer.graph.nodes(), dep_graph):
                     raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                     return False
             except ConstraintNotStatisfied as cns:
-                cns.op_index = self.operations.index(op)
-                cns.last_step = self
                 raise cns
 
         return True
@@ -1274,17 +1269,16 @@ class EdgeStep(Step):
         if dep_graph is not None:
             current = dep_graph.current
             if dep_graph.last_step == self:
-                last_index = dep_graph.last_op_index
+                last_index = dep_graph.last_operation_index
 
         for op in self.operations[last_index:]:
             try:
                 dep_graph.set_operation_index(self.operations.index(op))
+
                 if not op.execute(self.source_layer.graph.edges(), dep_graph):
                     raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                     return False
             except ConstraintNotStatisfied as cns:
-                cns.op_index = self.operations.index(op)
-                cns.last_step = self
                 raise cns
 
         return True
