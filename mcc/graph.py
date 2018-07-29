@@ -115,11 +115,15 @@ class Graph:
 class Node():
     """Represents a Node in the Dependency Graph"""
     def __init__(self):
-        self.valid = True
-        self.step_index = 0
+        self.valid           = True
+        self.step_index      = 0
         self.operation_index = 0
+        self.attribute_index = 0
+        self.operation       = None
+
 
 class MapNode(Node):
+    """Represents a Map Operation in the Dependency Graph"""
     def __init__(self, layer, param, value, candidates):
         super().__init__()
         self.layer      = layer
@@ -128,10 +132,10 @@ class MapNode(Node):
         self.candidates = candidates
 
     def __str__(self):
-        return 'Layer={}, Param={}, value={}, candidates={}'.format(self.layer, self.param, self.value, self.candidates)
+        return 'MapNode: Layer={}\n, Param={}\n, value={}\n, candidates={}\n'.format(self.layer, self.param, self.value, self.candidates)
 
 class AssignNode(Node):
-    """description"""
+    """Represents an Assign Operation in the Dependency Graph"""
     def __init__(self, layer, param, value, match):
         super().__init__()
         self.layer = layer
@@ -140,10 +144,10 @@ class AssignNode(Node):
         self.match = match
 
     def __str__(self):
-        return 'Layer= {}, Params={}, value={}, match={}'.format(self.layer, self.param, self.value, self.match)
+        return 'AssignNode: Layer= {}\n, Params={}\n, value={}\n, match={}\n'.format(self.layer, self.param, self.value, self.match)
 
 class DependNode(Node):
-    """description"""
+    """Represents parameters used in a Map operation"""
     def __init__(self, layer, params, dep):
         super().__init__()
         self.layer  = layer
@@ -151,9 +155,10 @@ class DependNode(Node):
         self.dep    = dep
 
     def __str__(self):
-        return 'Layer={}, Params={}, Dependencies={}'.format(self.layer, self.params, self.dep)
+        return 'DependNode: Layer={}\n, Params={}\n, Dependencies={}\n'.format(self.layer, self.params, self.dep)
 
 class TransformNode(Node):
+    """Represents a Transform Operation in the Dependency Graph"""
     def __init__(self, source_layer, target_layer, value, inserted):
         super().__init__()
         self.source_layer = source_layer
@@ -161,13 +166,13 @@ class TransformNode(Node):
         self.value        = value
         self.inserted     = inserted
 
-        # self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
-        # for o in inserted:
-            # self.target_layer._set_param_value(self.source_layer.name, o, obj)
         def __str__(self):
-            return 'source_layer {}, Target_layer {}, value {}, inserted {}'.format(self.source_layer, self.target_layer, self.value, self.inserted)
+            return 'source_layer {}\n, Target_layer {}\n, value {}\n, inserted {}\n'.format(self.source_layer, self.target_layer, self.value, self.inserted)
 
 class DependencyGraph(Graph):
+    """ Dependency Graph saves Operations executed by the BacktrackingRegistry
+        and is used to revert to a previous state.
+    """
     def __init__(self):
         # the current node in the path
         super().__init__()
@@ -192,6 +197,9 @@ class DependencyGraph(Graph):
         self.current = obj
         super().add_node(obj)
 
+    def set_operation(self, operation):
+        self.last_operation = operation
+
     def set_operation_index(self, operation_index):
         self.last_operation_index = operation_index
 
@@ -207,15 +215,6 @@ class DependencyGraph(Graph):
             if node.valid:
                 nodes.append(node)
         return nodes
-
-    def reset_head(self):
-        self.current = self.root
-
-    def set_next_legal_node(self):
-        for (s, t, e) in self.graph.out_edges(current, keys=True):
-            if t.valid and not isinstance(t, DependNode):
-                current = t
-                return
 
     def get_used_candidatens(self, anode):
         aprev = None
@@ -233,36 +232,30 @@ class DependencyGraph(Graph):
 
         return used_candidates
 
+    def shortest_path(self, source, target):
+        return nx.shortest_path(self.dep_graph.graph, source, target)
+
     def append_node(self, node):
         assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode) or isinstance(node, TransformNode))
 
         current              = self.current
         node.step_index      = self.last_step_index
         node.operation_index = self.last_operation_index
+        node.operation       = self.last_operation
 
         self.add_node(node)
 
-        # TODO: wie kann es sein, dass wir ohne das if 190-210 kanten zu None haben ?
+        # skip creating an edge on first node
         if current is None:
             return
+
         edge = Edge(current, node)
         self.add_edge(edge)
-
-    def find_map_node_from_assign_node(self, anode):
-        for node in self.nodes():
-            if not isinstance(node, MapNode) or not node.valid:
-                continue
-
-            if node.layer == anode.layer and node.param == anode.param and node.value == anode.value:
-                if node.valid:
-                    return node
-        return None
 
     def mark_subtree_as_bad(self, node):
         for (s, t, e) in self.graph.out_edges(node, keys=True):
             t.valid = False
             self.mark_subtree_as_bad(t)
-
 
     def write_dot(self):
 
@@ -280,13 +273,13 @@ class DependencyGraph(Graph):
                 if not node.valid:
                     not_valid = ', colorscheme=set39,fillcolor=5, style=filled]\n'
                 if isinstance(node, MapNode):
-                    node_str = '"{0}" [label="{1}", shape=hexagon'.format(nodes.index(node), nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=hexagon'.format(nodes.index(node), (node))
                 elif isinstance(node, AssignNode):
-                    node_str = '"{0}" [label="{1}", shape=circle'.format(nodes.index(node), nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=circle'.format(nodes.index(node), (node))
                 elif isinstance(node, DependNode):
-                    node_str = '"{0}" [label="{1}", shape=triangle'.format(nodes.index(node), nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=triangle'.format(nodes.index(node), (node))
                 elif isinstance(node, TransformNode):
-                    node_str = '"{0}" [label="{1}", shape=egg'.format(nodes.index(node), nodes.index(node))
+                    node_str = '"{0}" [label="{1}", shape=egg'.format(nodes.index(node), (node))
 
                 node_str += not_valid
 

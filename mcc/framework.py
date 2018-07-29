@@ -246,6 +246,11 @@ class Registry:
 
 
 class BacktrackRegistry(Registry):
+    """ Implements/manages a cross-layer model.
+
+    Layers and transformation steps are stored, managed, and executed by this class.
+    Uses Backtracking to find a valid config instead of failing
+    """
     def __init__(self):
         super().__init__()
         self.dep_graph = DependencyGraph()
@@ -266,13 +271,12 @@ class BacktrackRegistry(Registry):
 
         self.backtracking_try += 1
 
-        print('Try: {}'.format(self.backtracking_try))
 
         last_step = 0
         if self.backtracking_try > 1:
             last_step = self.dep_graph.last_step_index
 
-        print('Last step {}'.format(last_step))
+        logging.info('Backtracking Try {}, Last Step {}'.format(self.backtracking_try, last_step))
         for step in self.steps[last_step:]:
 
             previous_step = self._previous_step(step)
@@ -286,11 +290,9 @@ class BacktrackRegistry(Registry):
                 step.execute(self.dep_graph)
 
             except ConstraintNotStatisfied as cns:
-                print()
-                print('{} failed:'.format(cns.obj))
-                print()
+                logging.info('{} failed:'.format(cns.obj))
 
-                current    = self.dep_graph.current
+                current = self.dep_graph.current
 
                 head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
                 if head is None:
@@ -302,6 +304,8 @@ class BacktrackRegistry(Registry):
                     self._mark_subtree_as_bad(head.layer, head.param, head.value)
 
                 self._revert_subtree(head, current)
+                head = list(self.dep_graph.in_edges(head))[0].source
+
                 self.dep_graph.set_operation_index(head.operation_index)
                 self.dep_graph.set_step_index(head.step_index)
 
@@ -334,33 +338,17 @@ class BacktrackRegistry(Registry):
         return None
 
     def _revert_subtree(self, start, end):
-        if isinstance(start, AssignNode) and start.layer == end.layer and start.param == end.param and start.value == end.value:
-            return
-        if start is None:
-            return
-
-        #TODO: should we delete the param ?
-        if isinstance(start, AssignNode):
-            node = start
-            node.layer._set_param_value(node.param, node.value, None) # oder set() ?
-        elif isinstance(start, MapNode):
-            node = start
-            node.layer._set_param_candidates(node.param, node.value, set())
-        elif isinstance(start, Transform):
-            node = start
-            node.source_layer._set_param_value(node.target_layer.name, node.value, set())
-
-            for o in node.inserted:
-                node.target_layer._set_param_value(node.source_layer.name, o, None)
-
-        next_node = None
-        for edge in self.dep_graph.in_edges(start):
-            if isinstance(edge.source, DependNode) or not edge.source.valid:
-                continue
-            next_node = edge.source
-            break
-
-        self._revert_subtree(next_node, end)
+        # iterate over the path, and revert the changes
+        for node in self.dep_graph.shortest_path(start, end):
+            assert(not node.valid)
+            if isinstance(node, AssignNode):
+                node.layer._set_param_value(node.param, node.value, None)
+            elif isinstance(node, MapNode):
+                node.layer._set_param_candidates(node.param, node.value, set())
+            elif isinstance(node, Transform):
+                node.source_layer._set_param_value(node.target_layer.name, node.value, set())
+                for o in node.inserted:
+                    node.target_layer._set_param_value(node.source_layer.name, o, None)
 
     def _mark_subtree_as_bad(self, layer, param, culprit):
         # look for the last assign node that assings the culprit
@@ -368,8 +356,7 @@ class BacktrackRegistry(Registry):
             if not isinstance(node, AssignNode):
                 continue
 
-            #TODO: better
-            if node.value == culprit:
+            if node.value == culprit and node.layer == layer and node.param == param:
                 node.valid = False
                 self.dep_graph.mark_subtree_as_bad(node)
                 return node
@@ -530,8 +517,7 @@ class Layer:
         return inserted
 
     def _get_params(self, obj):
-        if isinstance(obj, Edge):
-            # obj is an edge
+        if isinstance(obj, Edge): # obj is an edge
             attributes = self.graph.edge_attributes(obj)
         else:
             # obj is a node
@@ -639,7 +625,6 @@ class Layer:
             params[param] = { 'value' : None, 'candidates' : set() }
 
         params[param]['value'] = value
-
 
 class AnalysisEngine:
     """ Base class for analysis engines.
@@ -999,7 +984,8 @@ class Map(Operation):
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
-        for obj in iterable:
+        # check if we need to skip elements
+        for (index, obj) in enumerate(iterable):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
@@ -1027,6 +1013,7 @@ class Map(Operation):
             assert(candidates is not None)
             if dep_graph is not None:
                 map_node = MapNode(self.source_layer, self.param, obj, candidates)
+                map_node.attribute_index = index
                 dep_graph.append_node(map_node)
 
                 dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
@@ -1067,7 +1054,17 @@ class Assign(Operation):
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
-        for obj in iterable:
+        skip_n_elements = 0
+        if dep_graph is not None:
+            if dep_graph.current is not None:
+                if dep_graph.current.operation == self:
+                    skip_n_elements = dep_graph.current.attribute_index
+
+        it = iter(iterable)
+        for i in range(skip_n_elements):
+            next(it)
+
+        for (index, obj) in enumerate(it):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
@@ -1084,6 +1081,7 @@ class Assign(Operation):
 
             if dep_graph is not None:
                 assign_node = AssignNode(self.source_layer, self.param, obj, result)
+                assign_node.attribute_index = index
                 dep_graph.append_node(assign_node)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
@@ -1141,7 +1139,7 @@ class Transform(Operation):
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
-        for obj in iterable:
+        for (index ,obj) in enumerate(iterable):
             # TODO shall we also return the existing objects (for comp_inst)?
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             assert new_objs, "transform() did not return any object"
@@ -1157,7 +1155,9 @@ class Transform(Operation):
                     assert(isinstance(o, self.target_layer.node_types()))
 
             if dep_graph is not None:
-                dep_graph.append_node(TransformNode(self.source_layer, self.target_layer, obj, inserted))
+                trans_node = TransformNode(self.source_layer, self.target_layer, obj, inserted)
+                trans_node.attribute_index = index
+                dep_graph.append_node(trans_node)
 
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
@@ -1249,6 +1249,7 @@ class NodeStep(Step):
             try:
                 if dep_graph is not None:
                     dep_graph.set_operation_index(self.operations.index(op))
+                    dep_graph.set_operation(op)
                     dep_graph.set_step(self)
 
                 if not op.execute(self.source_layer.graph.nodes(), dep_graph):
