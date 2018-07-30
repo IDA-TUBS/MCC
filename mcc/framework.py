@@ -1062,15 +1062,32 @@ class Assign(Operation):
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
 
-        skip_n_elements = 0
+        it = iter(iterable)
         if dep_graph is not None:
             if dep_graph.current is not None:
                 if dep_graph.current.operation == self:
                     skip_n_elements = dep_graph.current.attribute_index
+                    skip_n_elements -= 1
 
-        it = iter(iterable)
-        for i in range(skip_n_elements):
-            next(it)
+                    for i in range(skip_n_elements):
+                        next(it)
+
+                    obj = next(it)
+                    # obj is the operation that needs to choose a different
+                    # candidate
+                    assert(obj == dep_graph.current)
+                    used_candidates = set()
+                    for edge in self.dep_graph.out_edges(self.dep_graph.current):
+                        used_candidates.add(edge.target.match)
+
+                    candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+                    candidates -= used_candidates
+
+                    result = self.analysis_engines[0].assign(obj, candidates)
+                    assert(result in candidates)
+                    assign_node = AssignNode(self.source_layer, self.param, obj, result)
+                    assign_node.attribute_index = index
+                    dep_graph.append_node(assign_node)
 
         for (index, obj) in enumerate(it):
             assert(self.check_source_type(obj))
