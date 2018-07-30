@@ -271,7 +271,6 @@ class BacktrackRegistry(Registry):
 
         self.backtracking_try += 1
 
-
         last_step = 0
         if self.backtracking_try > 1:
             last_step = self.dep_graph.last_step_index
@@ -295,7 +294,7 @@ class BacktrackRegistry(Registry):
                 current = self.dep_graph.current
 
                 head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
-                if head is None:
+                if head is None or self._candidates_exhausted(head):
                     current = self.dep_graph.current
                     head = self._get_last_valid_assign(current)
                     if head is None:
@@ -329,17 +328,22 @@ class BacktrackRegistry(Registry):
             if not isinstance(start, AssignNode):
                 return self._get_last_valid_assign(edge.source)
 
-
-            params = start.layer._get_params(start.value)
-            candidates = params[start.param]['candidates']
-            used_candidates = self.dep_graph.get_used_candidates(start)
-
-            if candidates == used_candidates:
+            if self._candidates_exhausted(start):
                 return self._get_last_valid_assign(edge.source)
 
             return start
 
         return None
+
+    def _candidates_exhausted(self, anode):
+        params = anode.layer._get_params(anode.value)
+        candidates = params[anode.param]['candidates']
+        used_candidates = self.dep_graph.get_used_candidates(anode)
+
+        if candidates == used_candidates:
+            return True
+
+        return False
 
     def _revert_subtree(self, start, end):
         # iterate over the path, and revert the changes
