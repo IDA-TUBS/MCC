@@ -320,20 +320,24 @@ class BacktrackRegistry(Registry):
         return True
 
     def _get_last_valid_assign(self, start):
+
         for edge in self.dep_graph.in_edges(start):
-            if edge.source.valid:
-                if not isinstance(edge.source, AssignNode):
-                    return self._get_last_valid_assign(edge.source)
+            if not edge.source.valid:
+                continue
 
-                used_candidates = self.dep_graph.get_used_candidatens(edge.source)
+            # if non assign operation just go higher
+            if not isinstance(start, AssignNode):
+                return self._get_last_valid_assign(edge.source)
 
-                params = edge.source.layer._get_params(start.value)
-                candidates = params[edge.source.param]['candidates']
 
-                if candidates == used_candidates:
-                    return self._get_last_valid_assign(edge.source)
+            params = start.layer._get_params(start.value)
+            candidates = params[start.param]['candidates']
+            used_candidates = self.dep_graph.get_used_candidates(start)
 
-                return edge.source
+            if candidates == used_candidates:
+                return self._get_last_valid_assign(edge.source)
+
+            return start
 
         return None
 

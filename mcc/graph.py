@@ -216,7 +216,7 @@ class DependencyGraph(Graph):
                 nodes.append(node)
         return nodes
 
-    def get_used_candidatens(self, anode):
+    def get_used_candidates(self, anode):
         aprev = None
         for edge in self.in_edges(anode):
             if edge.source.valid:
@@ -226,14 +226,14 @@ class DependencyGraph(Graph):
         used_candidates = set()
 
         for edge in self.out_edges(aprev):
-            if not isinstance(edge.source, AssignNode):
+            if not isinstance(edge.target, AssignNode):
                 continue
-            used_candidates.add(edge.source.match)
+            used_candidates.add(edge.target.match)
 
         return used_candidates
 
     def shortest_path(self, source, target):
-        return nx.shortest_path(self.dep_graph.graph, source, target)
+        return nx.shortest_path(self.graph, source, target)
 
     def append_node(self, node):
         assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode) or isinstance(node, TransformNode))
