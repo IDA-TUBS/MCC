@@ -287,5 +287,5 @@ class SimpleMcc(MccBase):
         except Exception as e:
             print(e)
 
-        model.write_analysis_engine_dependency_graph()
+        model.write_analysis_engine_dependency_graph(outpath+'AeDepGraph.dot')
         return True

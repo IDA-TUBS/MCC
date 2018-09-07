@@ -319,11 +319,12 @@ class BacktrackRegistry(Registry):
 
         return None
 
-    def write_analysis_engine_dependency_graph(self):
+    def write_analysis_engine_dependency_graph(self, outfile='AeDepGraph.dot'):
         analysis_engines = set()
         engines_id       = set()
         layers           = set()
-        params           = set()
+        read_params      = set()
+        write_params     = set()
 
         for step in self.steps:
             for op in step.operations:
@@ -342,40 +343,37 @@ class BacktrackRegistry(Registry):
                     for param in ae.acl[layer]['reads']:
                         if param == None:
                             continue
-                        params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
+                        read_params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
 
                 if 'writes'in ae.acl[layer]:
                     for param in ae.acl[layer]['writes']:
                         if param == None:
                             continue
-                        params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
+                        write_params.add((en, str(layer).replace('-', '_'), param.replace('-', '_')))
 
-        with open('AeDepGraph.dot', 'w') as file:
+        # TODO we might want to force the params from the same layer to the same rank for better readability
+        with open(outfile, 'w') as file:
             file.write('digraph {\n')
+            file.write('rankdir=LR;\n')
 
             for e in engines_id:
                 e = e.replace('-', '_')
                 node = '{0} [label="<{0}>",shape=octagon,colorscheme=set39,fillcolor=4,style=filled];\n'.format(e)
                 file.write(node)
 
-            for l in layers:
-                l = l.replace('-', '_')
-                node = '{0} [label="<{0}>",shape=parallelogram,colorscheme=set39, fillcolor=5,style=filled];\n'.format(l)
-                file.write(node)
-
             # add params as nodes
-            for (param_id, param_label) in {(param+layer, param) for (ae, layer, param) in params}:
-                node = '{0} [label="{1}", shape=oval]\n'.format(param_id, param_label)
+            for (param_id, layer, param_label) in {(param, layer, param) for (ae, layer, param) in read_params | write_params}:
+                node = '{0}{1} [label="{1}.{2}", shape=oval]\n'.format(param_id, layer, param_label)
                 file.write(node)
 
             # edge AnalysisEngine to parameter e.g. CopyeEnine -> mapping
-            for (ae, param_id) in {(ae, param+layer) for (ae, layer, param) in params}:
+            for (ae, param_id) in {(ae, param+layer) for (ae, layer, param) in write_params}:
                 edge = '{0} -> {1}\n'.format(ae, param_id)
                 file.write(edge)
 
-            # edge param -> Layer
-            for (layer, param) in {(layer, param) for (ae, layer, param) in params}:
-                edge = '{0}{1} -> {1}\n'.format(param, layer)
+            # edge AnalysisEngine to parameter e.g. mapping -> CopyEngine
+            for (ae, param_id) in {(ae, param+layer) for (ae, layer, param) in read_params}:
+                edge = '{1} -> {0}\n'.format(ae, param_id)
                 file.write(edge)
 
             file.write('}\n')
