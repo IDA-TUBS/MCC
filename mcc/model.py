@@ -11,6 +11,7 @@ Implements model-specific data structures which are used by our cross-layer mode
 
 from mcc.parser import *
 from mcc.framework import *
+from mcc.backtracking import *
 
 class ServiceConstraints:
     def __init__(self, name=None, function=None, to_ref=None, from_ref=None):
