@@ -265,8 +265,7 @@ class SimpleMcc(MccBase):
 
         # TODO implement transformation/merge into component instantiation
 
-        # TODO implement backtracking
-
+        # insert backtracking engine for testing (random rejection of candidates)
         self.insert_random_backtracking_engine(model, 0.05)
         model.print_steps()
         if outpath is not None:
@@ -283,7 +282,10 @@ class SimpleMcc(MccBase):
             da_step.add_operation(BatchAssign(da_engine))
             model.add_step_unsafe(da_step)
 
-        model.execute()
+        try:
+            model.execute()
+        except Exception as e:
+            print(e)
 
-        # model.write_analysis_engine_dependency_graph()
+        model.write_analysis_engine_dependency_graph()
         return True

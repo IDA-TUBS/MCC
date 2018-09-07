@@ -466,7 +466,7 @@ class Layer:
         self.graph = Graph()
 
     def start_tracking(self):
-        self.traking = True
+        self.tracking = True
 
     def stop_tracking(self):
         self.tracking = False
@@ -1185,6 +1185,7 @@ class BatchMap(Map):
         assert(False)
 
     def execute(self, iterable):
+        # FIXME implement backtracking support
 
         ae = self.analysis_engines[0]
 
@@ -1310,6 +1311,7 @@ class BatchAssign(Assign):
         Assign.__init__(self, ae, name)
 
     def execute(self, iterable):
+        # FIXME implement backtracking support
 
         ae = self.analysis_engines[0]
 
