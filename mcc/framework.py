@@ -361,6 +361,22 @@ class Layer:
         else:
             return set()
 
+    def _clear_param_values(self, param):
+        for node in self.graph.nodes():
+            if param in self._get_params(node):
+                self._set_param_value(param, node, None)
+        for edge in self.graph.edges():
+            if param in self._get_params(edge):
+                self._set_param_value(param, edge, None)
+
+    def _clear_param_candidates(self, param):
+        for node in self.graph.nodes():
+            if param in self._get_params(node):
+                self._set_param_candidate(param, node, set())
+        for edge in self.graph.edges():
+            if param in self._get_params(edge):
+                self._set_param_candidate(param, edge, set())
+
     def set_param_candidates(self, ae, param, obj, candidates):
         """ Set candidate values for the given parameter and object.
 
