@@ -185,6 +185,8 @@ class SimpleMcc(MccBase):
         MccBase.__init__(self, repo)
 
     def insert_random_backtracking_engine(self, model, failure_rate=0.0):
+        # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
+        #      if we then set failure_rate to 1.0, we can traverse the entire search space
         assert(0 <= failure_rate <= 1.0)
 
         from random import Random

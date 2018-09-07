@@ -236,7 +236,7 @@ class BacktrackRegistry(Registry):
                 self.dep_graph.set_step_index(self.steps.index(step))
                 step.execute(self.dep_graph)
 
-            except ConstraintNotStatisfied as cns:
+            except ConstraintNotSatisfied as cns:
                 logging.info('{} failed:'.format(cns.obj))
 
                 current = self.dep_graph.current

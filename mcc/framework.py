@@ -975,6 +975,7 @@ class Map(Operation):
                 map_node.attribute_index = index
                 dep_graph.append_node(map_node)
 
+                # FIXME we shouldn't need DependNodes if we directly add edges to the corresponding AssignNodes
                 dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
                 dep_graph.add_node(dep_node)
                 edge = Edge(dep_node, map_node)
@@ -1108,6 +1109,9 @@ class Assign(Operation):
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
+                # TODO test case for testing that no candidates are left
+                # (e.g. add dummy component for a function with an additional unresolvable dependency)
+                raise ConstraintNotSatisfied(self.analysis_engines[0].layer, self.param, obj)
 
             result = self.analysis_engines[0].assign(obj, candidates)
             assert(result in candidates)
@@ -1249,11 +1253,11 @@ class Check(Operation):
                 assert(self.check_source_type(obj))
 
                 if not ae.check(obj):
-                    raise ConstraintNotStatisfied(ae.layer, ae.param, obj)
+                    raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
         return True
 
-class ConstraintNotStatisfied(Exception):
+class ConstraintNotSatisfied(Exception):
     def __init__(self, layer, param, obj):
         super().__init__()
         self.layer    = layer
@@ -1325,7 +1329,7 @@ class NodeStep(Step):
                 if not op.execute(self.source_layer.graph.nodes(), dep_graph):
                     raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                     return False
-            except ConstraintNotStatisfied as cns:
+            except ConstraintNotSatisfied as cns:
                 raise cns
 
         return True
@@ -1349,7 +1353,7 @@ class EdgeStep(Step):
                 if not op.execute(self.source_layer.graph.edges(), dep_graph):
                     raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                     return False
-            except ConstraintNotStatisfied as cns:
+            except ConstraintNotSatisfied as cns:
                 raise cns
 
         return True

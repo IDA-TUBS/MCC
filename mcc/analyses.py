@@ -617,7 +617,7 @@ class BacktrackingTestEngine(AnalysisEngine):
         super().__init__(layer, param)
 
         assert(0.0 <= failure_rate <= 1.0)
-        self.failre_rate = failure_rate
+        self.failure_rate = failure_rate
 
         from random import Random
         self.random = Random()
@@ -629,7 +629,7 @@ class BacktrackingTestEngine(AnalysisEngine):
             return True
 
         r = self.random.random()
-        if r < self.failre_rate:
+        if r < self.failure_rate:
             if self.fail_once:
                 self.failed = True
             return False
