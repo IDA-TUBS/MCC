@@ -11,6 +11,7 @@ Implements variants of the MCC by composing cross-layer models, analysis engines
 from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
+from mcc.importexport import *
 
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
@@ -176,7 +177,6 @@ class MccBase:
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
 
-
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
@@ -209,31 +209,35 @@ class SimpleMcc(MccBase):
         bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate, fail_once=True)
         model.steps.insert(r, NodeStep(Check(bt, 'BackTrackingTest')))
 
-    def search_config(self, subsystem_xml, xsd_file, args):
+    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
-            :param subsystem_xml: filename containing abstract subsystem configuruation
-            :type  subsystem_xml: str
+            :param platform_xml: filename containing platform specification
+            :type  platform_xml: str
+            :param system_xml: filename containing abstract system configuruation
+            :type  system_xml: str
             :param xsd_file: XSD filename for subsystem_xml
             :type  xsd_file: str
-            :param args: args from :class:`argparse.ArgumentParser`
+            :param outpath: output path/prefix
+            :type  outpath: str
         """
 
         # check function/composite/component references, compatibility and routes in system and subsystems
 
-        # 1) we parse the platform model (here: subsystem structure)
-        subsys_platform = SubsystemModel(SubsystemParser(subsystem_xml, xsd_file))
+        # 1) we parse the platform model
+        pf_model = SimplePlatformModel(PlatformParser(platform_xml, xsd_file))
 
         # 2) we create a new system model
-        model = SystemModel(self.repo, subsys_platform, dotpath=args.dotpath)
+        model = SystemModel(self.repo, pf_model, dotpath=outpath)
 
-        # 3) create query model (in SubsystemModel)
-        query_model = subsys_platform
+        # 3) create query model 
+        query_model = FuncArchQuery(SystemParser(system_xml, xsd_file))
 
         # output query model
-        if args.dotpath is not None:
-            subsys_platform.write_dot(args.dotpath+"query_graph.dot")
+        if outpath is not None:
+            query_model.write_dot(outpath+"query_graph.dot")
+            pf_model.write_dot(outpath+"platform.dot")
 
         # 4a) create system model from query model
         model.from_query(query_model)
@@ -265,7 +269,20 @@ class SimpleMcc(MccBase):
 
         self.insert_random_backtracking_engine(model, 0.05)
         model.print_steps()
-        model.write_dot('mcc.dot')
+        if outpath is not None:
+            model.write_dot(outpath+'mcc.dot')
+
+        if with_da:
+            from mcc import extern
+
+            if da_path is None:
+                da_path = outpath
+
+            da_engine = extern.DependencyAnalysisEngine(model, model.by_order, outpath+'model.pickle', outpath+'query.xml', da_path+'response.xml')
+            da_step = NodeStep(BatchMap(da_engine))
+            da_step.add_operation(BatchAssign(da_engine))
+            model.add_step_unsafe(da_step)
+
         model.execute()
 
         # model.write_analysis_engine_dependency_graph()

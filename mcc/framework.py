@@ -88,7 +88,8 @@ class Registry:
 
         self.steps.append(step)
 
-    def add_testing_step(self, step):
+    def add_step_unsafe(self, step):
+        # FIXME how do we deal with branches, i.e. going back in the layer hierarchy to decide on params in upper layers?
         self.steps.append(step)
 
     def write_dot(self, filename):
@@ -562,6 +563,22 @@ class Layer:
         else:
             return set()
 
+    def _clear_param_values(self, param):
+        for node in self.graph.nodes():
+            if param in self._get_params(node):
+                self._set_param_value(param, node, None)
+        for edge in self.graph.edges():
+            if param in self._get_params(edge):
+                self._set_param_value(param, edge, None)
+
+    def _clear_param_candidates(self, param):
+        for node in self.graph.nodes():
+            if param in self._get_params(node):
+                self._set_param_candidate(param, node, set())
+        for edge in self.graph.edges():
+            if param in self._get_params(edge):
+                self._set_param_candidate(param, edge, set())
+
     def set_param_candidates(self, ae, param, obj, candidates):
         """ Set candidate values for the given parameter and object.
 
@@ -785,6 +802,125 @@ class AnalysisEngine:
         """
         return tuple({object})
 
+class ExternalAnalysisEngine(AnalysisEngine):
+
+    def __init__(self, layer, param, name=None, acl=None):
+        AnalysisEngine.__init__(self, layer, param, name, acl)
+
+        self.state = "START" # EXPORTED, WAITING, READY
+
+        self.query = None
+
+    def _export_model(self):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _start_query(self):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _end_query(self):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _query_map(self, obj, candidates):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _query_assign(self, obj, candidates):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _wait_for_result(self):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _parse_map(self, obj):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _parse_assign(self, obj):
+        """ to be implemented by derived class
+        """
+        raise NotImplementedError()
+
+    def _wait_for_file(self, filename):
+        import os
+        import time
+        if not os.path.exists(filename):
+            print("Waiting for file %s", filename)
+        while not os.path.exists(filename):
+            time.sleep(1)
+
+        if os.path.getsize(filename) == 0:
+            print("Waiting for file %s not empty" % filename)
+        while os.path.getsize(filename) == 0:
+            time.sleep(1)
+
+    def _state_check_READY(self):
+        if self.state == "EXPORTED":
+            self._state_check_WAITING()
+
+        if self.state == "WAITING":
+            self.run()
+
+        assert(self.state == "READY")
+
+    def _state_check_EXPORTED(self):
+        if self.state == "START" or self.state == "READY":
+            self._export_model()
+            self.state = "EXPORTED"
+            self._start_query()
+
+        assert(self.state == "EXPORTED")
+
+    def _state_check_WAITING(self):
+        if self.state == "EXPORTED":
+            self._end_query()
+            self.state = "WAITING"
+
+        assert(self.state == "WAITING")
+
+    def prepare_map(self, obj, candidates):
+        self._state_check_EXPORTED()
+
+        self._query_map(obj, candidates)
+
+    def prepare_assign(self, obj, candidates):
+        self._state_check_EXPORTED()
+
+        self._query_assign(obj, candidates)
+
+    def run(self):
+        self._state_check_WAITING()
+
+        if self._wait_for_result():
+            self.state = "READY"
+
+    def map(self, obj):
+        self._state_check_READY()
+
+        return self._parse_map(obj)
+
+    def assign(self, obj):
+        self._state_check_READY()
+
+        return self._parse_assign(obj)
+
+    def check(self, obj):
+        raise NotImplementedError()
+
+    def transform(self, obj, target_layer):
+        raise NotImplementedError()
+
+
 class DummyEngine(AnalysisEngine):
     """ Can be used for identity-tranformation.
     """
@@ -962,6 +1098,7 @@ class Operation:
         """
         for ae in self.analysis_engines:
             if not isinstance(obj, ae.source_types()):
+                logging.error("%s is not an instance of %s" % (type(obj), ae.source_types()))
                 return False
 
         return True
@@ -1031,6 +1168,60 @@ class Map(Operation):
 
             self.source_layer.stop_tracking()
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
+
+        return True
+
+class BatchMap(Map):
+    def __init__(self, ae, name=''):
+        assert(isinstance(ae, ExternalAnalysisEngine))
+        Map.__init__(self, ae, name)
+
+    def register_ae(self, ae):
+        """
+        Returns:
+            False -- only a single analysis engine must be registered (which is given on construction)
+        """
+        # only one analysis engine can be registered
+        assert(False)
+
+    def execute(self, iterable):
+
+        ae = self.analysis_engines[0]
+
+        # prepare
+        for obj in iterable:
+            assert(self.check_source_type(obj))
+
+            # skip if parameter was already selected
+            if self.source_layer.get_param_value(ae, self.param, obj) is not None:
+                continue
+
+            candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
+            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
+                candidates = None
+
+            if candidates is None:
+                ae.prepare_map(obj, None)
+            else:
+                ae.prepare_map(obj, set(candidates))
+
+        # get results
+        for obj in iterable:
+
+            candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
+            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
+                candidates = None
+
+            if candidates is None:
+                candidates = ae.map(obj)
+            else:
+                new_candidates = ae.map(obj)
+                if new_candidates is not None:
+                    candidates &= new_candidates 
+
+            # update candidates for this parameter in layer object
+            assert(candidates is not None)
+            self.source_layer.set_param_candidates(ae, self.param, obj, candidates)
 
         return True
 
@@ -1110,6 +1301,41 @@ class Assign(Operation):
                 dep_graph.append_node(assign_node)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
+
+        return True
+
+class BatchAssign(Assign):
+    def __init__(self, ae, name=''):
+        assert(isinstance(ae, ExternalAnalysisEngine))
+        Assign.__init__(self, ae, name)
+
+    def execute(self, iterable):
+
+        ae = self.analysis_engines[0]
+
+        # prepare
+        for obj in iterable:
+            assert(self.check_source_type(obj))
+
+            # skip if parameter was already selected
+            if self.source_layer.get_param_value(ae, self.param, obj) is not None:
+                continue
+
+            candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
+            if len(candidates) == 0:
+                logging.error("No candidates left for param '%s'." % self.param)
+
+            ae.prepare_assign(obj, candidates)
+
+        # get results
+        for obj in iterable:
+            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+
+            result = ae.assign(obj)
+
+            assert(result in candidates)
+
+            self.source_layer.set_param_value(ae, self.param, obj, result)
 
         return True
 

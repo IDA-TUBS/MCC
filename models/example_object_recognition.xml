@@ -1,0 +1,274 @@
+<xml>
+<repository>
+
+	<!-- binaries //-->
+	<binary name="gpio_drv" />
+	<binary name="i2c_drv" />
+	<binary name="vdma_drv" />
+	<binary name="pl_irq_drv" />
+	<binary name="nic_drv" />
+	<binary name="nic_bridge" />
+	<binary name="remote_rom_client" />
+	<binary name="remote_rom_server" />
+	<binary name="camera" />
+	<binary name="debay" />
+	<binary name="rect" />
+	<binary name="object_recog" />
+
+	<!-- components //-->
+	<component name="gpio_drv" singleton="true">
+		<function name="GPIO" />
+		<provides>
+			<service name="GPIO" max_clients="1" />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="i2c_drv" singleton="true">
+		<function name="I2C" />
+		<provides>
+			<service name="I2C" max_clients="32" />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="vdma_drv" singleton="true">
+		<function name="VDMA" />
+		<provides>
+			<service name="VDMA" max_clients="1" />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="pl_irq_drv" singleton="true">
+		<function name="PL_IRQ" />
+		<provides>
+			<service name="PL_IRQ" max_clients="1" />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="nic_drv" singleton="true">
+		<function name="Network" />
+		<provides>
+			<service name="Nic" max_clients="1" />
+		</provides>
+		<requires>
+			<ram quantum="16" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="nic_bridge">
+		<mux service="Nic" />
+		<provides>
+			<service name="Nic" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="remote_rom_client">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="remote_rom_server">
+		<requires>
+			<service name="Nic" />
+			<service name="ROM" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="camera" singleton="true">
+		<function name="CAMERA" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<spec name="zynq" />
+			<!--service name="I2C" />
+			<service name="VDMA" />
+			<service name="PL_IRQ" />
+			<service name="GPIO" /-->
+			<ram quantum="16" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="debay">
+		<filter>
+			<add tag="debay" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" ref="in"/>
+			<ram quantum="8" />
+			<caps quantum="300" />
+		</requires>
+		<timing>
+			<on-signal from_ref="in">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
+	</component>
+
+	<component name="rect">
+		<filter>
+			<add tag="rect" />
+		</filter>
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" filter="debay" ref="in" />
+			<ram quantum="16" />
+			<caps quantum="400" />
+		</requires>
+		<timing>
+			<on-signal from_ref="in">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
+	</component>
+
+	<component name="object_recog">
+		<requires>
+			<service name="ROM" filter="rect" ref="in" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+		<timing>
+			<on-signal from_ref="in">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
+	</component>
+
+	<!-- composites //-->
+	<composite>
+		<function name="PREPROC" />
+		<provides>
+			<service name="ROM" ref="out" />
+		</provides>
+		<requires>
+			<service name="ROM" function="CAMERA" ref="cam" />
+		</requires>
+		<timing>
+			<on-signal from_ref="cam">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
+
+		<pattern>
+			<component name="debay">
+				<route><service name="ROM"><external ref="cam"/></service></route>
+			</component>
+			<component name="rect">
+				<route><service name="ROM"><child name="debay" /></service></route>
+				<expose ref="out">
+					<service name="ROM"/>
+				</expose>
+			</component>
+		</pattern>
+	</composite>
+
+	<composite name="ROM_PROXY">
+		<proxy carrier="Nic" />
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="ROM" />
+			<service name="Nic" function="Network" ref="from"/>
+			<service name="Nic" function="Network" ref="to"/>
+		</requires>
+
+		<pattern>
+			<component name="remote_rom_client">
+				<expose>
+					<service name="ROM" />
+				</expose>
+				<route>
+					<service name="Nic"><external ref="to" /></service>
+				</route>
+			</component>
+			<component name="remote_rom_server">
+				<route>
+					<service name="ROM"><external /></service>
+					<service name="Nic"><external ref="from" /></service>
+				</route>
+			</component>
+		</pattern>
+	</composite>
+</repository>
+
+<platform>
+	<subsystem name="zynq">
+		<provides>
+			<spec name="zynq" />
+		</provides>
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="zynq.config" />
+	</subsystem>
+
+	<subsystem name="pc">
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="pc.config" />
+	</subsystem>
+
+	<comm name="Network" />
+</platform>
+
+<!-- system //-->
+<system name="object_recognition"> 
+	<child name="CAM" subsystem="zynq"><function name="CAMERA" /></child>
+	
+	<child name="PP" subsystem="zynq">
+		<function name="PREPROC" />
+		<dependency>
+			<child name="CAM" />
+		</dependency>
+	</child>
+
+	<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
+
+	<child subsystem="pc">
+		<component name="object_recog" />
+		<route>
+			<service name="ROM"><child name="PP" /></service>
+		</route>
+	</child>
+
+	<child name="NIC2" subsystem="pc"><function name="Network" /></child>
+</system>
+</xml>
