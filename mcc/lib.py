@@ -12,6 +12,8 @@ from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
 
+from mcc.model_extractor import *
+
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
     """
@@ -263,10 +265,15 @@ class SimpleMcc(MccBase):
 
         # TODO implement backtracking
 
-        self.insert_random_backtracking_engine(model, 0.05)
+        self.insert_random_backtracking_engine(model, 0.00)
         model.print_steps()
         model.write_dot('mcc.dot')
-        model.execute()
+        try:
+            model.execute()
+        except Exception as e:
+            pass
 
         # model.write_analysis_engine_dependency_graph()
+        model_extractor = ModelExtractor(model.by_name, '/tmp/blub.xml', model.dep_graph)
+        model_extractor.write_modell()
         return True

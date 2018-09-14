@@ -75,7 +75,7 @@ class ComponentDependencyEngine(AnalysisEngine):
             source_mapping = self.layer.get_param_value(self, 'mapping', obj.source)
             target_mapping = self.layer.get_param_value(self, 'mapping', obj.target)
             if source_mapping != target_mapping:
-                logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
+                # logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                 return False
             else:
                 return True

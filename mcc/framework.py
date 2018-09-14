@@ -313,6 +313,8 @@ class BacktrackRegistry(Registry):
                 self.dep_graph.current = head
                 return False
 
+
+
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
@@ -446,6 +448,7 @@ class Layer:
         self.graph       = Graph()
         self.name        = name
         self._nodetypes  = nodetypes
+        # used for backtracking
         self.used_params = set()
         self.tracking    = False
 
@@ -465,7 +468,7 @@ class Layer:
         self.graph = Graph()
 
     def start_tracking(self):
-        self.traking = True
+        self.tracking = True
 
     def stop_tracking(self):
         self.tracking = False
@@ -1024,10 +1027,10 @@ class Map(Operation):
                 map_node.attribute_index = index
                 dep_graph.append_node(map_node)
 
-                dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
-                dep_graph.add_node(dep_node)
-                edge = Edge(dep_node, map_node)
-                dep_graph.add_edge(edge)
+                # dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
+                # dep_graph.add_node(dep_node)
+                # edge = Edge(dep_node, map_node)
+                # dep_graph.add_edge(edge)
 
             self.source_layer.stop_tracking()
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)

@@ -120,6 +120,7 @@ class Node():
         self.operation_index = 0
         self.attribute_index = 0
         self.operation       = None
+        self.param           = ''
 
 
 class MapNode(Node):
