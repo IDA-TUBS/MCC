@@ -98,19 +98,7 @@
 			<spec name="legacy_pc" />
 		</requires>
 	</component>
-<!--	
-	<component name="sensor_data_prep">
-		<function name="SENSOR_DATA_PREP" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" />
-			<spec name="legacy_pc" />
-		</requires>
-	</component> //-->
 	
-	<!-- sensor data preprocessing //-->	
 	<component name="stream_splitter">
 		<provides>
 			<service name="ROM" />
@@ -190,7 +178,7 @@
 			<remove tag="stixel" />
 		</filter>
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref="free_range" />
 		</provides>
 		<requires>
 			<service name="ROM" filter="pointcloud stixel !horizontal_seg !curbs !vertical_seg !contour" />
@@ -202,7 +190,7 @@
 			<add tag="contrast" />
 		</filter>
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref="contrast" />
 		</provides>
 		<requires>
 			<service name="ROM" filter="pointcloud" />
@@ -255,7 +243,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" label="pointcloud free_range" />
+			<service name="ROM" label="pointcloud contrast" ref="free_range" />
 		</requires>
 	</component>
 	
@@ -404,11 +392,11 @@
 	
 	
 	<!--	functional composites	//-->
-	<composite>
+	<composite name="SENSOR_DATA_PREP">
 		<function name="SENSOR_DATA_PREP" />
 		<provides>
 			<service name="ROM" ref="free_range" />
-			<!-- <service name="ROM" ref="contrast" /> //-->
+			<service name="ROM" ref="contrast" /> 
 		</provides>
 		<requires>
 			<service name="ROM" function="SENSOR_DATA_AQ" />
@@ -423,7 +411,7 @@
 			</component>
 			<component name="contrast_enhancement">
 				<route><service name="ROM"><child name="stream_splitter" /></service></route>
-				<!-- <expose><service name="ROM" ref="contrast"/></expose>	//-->
+				<expose ref="contrast"><service name="ROM" /></expose>	
 			</component>
 			<component name="vertical_segmentation">
 				<route><service name="ROM"><child name="stream_splitter" /></service></route>
@@ -473,12 +461,12 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" function="SENSOR_DATA_PREP" ref="free_range" />
+			<service name="ROM" function="SENSOR_DATA_PREP" ref="contrast" />
 		</requires>
 		
 		<pattern>
 			<component name="img_updater_reflectance">
-				<route><service name="ROM"><external  ref="free_range" /></service></route>
+				<route><service name="ROM"><external  ref="contrast" /></service></route>
 			</component>
 			<component name="cell_updater_reflectance">
 				<route><service name="ROM"><child name="img_updater_reflectance" /></service></route>
@@ -535,83 +523,104 @@
 
 </repository>
 
+<platform>
+    <subsystem name="legacy_pc">
+        <provides>
+            <spec name="legacy_pc" />
+        </provides>
+        <requires>
+            <comm name="Network" />
+        </requires>
+        <config name="legacy_pc.config" />
+    </subsystem>
+
+    <subsystem name="nuc">
+        <requires>
+            <comm name="Network" />
+        </requires>
+        <config name="nuc.config" />
+    </subsystem>
+
+    <subsystem name="zynq">
+        <requires>
+            <comm name="Network" />
+        </requires>
+        <config name="zynq.config" />
+    </subsystem>
+
+    <subsystem name="dspace">
+        <requires>
+            <comm name="Network" />
+        </requires>
+        <config name="dspace.config" />
+    </subsystem>
+
+    <comm name="Network" />
+</platform>
+
 <system name="obstacle_evasion">
-	<provides>
-		<spec name="legacy_pc"/>
-	</provides>
+    <child name="SENS_DATA_AQ" subsystem="legacy_pc">
+        <function name="SENSOR_DATA_AQ"/>
+    </child>
+    
+    <child name="SENS_DATA_PREP" subsystem="legacy_pc">
+        <function name="SENSOR_DATA_PREP" />
+        <route>
+            <service name="ROM"><child name="SENS_DATA_AQ" /></service>
+        </route>
+    </child>
+    <child name="NIC1" subsystem="legacy_pc"><function name="Network" /></child>
 	
-	<subsystem name="legacy_pc">
-		<child name="SENS_DATA_AQ">
-			<function name="SENSOR_DATA_AQ"/>
-		</child>
-		
-		<child name="SENS_DATA_PREP">
-			<function name="SENSOR_DATA_PREP" />
-			<route>
-				<service name="ROM"><child name="SENS_DATA_AQ" /></service>
-			</route>
-		</child>
-		<child name="NIC"><function name="Network" /></child>
-	</subsystem>
+    <child name="GRID_BAYES" subsystem="nuc">
+        <function name="GRID_LAYER_BAYES"/>
+        <route>
+            <service name="ROM"><child name="SENS_DATA_PREP" /></service>
+        </route>
+    </child>
+    
+    <child name="GRID_REFLECTANCE" subsystem="nuc">
+        <function name="GRID_LAYER_REFLECTANCE"/>
+        <route>
+            <service name="ROM"><child name="SENS_DATA_PREP"/></service>
+        </route>
+    </child>
+            
+    <child name="TRISTATE" subsystem="nuc">
+        <component name="tristate_fusion" />
+        <dependency>
+            <child name="GRID_BAYES" />
+            <child name="GRID_REFLECTANCE" />
+        </dependency>
+    </child>
+            
+    <child name="TARGET_POSE_GEN" subsystem="nuc">
+        <function name="TARGET_POSE_GENERATION"/>
+        <dependency>
+            <child name="TRISTATE" />
+        </dependency>
+    </child>
+    
+    <child name="NIC2" subsystem="nuc"><function name="Network" /></child>
 	
-	<subsystem name="nuc">
-		<child name="GRID_BAYES">
-			<function name="GRID_LAYER_BAYES"/>
-			<route>
-				<service name="ROM"><child name="SENS_DATA_PREP" /></service>
-			</route>
-		</child>
 		
-		<child name="GRID_REFLECTANCE">
-			<function name="GRID_LAYER_REFLECTANCE"/>
-			<route>
-				<service name="ROM"><child name="SENS_DATA_PREP"/></service>
-			</route>
-		</child>
-				
-		<child name="TRISTATE">
-			<component name="tristate_fusion" />
-			<dependency>
-				<child name="GRID_BAYES" />
-				<child name="GRID_REFLECTANCE" />
-			</dependency>
-		</child>
-				
-		<child name="TARGET_POSE_GEN">
-			<function name="TARGET_POSE_GENERATION"/>
-			<dependency>
-				<child name="TRISTATE" />
-			</dependency>
-		</child>
-		
-		<child name="NIC"><function name="Network" /></child>
-	</subsystem>
+    <child name="TRAJ_GEN" subsystem="zynq">
+        <function name="TRAJECTORY_GENERATION" />
+        <route>
+            <service name="ROM"><child name="TARGET_POSE_GEN" /></service>
+        </route>
+    </child>
+    
+    <child name="NIC3" subsystem="zynq"><function name="Network" /></child>
 	
-	
-	<subsystem name="zynq"> 
-		
-		<child name="TRAJ_GEN">
-			<function name="TRAJECTORY_GENERATION" />
-			<route>
-				<service name="ROM"><child name="TARGET_POSE_GEN" /></service>
-			</route>
-		</child>
-		
-		<child name="NIC"><function name="Network" /></child>
-	</subsystem>
-	
-	
-	<subsystem name="dspace"> 
-		<child name="VEHICLE_CTRL">
-			<function name="VEHICLE_CONTROL" />
-			<route>
-				<service name="ROM"><child name="TRAJ_GEN"/></service>
-			</route>
-		</child>
-		
-		<child name="NIC"><function name="Network" /></child>
-		<child name="CAN"><function name="CAN" /></child>
-	</subsystem>
+    <child name="VEHICLE_CTRL" subsystem="dspace">
+        <function name="VEHICLE_CONTROL" />
+        <route>
+            <service name="ROM"><child name="TRAJ_GEN"/></service>
+        </route>
+    </child>
+    
+    <child name="NIC4" subsystem="dspace"><function name="Network" /></child>
+    <child name="CAN" subsystem="dspace"><function name="CAN" /></child>
 	
 	
 </system>

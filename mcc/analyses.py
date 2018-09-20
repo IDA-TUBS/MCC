@@ -354,8 +354,7 @@ class ComponentEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
-        if len(candidates) == 0:
-            raise Exception("no component left for assignment")
+        assert len(candidates) != 0, "no component left for assignment to child %s" % obj
 
         return list(candidates)[0]
 
@@ -571,6 +570,9 @@ class ReachabilityEngine(AnalysisEngine):
         if carrier == 'native':
             return GraphObj(obj, params={ 'service' : self.layer.get_param_value(self, 'service', obj) })
         else:
+            assert carrier is not None, "not implemented"
+            # FIXME automatically determine carrier from contract repo
+
             proxy = model.Proxy(carrier=carrier, service=self.layer.get_param_value(self, 'service', obj))
             result = [proxy]
 
@@ -585,12 +587,17 @@ class ReachabilityEngine(AnalysisEngine):
             result.append(GraphObj(Edge(proxy, dst), params={'service' : proxy.service}))
 
             # add dependencies to pcomp
+            found = False
             for n in self.layer.graph.nodes():
                 if n.type() == 'function' and n.query() == pcomp:
                     if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source):
                         result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='to') }))
+                        found = True
                     elif self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.target):
                         result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='from') }))
+                        found = True
+
+            assert found, "Cannot find function '%s' required by proxy" % (pcomp)
 
             return result
 
@@ -610,7 +617,7 @@ class BacktrackingTestEngine(AnalysisEngine):
         super().__init__(layer, param)
 
         assert(0.0 <= failure_rate <= 1.0)
-        self.failre_rate = failure_rate
+        self.failure_rate = failure_rate
 
         from random import Random
         self.random = Random()
@@ -622,7 +629,7 @@ class BacktrackingTestEngine(AnalysisEngine):
             return True
 
         r = self.random.random()
-        if r < self.failre_rate:
+        if r < self.failure_rate:
             if self.fail_once:
                 self.failed = True
             return False

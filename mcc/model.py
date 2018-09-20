@@ -11,6 +11,7 @@ Implements model-specific data structures which are used by our cross-layer mode
 
 from mcc.parser import *
 from mcc.framework import *
+from mcc.backtracking import *
 
 class ServiceConstraints:
     def __init__(self, name=None, function=None, to_ref=None, from_ref=None):
@@ -107,16 +108,170 @@ class PlatformModel(object):
         self.platform_graph = Graph()
 
         self.pf_dot_styles = { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
-                               'edge' : '' }
+                               'edge' : {'undirected' : ['arrowhead=none', 'arrowtail=none'],
+                                         'directed'   : [] } }
 
     def reachable(self, from_component, to_component):
         raise NotImplementedError()
+
+class SimplePlatformModel(PlatformModel):
+    """ Implements a simple platform model with resources (nodes) and communication paths (edges).
+    """
+    def __init__(self, parser):
+        """ Initialises the platform model using the given parser.
+
+        Args:
+            :type parser: :class:`mcc.parser.PlatformParser`
+        """
+        self.parser = parser
+        PlatformModel.__init__(self)
+
+        self._parse()
+
+    def _parse(self):
+        reachability_map = dict()
+        for comm in self.parser.comm_names():
+            reachability_map[comm] = set()
+
+        for c in self.parser.pf_components():
+            self.platform_graph.add_node(c)
+            for comm in c.comms():
+                reachability_map[comm].add(c)
+
+        processed = set()
+        for comm in reachability_map:
+            for src in reachability_map[comm]:
+                processed.add(src)
+                for dst in reachability_map[comm] - processed:
+                    e1 = self.platform_graph.create_edge(src, dst)
+                    self.platform_graph.edge_attributes(e1)['carrier'] = comm
+                    self.platform_graph.edge_attributes(e1)['undirected'] = True
+
+    def find_by_name(self, name):
+        for n in self.platform_graph.nodes():
+            if n.name() == name:
+                return n
+
+        return None
+
+    def write_dot(self, filename):
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+
+            id_lookup = dict()
+            next_node_id = 1
+            for n in self.platform_graph.nodes():
+                id_lookup[n.name()] = "n%d" % next_node_id
+                next_node_id += 1
+
+                label = "label=\"%s\"," % n.name()
+                style = ','.join(self.pf_dot_styles['node'])
+
+                dotfile.write("%s [%s%s];\n" % (id_lookup[n.name()], label, style))
+
+            for e in self.platform_graph.edges():
+                attr = self.platform_graph.edge_attributes(e)
+
+                if 'undirected' in attr and attr['undirected']:
+                    style = ','.join(self.pf_dot_styles['edge']['undirected'])
+                else:
+                    style = ','.join(self.pf_dot_styles['edge']['directed'])
+
+                if 'carrier' in attr:
+                    label = "label=\"%s\"," % attr['carrier']
+                else:
+                    label = ""
+
+                dotfile.write("%s -> %s [%s%s];\n" % (id_lookup[e.source.name()],
+                                                      id_lookup[e.target.name()],
+                                                      label,
+                                                      style))
+
+            dotfile.write('}\n')
+
+    def reachable(self, from_component, to_component):
+        assert isinstance(from_component, PlatformParser.PfComponent)
+        assert isinstance(to_component, PlatformParser.PfComponent)
+
+        if from_component == to_component:
+            return True, 'native', from_component
+        else:
+            # FIXME automatically determine carrier from contract repository
+
+            for e in self.platform_graph.out_edges(from_component):
+                if e.target == to_component:
+                    attr = self.platform_graph.edge_attributes(e)
+                    if attr['carrier'].startswith("Network") or attr['carrier'].startswith("network"):
+                        return False, 'Nic', attr['carrier']
+                    else:
+                        logging.warning("Cannot determine interface for carrier '%s'" % attr['carrier'])
+                        return False, None, attr['carrier']
+
+            for e in self.platform_graph.out_edges(to_component):
+                attr = self.platform_graph.edge_attributes(e)
+                if e.target == from_component and attr['undirected']:
+                    if attr['carrier'].startswith("Network") or attr['carrier'].startswith("network"):
+                        return False, 'Nic', attr['carrier']
+                    else:
+                        logging.warning("Cannot determine interface for carrier '%s'" % attr['carrier'])
+                        return False, None, attr['carrier']
+
+        logging.error("No reachability between %s and %s" % (from_component, to_component))
+        return False, None, None
+
+class FuncArchQuery(QueryModel):
+    def __init__(self, parser):
+        self.parser = parser
+
+        QueryModel.__init__(self)
+
+        self._parse()
+
+    def _parse(self):
+        for child in self.parser.children():
+            self.query_graph.add_node(child)
+
+        # parse and add explicit routes
+        for child in self.query_graph.nodes():
+            for route in child.routes():
+                target = self.find_child(route['child'])
+                if target is not None:
+                    e = self.query_graph.create_edge(child, target)
+                    self.query_graph.edge_attributes(e).update(route)
+                else:
+                    logging.error("Cannot route to referenced child %s. Not found." % (route['child']))
+
+    def find_child(self, name):
+        for ch in self.query_graph.nodes():
+            if ch.identifier() == name:
+                return ch
+
+        return None
+
+    def write_dot(self, filename):
+        with open(filename, 'w+') as dotfile:
+            dotfile.write("digraph {\n")
+
+            next_node_id = 1
+            for n in self.query_graph.nodes():
+                self.query_graph.node_attributes(n)['id'] = "n%d" % next_node_id
+                next_node_id += 1
+
+                QueryModel._write_dot_node(self, dotfile, n)
+
+            for e in self.query_graph.edges():
+                QueryModel._write_dot_edge(self, dotfile, e)
+
+            dotfile.write('}\n')
 
 class SubsystemModel(PlatformModel, QueryModel):
     """ Models the (hierarchical) structure of (Genode) subsystems.
 
     A subsystem model specifies both, the platform (consisting of subsystems) and an abstract, pre-defined mapping
     of children that reside in the subsystems.
+
+    .. deprecated:: x
+        Use :class:`mcc.model.FuncArchQuery` and :class:`mcc.model.SimplePlatformModel` instead
     """
 
     def __init__(self, parser):
@@ -264,8 +419,8 @@ class SystemModel(BacktrackRegistry):
     """
     def __init__(self, repo, platform, dotpath=None):
         super().__init__()
-        self.add_layer(Layer('func_arch', nodetypes={Subsystem.Child}))
-        self.add_layer(Layer('comm_arch', nodetypes={Subsystem.Child,Proxy}))
+        self.add_layer(Layer('func_arch', nodetypes={ChildQuery}))
+        self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy}))
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch', nodetypes={Repository.Component}))
@@ -324,8 +479,12 @@ class SystemModel(BacktrackRegistry):
         fa.graph.add_node(child)
 
         # set pre-defined mapping
-        if child.platform_component() is not None:
-            fa._set_param_candidates('mapping', child, set([child.platform_component()]))
+        if hasattr(child, "platform_component"):
+            if child.platform_component() is not None:
+                fa._set_param_candidates('mapping', child, set([child.platform_component()]))
+        elif child.subsystem() is not None:
+            pf_comp = self.platform.find_by_name(child.subsystem())
+            fa._set_param_candidates('mapping', child, set([pf_comp]))
 
     def _write_dot_node(self, layer, dotfile, node, prefix="  "):
         label = "label=\"%s\"," % node.label()
@@ -368,7 +527,7 @@ class SystemModel(BacktrackRegistry):
                 i += 1
 
                 label = ""
-                if sub.name(None) is not None:
+                if sub.name() is not None:
                     label = "label=\"%s\";" % sub.name()
 
                 style = self.dot_styles[self.platform]['node']
@@ -379,7 +538,8 @@ class SystemModel(BacktrackRegistry):
                 # add components of this subsystem
                 for comp in layer.graph.nodes():
                     # only process children in this subsystem
-                    if sub is not layer._get_param_value('mapping', comp):
+                    if layer._get_param_value('mapping', comp) is not None \
+                       and sub.name() != layer._get_param_value('mapping', comp).name():
                         continue
 
                     layer.graph.node_attributes(comp)['id'] = "c%d" % n
@@ -427,7 +587,10 @@ class SystemModel(BacktrackRegistry):
                 # skip if one of the subsystems is empty
                 if e.source not in clusternodes or e.target not in clusternodes:
                     continue
-                style = self.dot_styles[self.platform]['edge']
+                if pfg.edge_attributes(e)['undirected']:
+                    style = ','.join(self.dot_styles[self.platform]['edge']['undirected'])
+                else:
+                    style = ','.joint(self.dot_styles[self.platform]['edge']['directed'])
                 dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e.source],
                                                       clusternodes[e.target],
                                                       pfg.node_attributes(e.source)['id'],
