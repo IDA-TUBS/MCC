@@ -1,0 +1,251 @@
+#
+# Runfile for pose estimation zynq part. 
+#
+
+#
+# Build
+#
+
+build {
+	core
+	init
+	drivers/timer
+	proxy/remote_rom/backend/nic_ip
+	drivers/nic
+	server/nic_bridge
+	drivers/gpio
+	drivers/i2c
+	drivers/vdma
+	drivers/pl_irq
+	components/camera
+	components/debayer
+	components/rectify
+}
+
+create_boot_directory
+
+#
+# Generate config
+#
+
+set config {
+<config verbose="yes">
+	<parent-provides>
+		<service name="CAP"/>
+		<service name="LOG"/>
+		<service name="RM"/>
+		<service name="SIGNAL"/>
+		<service name="IO_MEM"/>
+		<service name="IRQ"/>
+		<service name="ROM"/>
+		<service name="RAM"/>
+		<service name="IO_PORT"/>
+		<service name="PD"/>
+		<service name="CPU"/>
+	</parent-provides>
+	<default-route>
+		<any-service> <parent/> <any-child/> </any-service>
+	</default-route>
+	<default caps="300" />
+	
+	<start name="timer">
+		<resource name="RAM" quantum="1M"/>
+		<provides><service name="Timer"/></provides>
+	</start>
+
+	<start name="zynq_gpio">
+		<binary name="zynq_gpio_drv" />
+		<resource name="RAM" quantum="1M" />
+		<provides><service name="Gpio"/></provides>
+		<config>
+			<gpio addr="0x41200000"/>
+		</config>
+	</start>
+
+	<start name="zynq_i2c">
+		<binary name="zynq_i2c_drv" />
+		<resource name="RAM" quantum="1M" />
+		<provides><service name="I2C"/></provides>
+	</start>
+
+	<start name="zynq_vdma">
+		<binary name="zynq_vdma_drv" />
+		<resource name="RAM" quantum="1M" />
+		<provides><service name="Vdma"/></provides>
+		<config>
+			<vdma addr="0x43020000"/>
+			<vdma addr="0x43010000"/>
+			<vdma addr="0x43000000"/>
+			<vdma addr="0x43100000"/>	
+			<vdma addr="0x43110000"/>
+		</config>
+	</start>
+
+	<start name="zynq_pl_irq">
+		<binary name="zynq_pl_irq_handler" />
+		<resource name="RAM" quantum="1M" />
+		<provides><service name="Pl_irq"/></provides>
+		<config>
+			<irq number="84"/>
+			<irq number="62"/>
+			<irq number="61"/>
+			<irq number="64"/>
+			<irq number="66"/>
+		</config>
+	</start>
+
+	<start name="camera" caps="400">
+		<resource name="RAM" quantum="32M" />
+		<provides><service name="ROM"/></provides>
+		<route>
+			<service name="ROM" label="trigger_remote"> <child name="remote_rom_client"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+		<config rom="trigger_remote"> </config>
+	</start>
+
+	<start name="debayer_left">
+		<binary name="debayer"/>
+		<resource name="RAM" quantum="8M" />
+		<provides><service name="ROM"/></provides>
+		<route>
+			<service name="ROM" label="image_bayer_left"> <child name="camera"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+		<config>
+			<rom name="image_bayer_left"/>
+		 </config>
+	</start>
+
+	<start name="debayer_middle">
+		<binary name="debayer"/>
+		<resource name="RAM" quantum="8M" />
+		<provides><service name="ROM"/></provides>
+		<route>
+			<service name="ROM" label="image_bayer_middle"> <child name="camera"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+		<config>
+			<rom name="image_bayer_middle"/>
+		 </config>
+	</start>
+
+	<start name="rectify_left" caps="400">
+		<binary name="rectify"/>
+		<resource name="RAM" quantum="16M" />
+		<provides><service name="ROM"/></provides>
+		<route>
+			<service name="ROM" label="image_rgb_left"> <child name="debayer_left"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+		<config>
+			<rom name="image_rgb_left"/>
+		 </config>
+	</start>
+
+	<start name="rectify_middle" caps="400">
+		<binary name="rectify"/>
+		<resource name="RAM" quantum="16M" />
+		<provides><service name="ROM"/></provides>
+		<route>
+			<service name="ROM" label="image_rgb_middle"> <child name="debayer_middle"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+		<config>
+			<rom name="image_rgb_middle"/>
+		 </config>
+	</start>
+
+	<start name="remote_rom_server_left">
+		<binary name="remote_rom_server"/>
+		<resource name="RAM" quantum="64M"/>
+		<route>
+			<service name="ROM" label="image_rect_left"> <child name="rectify_left"/> </service>
+			<service name="Nic"> <child name="nic_bridge"/> </service>
+			<any-service> <parent/> </any-service>
+		</route>
+		<config>
+			<remote_rom binary="true" localname="image_rect_left" name="image_left_remote" src="192.168.0.110" dst="192.168.0.111">
+			</remote_rom>
+		</config>
+	</start>
+
+	<start name="remote_rom_server_middle">
+		<binary name="remote_rom_server"/>
+		<resource name="RAM" quantum="64M"/>
+		<route>
+			<service name="ROM" label="image_rect_middle"> <child name="rectify_middle"/> </service>
+			<service name="Nic"> <child name="nic_bridge"/> </service>
+			<any-service> <parent/> </any-service>
+		</route>
+		<config>
+			<remote_rom binary="true" localname="image_rect_middle" name="image_middle_remote" src="192.168.0.110" dst="192.168.0.111">
+			</remote_rom>
+		</config>
+	</start>
+
+	<start name="remote_rom_client">
+		<resource name="RAM" quantum="64M"/>
+		<route>
+			<service name="Nic"> <child name="nic_bridge"/> </service>
+			<any-service> <parent/> </any-service>
+		</route>
+		<provides><service name="ROM"/></provides>
+		<config>
+			<remote_rom binary="false" name="trigger_remote" src="192.168.0.110" dst="192.168.0.111">
+			</remote_rom>
+		</config>
+	</start>
+
+	<start name="nic_bridge">
+		<resource name="RAM" quantum="64M"/>
+		<provides><service name="Nic"/></provides>
+		<route>
+			<service name="Nic"> <child name="nic_drv"/> </service>
+			<any-service> <parent/> </any-service>
+		</route>
+		<config></config>
+	</start>
+
+	<start name="nic_drv">
+		<resource name="RAM" quantum="16M"/>
+		<provides><service name="Nic"/></provides>
+	</start>
+
+</config>
+}
+
+install_config $config
+
+#
+# Boot
+#
+
+build_boot_image {
+	core
+	init
+	timer
+	zynq_gpio_drv
+	zynq_i2c_drv
+	zynq_vdma_drv
+	zynq_pl_irq_handler
+	camera
+	debayer
+	rectify
+	opencv_core.lib.so
+	opencv_imgproc.lib.so
+	opencv_imgcodecs.lib.so
+	ld.lib.so
+	libc.lib.so
+	libm.lib.so
+	zlib.lib.so
+	stdcxx.lib.so
+	pthread.lib.so
+	remote_rom_server
+	remote_rom_client
+	nic_drv
+	nic_bridge
+	vfs.lib.so
+}
+
+run_genode_until forever
