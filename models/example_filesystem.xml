@@ -1,0 +1,98 @@
+
+<xml>
+<repository>
+	<!-- binaries //-->
+	<binary name="sd_card_drv" />
+	<binary name="fatfs_fs" />
+	<binary name="fs_rom" />
+
+	<!-- components //-->
+	<component name="sd_card_drv">
+		<function name="SD_CARD"/>
+		<provides>
+			<service name="Block"/>
+		</provides>
+		<requires>
+			<ram quantum="1"/>
+		</requires>
+	</component>
+
+	<component name="fatfs_fs">
+		<function name="FATFS_FS"/>
+		<provides>
+			<service name="File_system"/>
+		</provides>
+		<requires>
+			<service name="Block"/>
+			<ram quantum="1"/>
+		</requires>
+	</component>
+
+	<component name="fs_rom">
+		<function name="FS_ROM"/>
+		<provides>
+			<service name="ROM" ref="rom"/>
+		</provides>
+		<requires>
+			<service name="File_system"/>
+			<ram quantum="16"/>
+		</requires>
+	</component>
+
+	<!-- composites //-->
+	<composite name="FILE_SYSTEM">
+		<function name="FILE_SYSTEM"/>
+		<provides>
+			<service name="ROM" ref="file_1" />
+			<service name="ROM" ref="file_2" />
+		</provides>
+		<requires>
+			<service name="Block" function="SD_CARD" ref="in" />
+		</requires>
+
+		<pattern>
+			<component name="fatfs_fs">
+				<route>
+					<service name="Block"><external ref="in" /></service>
+				</route>
+			</component>
+			<component name="fs_rom">
+				<route>
+					<service name="File_system"><child name="fatfs_fs" /></service>
+				</route>
+				<expose ref="file_1" ><service name="ROM" ref="rom"/></expose>
+				<!-- When exposing second file, the ConfigModelChecker fails!!! -->
+				<!--expose ref="file_2"><service name="ROM" ref="rom"/></expose-->
+			</component>
+		</pattern>
+	</composite>
+</repository>
+
+<platform>
+	<subsystem name="zynq">
+		<provides>
+			<spec name="zynq" />
+		</provides>
+		<requires>
+			<comm name="Network" />
+		</requires>
+		<config name="zynq.config" />
+	</subsystem>
+
+	<comm name="Network" />
+</platform>
+
+<!-- system //-->
+<system name="file_system"> 
+
+	<child name="FILE_SYSTEM" subsystem="zynq">
+		<function name="FILE_SYSTEM" />
+		<dependency> 
+			<child name="SD_CARD" />
+		</dependency>
+	</child>
+
+	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
+
+</system>
+</xml>

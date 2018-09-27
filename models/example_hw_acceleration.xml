@@ -2,18 +2,6 @@
 <repository>
 
 	<!--TBD>
-		Q: do we need the component name="timer"
-		or is this part of the "base"-system?
-		A: This is part of the base system. However, the requirement of a 'Timer' service should be part of the <component> spec. Same holds for 'LOG'.
-	</TBD-->
-
-	<!-- TBD>
-		Q: should config (e.g. GPIO baseaddr) for components be an attribute in component?
-		Alternatively: config described in platform
-		A: There is the <component><defaults> node available that can host the <config> which is used by default. This can also be overwritten in patterns by directly adding the <config> node within <pattern><component>.
-	</TBD-->
-
-	<!--TBD>
 		Q: how to expose more than 1 ROM?
 		A: There should be no limitation in the number of provided or exposed services. Particularly, I recently introduced the 'ref' attribute for this case so that the provided services can be distinguished and referenced in the pattern. (see https://www.ida.ing.tu-bs.de/kanboard/?controller=TaskViewController&action=show&task_id=7&project_id=1#comment-3)
 	</TBD-->
@@ -48,6 +36,21 @@
 	<binary name="object_recog" />
 
 	<!-- components //-->
+
+	<component name="parent" singleton="true">
+		<!-- This is a dummy component that provides base system services such as Timer and LOG 
+			Those services should be part of a base system in future.-->
+		<function name="PARENT" />
+		<provides>
+			<service name="Timer" />
+			<service name="LOG"  />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
 	<component name="gpio_drv" singleton="true">
 		<function name="GPIO" />
 		<provides>
@@ -57,6 +60,11 @@
 			<ram quantum="1" />
 			<caps quantum="300" />
 		</requires>
+		<defaults>
+			<config>
+				<gpio addr="0x41200000"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="i2c_drv" singleton="true">
@@ -78,7 +86,17 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
+			<service name="Timer" />
 		</requires>
+		<defaults>
+			<config>
+				<vdma addr="0x43000000"/>
+				<vdma addr="0x43010000"/>
+				<vdma addr="0x43020000"/>
+				<vdma addr="0x43100000"/>
+				<vdma addr="0x43110000"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="pl_irq_drv" singleton="true">
@@ -89,7 +107,21 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
+			<service name="Timer" />
 		</requires>
+		<defaults>
+			<config>
+				<irq number="61"/>
+				<irq number="62"/>
+				<irq number="63"/>
+				<irq number="64"/>
+				<irq number="65"/>
+				<irq number="66"/>
+				<irq number="67"/>
+				<irq number="68"/>
+				<irq number="84"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="nic_drv" singleton="true">
@@ -124,6 +156,12 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
+		<defaults>
+			<config>
+				<remote_rom binary="false" name="trigger_remote" src="192.168.0.110" dst="192.168.0.111">
+				</remote_rom>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="remote_rom_server">
@@ -133,6 +171,11 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
+		<defaults>
+			<config>
+				<remote_rom binary="true" localname="img_pointcloud" name="image_remote_pointcloud" src="192.168.0.110" dst="192.168.0.111"> </remote_rom>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="sd_card_drv">
@@ -154,12 +197,17 @@
 			<service name="Block"/>
 			<ram quantum="1"/>
 		</requires>
+		<defaults>
+			<config>
+				<default-policy root="/" writeable="yes" />
+			</config>
+		</defaults>
 	</component>
 
 	<component name="fs_rom">
 		<function name="FS_ROM"/>
 		<provides>
-			<service name="ROM"/>
+			<service name="ROM" ref="rom"/>
 		</provides>
 		<requires>
 			<service name="File_system"/>
@@ -173,15 +221,26 @@
 			<service name="Dpr" max_clients="1"/>
 		</provides>
 		<requires>
-			<service name="ROM" ref="debayer_region_0" />
-			<!--service name="ROM" ref="debayer_region_1"/>
-			<service name="ROM" ref="rectify_region_1"/>
-			<service name="ROM" ref="stereomatch_region_1"/>
-			<service name="ROM" ref="disp2pc_region_0"/>
-			<service name="ROM" ref="disp2pc_region_1"/-->
+			<service name="Timer" function="PARENT"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
+			<!--service name="ROM" function="FILE_SYSTEM" ref="debayer_region_1"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="stereomatch_region_1"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="disp2pc_region_0"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="disp2pc_region_1"/-->
 			<ram quantum="1" />
 			<caps quantum="300" />
 		</requires>
+		<defaults>
+			<config verbose="yes">
+				<file name="config_debayer_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="1" region="0"/>
+				<file name="config_debayer_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="1" region="1"/>
+				<file name="config_rectify_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="2" region="1"/>
+				<file name="config_stereo_matching_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="3" region="1"/>
+				<file name="config_disp2pc_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="4" region="0"/>
+				<file name="config_disp2pc_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="4" region="1"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="hw_accelerator">
@@ -197,6 +256,7 @@
 			<service name="Dpr" function="Dpr" />
 			<service name="ROM" ref="cam_left" />
 			<service name="ROM" ref="cam_right" />
+			<service name="Timer" function="PARENT"/>
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
@@ -214,9 +274,16 @@
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
 			<service name="ROM" function="TRIGGER" />
+			<service name="Timer" function="PARENT"/>
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
+		<defaults>
+			<config>
+				<dst_rom name_left="img_left" name_right="img_right" size="0x140000"/>
+				<trigger_rom name="trigger_remote"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="debay_left">
@@ -519,8 +586,8 @@
 		<function name="FILE_SYSTEM"/>
 		<provides>
 			<service name="ROM" ref="debayer_region_0" />
-			<!--service name="ROM" ref="debayer_region_1" />
-			<service name="ROM" ref="rectify_region_1" />
+			<service name="ROM" ref="debayer_region_1" />
+			<!--service name="ROM" ref="rectify_region_1" />
 			<service name="ROM" ref="stereomatching_region_1" />
 			<service name="ROM" ref="disp2pc_region_0" />
 			<service name="ROM" ref="disp2pc_region_1" /-->
@@ -539,8 +606,8 @@
 				<route>
 					<service name="File_system"><child name="fatfs_fs" /></service>
 				</route>
-				<expose ref="debayer_region_0"><service name="ROM" /></expose>
-				<!--expose ref="debayer_region_1"><service name="ROM" /></expose>
+				<expose ref="debayer_region_0" ><service name="ROM" ref="rom"/></expose>
+				<!--expose ref="debayer_region_1"><service name="ROM" ref="rom"/></expose>
 				<expose ref="rectify_region_1"><service name="ROM" /></expose>
 				<expose ref="stereomatching_region_1"><service name="ROM" /></expose>
 				<expose ref="disp2pc_region_0"><service name="ROM" /></expose>
@@ -561,6 +628,7 @@
 			<service name="PL_IRQ" function="PL_IRQ" ref="irq"/>
 			<service name="GPIO" function="GPIO" ref="gpio"/>
 			<service name="Dpr" function="Dpr" ref="dpr"/>
+			<service name="Timer" function="PARENT" ref="timer" />
 		</requires>
 		<timing>
 			<on-signal from_ref="preproc">
@@ -616,6 +684,7 @@
 					<service name="PL_IRQ" ><external ref="irq"/></service>
 					<service name="GPIO" ><external ref="gpio"/></service>
 					<service name="Dpr" ><external ref="dpr"/></service>
+					<service name="Timer" ><external ref="timer"/></service>
 				</route>
 				<config>
 					<action type="waitfor_irq" src_name="img_left"/>
@@ -781,6 +850,7 @@
 			<child name="VDMA" />
 			<child name="PL_IRQ" />
 			<child name="TRIGGER" />
+			<child name="base_component"/>
 		</dependency>
 	</child>
 
@@ -806,6 +876,7 @@
             <child name="PL_IRQ" />
             <child name="GPIO" />
 			<child name="Dpr" />
+			<child name="base_component" />
         </dependency>
 	</child>
 
@@ -813,6 +884,7 @@
 		<function name="Dpr" />
 		<dependency> 
 			<child name="FILE_SYSTEM" />
+			<child name="base_component"/>
 		</dependency>
 	</child>
 
@@ -825,10 +897,11 @@
 
 	<child name="I2C" subsystem="zynq"><function name="I2C" /></child>
 	<child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
-	<child name="VDMA" subsystem="zynq"><function name="VDMA" /></child>
-	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /></child>
+	<child name="VDMA" subsystem="zynq"><function name="VDMA" /><dependency><child name="base_component"/></dependency></child>
+	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /><dependency><child name="base_component"/></dependency></child>
 	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
 	<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
+	<child name="base_component" subsystem="zynq"><function name="PARENT" /></child>
 	
 	<!--child name="object_recog" >
 		<component name="object_recog" />
