@@ -11,6 +11,7 @@ Implements variants of the MCC by composing cross-layer models, analysis engines
 from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
+from mcc.importexport import *
 
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
@@ -176,7 +177,6 @@ class MccBase:
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
 
-
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
@@ -184,7 +184,7 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
-    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None):
+    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -245,6 +245,18 @@ class SimpleMcc(MccBase):
         model.print_steps()
         if outpath is not None:
             model.write_dot(outpath+'mcc.dot')
+
+        if with_da:
+            from mcc import extern
+
+            if da_path is None:
+                da_path = outpath
+
+            da_engine = extern.DependencyAnalysisEngine(model, model.by_order, outpath+'model.pickle', outpath+'query.xml', da_path+'response.xml')
+            da_step = NodeStep(BatchMap(da_engine))
+            da_step.add_operation(BatchAssign(da_engine))
+            model.add_step_unsafe(da_step)
+
         model.execute()
 
         return True

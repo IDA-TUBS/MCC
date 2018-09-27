@@ -17,6 +17,7 @@ parser.add_argument('--repo', type=str, default=None,
         help='XML file with contract repository')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
+parser.add_argument('--dependency_analysis', action='store_true')
 
 args = parser.parse_args()
 
@@ -46,4 +47,4 @@ if __name__ == '__main__':
     cfg.check_composite_components()
 
     mcc = lib.SimpleMcc(repo=cfg)
-    mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath)
+    mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath, with_da=args.dependency_analysis)

@@ -760,6 +760,13 @@ class ChildQuery:
     def __repr__(self):
         return self.label()
 
+    def __getstate__(self):
+        return ( self._type,
+                 self._identifier, 
+                 self._queryname )
+
+    def __setstate__(self, state):
+        self._type, self._identifier, self._queryname = state
 
 class Subsystem:
     """ .. deprecated:: X
@@ -894,6 +901,8 @@ class PlatformParser:
             else:
                 return 'native'
 
+        def __getstate__(self):
+            return ( self.name() )
 
     def __init__(self, xml_file, xsd_file):
         XMLParser.__init__(self, xml_file, xsd_file)

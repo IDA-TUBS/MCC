@@ -102,11 +102,62 @@ class Graph:
 
         return edges
 
-    def node_attributes(self, node):
-        return self.graph.node[node]
+    def node_attributes(self, node, params=None):
+        if params is None:
+            return self.graph.node[node]
+        else:
+            filtered_attrs = { 'params' : dict() }
+            for attr, val in self.graph.node[node].items():
+                if attr == 'params':
+                    for param, pval in val.items():
+                        if param in params:
+                            filtered_attrs['params'][param] = { 'value' : pval['value'], 'candidates' : None }
+                else:
+                    filtered_attrs[attr] = val
 
-    def edge_attributes(self, edge):
-        return self.graph.edges[edge.source,edge.target,edge]
+            return filtered_attrs
+
+    def edge_attributes(self, edge, params=None):
+        if params is None:
+            return self.graph.edges[edge.source,edge.target,edge]
+        else:
+            filtered_attrs = { 'params' : dict() }
+            for attr, val in self.graph.edges[edge.source,edge.target,edge].items():
+                if attr == 'params':
+                    for param, pval in val.items():
+                        if param in params:
+                            filtered_attrs['params'][param] = { 'value' : pval['value'], 'candidates' : None }
+                else:
+                    filtered_attrs[attr] = val
+
+            return filtered_attrs
+
+    def generate_ids(self):
+        # TODO store (arbitrary) IDs as node and edge attributes
+        raise NotImplementedError
 
     def nodes(self):
         return self.graph.node.keys()
+
+    def export_filter(self, node_params, edge_params):
+        self._node_params = node_params
+        self._edge_params = edge_params
+
+    def __getstate__(self):
+        return GraphExporter(self, self._node_params, self._edge_params).__dict__
+
+
+class GraphExporter(Graph):
+    def __init__(self, graph, node_params, edge_params):
+        self.graph = graph.graph.fresh_copy()
+        self.graph.add_nodes_from(graph.graph)
+        self.graph.add_edges_from(graph.graph.edges(keys=True))
+
+        for node in self.graph.nodes():
+            self.node_attributes(node).update(graph.node_attributes(node, node_params))
+
+        for edge in self.edges():
+            self.edge_attributes(edge).update(graph.edge_attributes(edge, edge_params))
+
+        return
+
