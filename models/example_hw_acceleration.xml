@@ -1,6 +1,20 @@
 <xml>
 <repository>
 
+	<!--TBD>
+		do we need the component name="timer"
+		or is this part of the "base"-system?
+	</TBD-->
+
+	<!-- TBD>
+		should config (e.g. GPIO baseaddr) for components be an attribute in component?
+		Alternatively: config described in platform
+	</TBD-->
+
+	<!--TBD>
+		how to expose more than 1 ROM?
+	</TBD-->
+
 	<!-- binaries //-->
 	<binary name="gpio_drv" />
 	<binary name="i2c_drv" />
@@ -10,6 +24,9 @@
 	<binary name="nic_bridge" />
 	<binary name="remote_rom_client" />
 	<binary name="remote_rom_server" />
+	<binary name="sd_card_drv" />
+	<binary name="fatfs_fs" />
+	<binary name="fs_rom" />
 	<binary name="bitstream_loader" />
 	<binary name="hw_accelerator" />
 	<binary name="camera" />
@@ -24,6 +41,7 @@
 	<binary name="stereo_match" />
 	<binary name="disp_to_pc" />
 	<binary name="pose_estimation" />
+	<binary name="trigger" />
 	<binary name="object_recog" />
 
 	<!-- components //-->
@@ -114,12 +132,50 @@
 		</requires>
 	</component>
 
+	<component name="sd_card_drv">
+		<function name="SD_CARD"/>
+		<provides>
+			<service name="Block"/>
+		</provides>
+		<requires>
+			<ram quantum="1"/>
+		</requires>
+	</component>
+
+	<component name="fatfs_fs">
+		<function name="FATFS_FS"/>
+		<provides>
+			<service name="File_system"/>
+		</provides>
+		<requires>
+			<service name="Block"/>
+			<ram quantum="1"/>
+		</requires>
+	</component>
+
+	<component name="fs_rom">
+		<function name="FS_ROM"/>
+		<provides>
+			<service name="ROM"/>
+		</provides>
+		<requires>
+			<service name="File_system"/>
+			<ram quantum="16"/>
+		</requires>
+	</component>
+
 	<component name="bitstream_loader" singleton="true">
 		<function name="Dpr" />
 		<provides>
 			<service name="Dpr" max_clients="1"/>
 		</provides>
 		<requires>
+			<service name="ROM" ref="debayer_region_0" />
+			<!--service name="ROM" ref="debayer_region_1"/>
+			<service name="ROM" ref="rectify_region_1"/>
+			<service name="ROM" ref="stereomatch_region_1"/>
+			<service name="ROM" ref="disp2pc_region_0"/>
+			<service name="ROM" ref="disp2pc_region_1"/-->
 			<ram quantum="1" />
 			<caps quantum="300" />
 		</requires>
@@ -154,6 +210,7 @@
 			<service name="GPIO" function="GPIO" />
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
+			<service name="ROM" function="TRIGGER" />
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
@@ -214,9 +271,9 @@
 			</regions-->
 		</requires>
 		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
-			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
-			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
+			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
+			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
 		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="in">
@@ -280,9 +337,9 @@
 			<!--regions><region id="0" /></regions-->
 		</requires>
 		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
-			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
-			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
+			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
+			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
 		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="in">
@@ -333,9 +390,9 @@
 			<!--regions><region id="0" /></regions-->
 		</requires>
 		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
-			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
-			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
+			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
+			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
+			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
 		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="left">
@@ -376,12 +433,12 @@
 				<region id="0" />
 				<region id="1" />
 			</regions-->
+			<!--hw_characteristics>
+				<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
+				<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
+				<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
+			</hw_characteristics-->
 		</requires>
-		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" gain_essential="10" cross_section="123" />
-			<type name="BRAM" quantum="123456" gain_essential="5" gain_ecc="20000" cross_section="123" />
-			<type name="LUT" quantum="123456" gain_essential="2" gain_redundancy="30000" cross_section="123" />
-		</hw_characteristics-->
 		<timing>
 			<on-signal from_ref="disp">
 				<task wcet="60" bcet="40"/>
@@ -395,6 +452,18 @@
 			<ram quantum="256" />
 			<caps quantum="500" />
 		</requires>
+		<timing>
+			<on-signal from_ref="in">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
+	</component>
+
+	<component name="trigger">
+		<function name="TRIGGER" />
+		<provides>
+			<service name="ROM" />
+		</provides>
 		<timing>
 			<on-signal from_ref="in">
 				<task wcet="100" bcet="80"/>
@@ -439,6 +508,40 @@
 				<expose ref="out">
 					<service name="ROM"/>
 				</expose>
+			</component>
+		</pattern>
+	</composite>
+
+	<composite name="FILE_SYSTEM">
+		<function name="FILE_SYSTEM"/>
+		<provides>
+			<service name="ROM" ref="debayer_region_0" />
+			<!--service name="ROM" ref="debayer_region_1" />
+			<service name="ROM" ref="rectify_region_1" />
+			<service name="ROM" ref="stereomatching_region_1" />
+			<service name="ROM" ref="disp2pc_region_0" />
+			<service name="ROM" ref="disp2pc_region_1" /-->
+		</provides>
+		<requires>
+			<service name="Block" function="SD_CARD" ref="in" />
+		</requires>
+
+		<pattern>
+			<component name="fatfs_fs">
+				<route>
+					<service name="Block"><external ref="in" /></service>
+				</route>
+			</component>
+			<component name="fs_rom">
+				<route>
+					<service name="File_system"><child name="fatfs_fs" /></service>
+				</route>
+				<expose ref="debayer_region_0"><service name="ROM" /></expose>
+				<!--expose ref="debayer_region_1"><service name="ROM" /></expose>
+				<expose ref="rectify_region_1"><service name="ROM" /></expose>
+				<expose ref="stereomatching_region_1"><service name="ROM" /></expose>
+				<expose ref="disp2pc_region_0"><service name="ROM" /></expose>
+				<expose ref="disp2pc_region_1"><service name="ROM" /></expose-->
 			</component>
 		</pattern>
 	</composite>
@@ -520,7 +623,7 @@
 						<dst name="img_rectified_left" amount="3"/>
 					</action>
 					<action type="task" region="0" tdest="4">
-						<src1 name="img_left" vdma="2" amount="1"/>
+						<src1 name="img_left" vdma="3" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
@@ -528,19 +631,26 @@
 						<dst name="img_rectified_right" amount="3"/>
 					</action>
 					<action type="task" region="0" tdest="4">
-						<src1 name="img_right" vdma="2" amount="1"/>
+						<src1 name="img_right" vdma="3" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="0"/>
 					<action type="waitfor_irq" region="1"/>
 					<action type="reconfigure" region="1" algorithm="stereo_matching"/>
 					<action type="task" region="1" tdest="0">
-						<src1 name="img_rectified_left" vdma="2" amount="3"/>
-						<src2 name="img_rectified_right" vdma="3" amount="3"/>
+						<src1 name="img_rectified_left" vdma="3" amount="3"/>
+						<src2 name="img_rectified_right" vdma="4" amount="3"/>
 						<dst name="img_disparity" amount="1"/>
 					</action>
 					<action type="waitfor_irq" region="1"/>
 					<action type="reconfigure" region="0" algorithm="disp2pc"/>
-				</config>
+					<action type="task" region="0" tdest="0">
+						<src1 name="img_disparity" vdma="3" amount="1" />
+						<src2 name="img_rectified_left" vdma="4" amount="3"/>
+						<dst name="img_pointcloud" amount="16"/>
+					</action>
+					<action type="waitfor_irq" region="0"/>
+					<action type="update" dst_name="img_pointcloud"/>
+					</config>
 				<expose ref="out">
 					<service name="ROM"/>
 				</expose>
@@ -632,8 +742,11 @@
 				<region id="0" reconf_time="123" />
 				<region id="1" reconf_time="456" />
 			</regions>
-			<vdmas quantum="2" />
-		</provides-->
+			<vdmas>
+				<vdma id="0" />
+				<vdma id="1" />
+			</vdmas-->
+		</provides>
 		<requires>
 			<comm name="Network" />
 		</requires>
@@ -664,6 +777,7 @@
 			<child name="GPIO" />
 			<child name="VDMA" />
 			<child name="PL_IRQ" />
+			<child name="TRIGGER" />
 		</dependency>
 	</child>
 
@@ -692,13 +806,27 @@
         </dependency>
 	</child>
 
+	<child name="Dpr" subsystem="zynq">
+		<function name="Dpr" />
+		<dependency> 
+			<child name="FILE_SYSTEM" />
+		</dependency>
+	</child>
+
+	<child name="FILE_SYSTEM" subsystem="zynq">
+		<function name="FILE_SYSTEM" />
+		<dependency> 
+			<child name="SD_CARD" />
+		</dependency>
+	</child>
+
 	<child name="I2C" subsystem="zynq"><function name="I2C" /></child>
 	<child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
 	<child name="VDMA" subsystem="zynq"><function name="VDMA" /></child>
 	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /></child>
-	<child name="Dpr" subsystem="zynq"><function name="Dpr" /></child>
+	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
 	<child name="NIC1" subsystem="zynq"><function name="Network" /></child>
-
+	
 	<!--child name="object_recog" >
 		<component name="object_recog" />
 		<route>
@@ -709,10 +837,12 @@
 	<child subsystem="pc" >
         <component name="pose_estimation" />
 		<route>
-			<!-- select composite as child here (OBJECT_PREPRO / POSE_SW / POSE_HW) /-->
+			<!--select composite as child here (OBJECT_PREPRO / POSE_SW / POSE_HW) /-->
 			<service name="ROM"><child name="POSE_SW" /></service>
 		</route>
 	</child>
+
+	<child name="TRIGGER" subsystem="pc"><function name="TRIGGER" /></child>
 
 	<child name="NIC2" subsystem="pc"><function name="Network" /></child>
 </system>
