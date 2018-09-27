@@ -223,11 +223,11 @@
 		<requires>
 			<service name="Timer" function="PARENT"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
-			<!--service name="ROM" function="FILE_SYSTEM" ref="debayer_region_1"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_1"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="stereomatch_region_1"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="disp2pc_region_0"/>
-			<service name="ROM" function="FILE_SYSTEM" ref="disp2pc_region_1"/-->
+			<service name="ROM" function="FILE_SYSTEM" ref="disp2pc_region_1"/>
 			<ram quantum="1" />
 			<caps quantum="300" />
 		</requires>
@@ -587,10 +587,10 @@
 		<provides>
 			<service name="ROM" ref="debayer_region_0" />
 			<service name="ROM" ref="debayer_region_1" />
-			<!--service name="ROM" ref="rectify_region_1" />
+			<service name="ROM" ref="rectify_region_1" />
 			<service name="ROM" ref="stereomatching_region_1" />
 			<service name="ROM" ref="disp2pc_region_0" />
-			<service name="ROM" ref="disp2pc_region_1" /-->
+			<service name="ROM" ref="disp2pc_region_1" />
 		</provides>
 		<requires>
 			<service name="Block" function="SD_CARD" ref="in" />
@@ -607,11 +607,11 @@
 					<service name="File_system"><child name="fatfs_fs" /></service>
 				</route>
 				<expose ref="debayer_region_0" ><service name="ROM" ref="rom"/></expose>
-				<!--expose ref="debayer_region_1"><service name="ROM" ref="rom"/></expose>
+				<expose ref="debayer_region_1"><service name="ROM" ref="rom"/></expose>
 				<expose ref="rectify_region_1"><service name="ROM" /></expose>
 				<expose ref="stereomatching_region_1"><service name="ROM" /></expose>
 				<expose ref="disp2pc_region_0"><service name="ROM" /></expose>
-				<expose ref="disp2pc_region_1"><service name="ROM" /></expose-->
+				<expose ref="disp2pc_region_1"><service name="ROM" /></expose>
 			</component>
 		</pattern>
 	</composite>
@@ -686,6 +686,9 @@
 					<service name="Dpr" ><external ref="dpr"/></service>
 					<service name="Timer" ><external ref="timer"/></service>
 				</route>
+				<expose ref="out">
+					<service name="ROM"/>
+				</expose>
 				<config>
 					<action type="waitfor_irq" src_name="img_left"/>
 					<action type="waitfor_irq" src_name="img_right"/>
@@ -723,9 +726,6 @@
 					<action type="waitfor_irq" region="0"/>
 					<action type="update" dst_name="img_pointcloud"/>
 					</config>
-				<expose ref="out">
-					<service name="ROM"/>
-				</expose>
 			</component>
 		</pattern>
 	</composite>
@@ -789,12 +789,12 @@
 
 		<pattern>
 			<component name="remote_rom_client">
-				<expose>
-					<service name="ROM" />
-				</expose>
 				<route>
 					<service name="Nic"><external ref="to" /></service>
 				</route>
+				<expose>
+					<service name="ROM" />
+				</expose>
 			</component>
 			<component name="remote_rom_server">
 				<route>

@@ -277,9 +277,9 @@
    </xs:complexType>
 
    <xs:complexType name="PatternComponentType">
-      <xs:all>
-        <xs:element name="requires" type="CompositeRequiresType" minOccurs="0" />
-        <xs:element name="route" minOccurs="0">
+      <xs:sequence>
+        <xs:element name="requires" type="CompositeRequiresType" minOccurs="0" maxOccurs="1" />
+        <xs:element name="route" minOccurs="0" maxOccurs="1">
           <xs:complexType>
             <xs:choice maxOccurs="unbounded">
                 <xs:element name="service">
@@ -297,16 +297,16 @@
             </xs:choice>
           </xs:complexType>
         </xs:element>
-        <xs:element name="expose" minOccurs="0">
+        <xs:element name="expose" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
-            <xs:choice maxOccurs="unbounded">
+            <xs:all>
               <xs:element name="service" type="ServiceType" />
-            </xs:choice>
+            </xs:all>
             <xs:attribute name="ref" type="xs:string" />
           </xs:complexType>
         </xs:element>
-        <xs:element name="config" minOccurs="0" />
-      </xs:all>
+        <xs:element name="config" minOccurs="0" maxOccurs="1" />
+      </xs:sequence>
       <xs:attribute name="name" type="xs:string" use="required"/>
    </xs:complexType>
 

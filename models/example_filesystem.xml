@@ -62,7 +62,7 @@
 				</route>
 				<expose ref="file_1" ><service name="ROM" ref="rom"/></expose>
 				<!-- When exposing second file, the ConfigModelChecker fails!!! -->
-				<!--expose ref="file_2"><service name="ROM" ref="rom"/></expose-->
+				<expose ref="file_2"><service name="ROM" ref="rom"/></expose>
 			</component>
 		</pattern>
 	</composite>
