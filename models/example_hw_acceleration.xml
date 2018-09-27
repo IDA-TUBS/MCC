@@ -2,17 +2,20 @@
 <repository>
 
 	<!--TBD>
-		do we need the component name="timer"
+		Q: do we need the component name="timer"
 		or is this part of the "base"-system?
+		A: This is part of the base system. However, the requirement of a 'Timer' service should be part of the <component> spec. Same holds for 'LOG'.
 	</TBD-->
 
 	<!-- TBD>
-		should config (e.g. GPIO baseaddr) for components be an attribute in component?
+		Q: should config (e.g. GPIO baseaddr) for components be an attribute in component?
 		Alternatively: config described in platform
+		A: There is the <component><defaults> node available that can host the <config> which is used by default. This can also be overwritten in patterns by directly adding the <config> node within <pattern><component>.
 	</TBD-->
 
 	<!--TBD>
-		how to expose more than 1 ROM?
+		Q: how to expose more than 1 ROM?
+		A: There should be no limitation in the number of provided or exposed services. Particularly, I recently introduced the 'ref' attribute for this case so that the provided services can be distinguished and referenced in the pattern. (see https://www.ida.ing.tu-bs.de/kanboard/?controller=TaskViewController&action=show&task_id=7&project_id=1#comment-3)
 	</TBD-->
 
 	<!-- binaries //-->
