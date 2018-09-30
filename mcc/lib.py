@@ -269,29 +269,9 @@ class SimpleMcc(MccBase):
 
         # TODO implement transformation/merge into component instantiation
 
-<<<<<<< HEAD
-        # TODO implement backtracking
-
-        self.insert_random_backtracking_engine(model, 0.00)
-||||||| merged common ancestors
-        # TODO implement backtracking
-
-        self.insert_random_backtracking_engine(model, 0.05)
-=======
         # insert backtracking engine for testing (random rejection of candidates)
         self.insert_random_backtracking_engine(model, 0.05)
->>>>>>> origin/backtrack
-        model.print_steps()
-<<<<<<< HEAD
-        model.write_dot('mcc.dot')
-        try:
-            model.execute()
-        except Exception as e:
-            pass
-||||||| merged common ancestors
-        model.write_dot('mcc.dot')
-        model.execute()
-=======
+
         if outpath is not None:
             model.write_dot(outpath+'mcc.dot')
 
@@ -310,15 +290,8 @@ class SimpleMcc(MccBase):
             model.execute()
         except Exception as e:
             print(e)
->>>>>>> origin/backtrack
-
-<<<<<<< HEAD
         # model.write_analysis_engine_dependency_graph()
         model_extractor = ModelExtractor(model.by_name, '/tmp/blub.xml', model.dep_graph)
         model_extractor.write_modell()
-||||||| merged common ancestors
         # model.write_analysis_engine_dependency_graph()
-=======
-        model.write_analysis_engine_dependency_graph(outpath+'AeDepGraph.dot')
->>>>>>> origin/backtrack
         return True
