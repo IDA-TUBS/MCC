@@ -941,7 +941,6 @@ class Map(Operation):
 
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
-        from mcc.backtracking import MapNode, DependNode # TODO remove dependency to backtracking
 
         # check if we need to skip elements
         for (index, obj) in enumerate(iterable):
@@ -971,15 +970,11 @@ class Map(Operation):
             # update candidates for this parameter in layer object
             assert(candidates is not None)
             if dep_graph is not None:
-                map_node = MapNode(self.source_layer, self.param, obj, candidates)
-                map_node.attribute_index = index
-                dep_graph.append_node(map_node)
+                dep_graph.add_map_node(source_layer, param, obj, candidates, index)
 
                 # FIXME we shouldn't need DependNodes if we directly add edges to the corresponding AssignNodes
-                dep_node = DependNode(self.source_layer, self.source_layer.used_params, obj)
-                dep_graph.add_node(dep_node)
-                edge = Edge(dep_node, map_node)
-                dep_graph.add_edge(edge)
+                # edge = Edge(dep_node, map_node)
+                # dep_graph.add_edge(edge)
 
             self.source_layer.stop_tracking()
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
@@ -1084,7 +1079,7 @@ class Assign(Operation):
                     obj = next(it)
                     # obj is the operation that needs to choose a different
                     # candidate
-                    assert(obj == dep_graph.current)
+
                     used_candidates = set()
                     for edge in self.dep_graph.out_edges(self.dep_graph.current):
                         used_candidates.add(edge.target.match)
@@ -1117,9 +1112,7 @@ class Assign(Operation):
             assert(result in candidates)
 
             if dep_graph is not None:
-                assign_node = AssignNode(self.source_layer, self.param, obj, result)
-                assign_node.attribute_index = index
-                dep_graph.append_node(assign_node)
+                dep_graph.add_assign_node(self.source_layer, self.param, obj, result, index)
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
@@ -1211,7 +1204,6 @@ class Transform(Operation):
 
     def execute(self, iterable, dep_graph=None):
         logging.info("Executing %s" % self)
-        from mcc.backtracking import TransformNode # TODO remove dependency to backtracking
 
         for (index ,obj) in enumerate(iterable):
             # TODO shall we also return the existing objects (for comp_inst)?
@@ -1229,9 +1221,8 @@ class Transform(Operation):
                     assert(isinstance(o, self.target_layer.node_types()))
 
             if dep_graph is not None:
-                trans_node = TransformNode(self.source_layer, self.target_layer, obj, inserted)
-                trans_node.attribute_index = index
-                dep_graph.append_node(trans_node)
+                dep_graph.add_transform_node(self.source_layer, self.target_layer,
+                        obj, inserted, index)
 
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:

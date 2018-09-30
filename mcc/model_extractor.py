@@ -4,6 +4,7 @@ from lxml import etree as ET
 from lxml.etree import XMLSyntaxError
 
 from mcc.framework import *
+from mcc.backtracking import *
 
 import networkx as nx
 
@@ -96,10 +97,10 @@ class ModelExtractor():
                     value = n_attributes['params'][param]['value']
                     candidates = n_attributes['params'][param]['candidates']
 
-                    print(n_attributes['params'])
+                    # print(n_attributes['params'])
                     if 'match' in n_attributes['params'][param]:
                         match = n_attributes['params'][param]['match']
-                        print(str(match))
+                        # print(str(match))
                         match_node = ET.SubElement(param_root, 'match')
                         match_node.text = str(match)
                     value_node = ET.SubElement(param_root, 'value')

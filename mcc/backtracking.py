@@ -54,6 +54,7 @@ class DependNode(Node):
         self.layer  = layer
         self.params = params
         self.dep    = dep
+        self.param = ""
 
     def __str__(self):
         return 'DependNode: Layer={}\n, Params={}\n, Dependencies={}\n'.format(self.layer, self.params, self.dep)
@@ -157,6 +158,21 @@ class DependencyGraph(Graph):
         for (s, t, e) in self.graph.out_edges(node, keys=True):
             t.valid = False
             self.mark_subtree_as_bad(t)
+
+    def add_transform_node(source_layer, target_layer, obj, inserted, attr_index):
+        node = TransformNode(source_layer, target_layer, obj, inserted)
+        node.attribute_index = attr_index
+        self.append_node(node)
+
+    def add_map_node(source_layer, param, obj, candidates, attr_index):
+        node = MapNode(source_layer, param, obj, candidates)
+        node.attribute_index = attr_index
+        self.append_node(node)
+
+    def add_assign_node(source_layer, param, obj, result, attr_index):
+        node = AssignNode(source_layer, param, obj, result)
+        node.attribute_index = attr_index
+        self.append_node(node)
 
     def write_dot(self):
 
