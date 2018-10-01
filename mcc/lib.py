@@ -191,27 +191,10 @@ class SimpleMcc(MccBase):
         #      if we then set failure_rate to 1.0, we can traverse the entire search space
         assert(0 <= failure_rate <= 1.0)
 
-        from random import Random
-        rand = Random()
-
-        source_layer = None
-        r = 0
-        rand_found = False
-        while not rand_found:
-            r = rand.randint(1, len(model.steps)-1)
-
-            print(model.steps)
-            for op in model.steps[r].operations:
-                if isinstance(op, Assign):
-                    r += 1
-                    rand_found = True
-                    break;
-
-
-        source_layer = model.steps[r-1].source_layer;
+        source_layer = model.steps[len(model.steps)-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate, fail_once=True)
-        model.steps.insert(r, NodeStep(Check(bt, 'BackTrackingTest')))
+        bt = BacktrackingTestEngine(source_layer, 'mapping', failure_rate, fail_once=False)
+        model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.

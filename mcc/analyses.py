@@ -613,26 +613,26 @@ class GenodeSubsystemEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
 
 class BacktrackingTestEngine(AnalysisEngine):
-    def __init__(self, layer, param, failure_rate=0.0, fail_once=False):
+    def __init__(self, layer, param, dep_graph, failure_rate=0, fail_once=False):
         super().__init__(layer, param)
-
-        assert(0.0 <= failure_rate <= 1.0)
-        self.failure_rate = failure_rate
-
-        from random import Random
-        self.random = Random()
-        self.fail_once = fail_once
-        self.failed = False
+        self.dep_graph    = dep_graph
+        self.failure_rate = 0
+        self.fail_once    = fail_once
 
     def check(self, obj):
-        if self.failed:
-            return True
 
-        r = self.random.random()
-        if r < self.failure_rate:
-            if self.fail_once:
-                self.failed = True
-            return False
+        # check if for every assign node alle the candidates have been used
+        current = self.dep_graph.current
+        path = self.dep_graph.shortest_path(self.dep_graph.root, current)
+        for node in path:
+            if not isinstance(node, AssignNode):
+                continue
+            used_cands = self.dep_graph.get_used_candidates(node)
+            all_cands  = node.layer._get_params(node.param, node.value)
+
+            cands = all_cands - used_cands
+            if len(cands) == 0:
+                return False
 
         return True
 
