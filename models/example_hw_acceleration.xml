@@ -558,9 +558,10 @@
 	<composite name="OBJECT_PREPRO">
 		<function name="OBJECT_PREPRO" />
 		<provides>
-			<service name="ROM" ref="out" />
+			<service> name="ROM" ref="out" 
+				<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
+			</service>
 		</provides>
-		<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 		</requires>
@@ -619,10 +620,9 @@
 
 	<composite name="POSE_ESTIMATION_HW">
 		<function name="POSE_ESTIMATION_HW" />
-		<provides>
-			<service name="ROM" ref="out" />
-		</provides>
-		<!--traffic amount="960*1280*3*8" type="byte_per_frame"/-->
+		<service> name="ROM" ref="out" 
+			<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
+		</service>
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
@@ -734,10 +734,9 @@
 
 	<composite name="POSE_ESTIMATION_SW">
 		<function name="POSE_ESTIMATION_SW" />
-		<provides>
-			<service name="ROM" ref="out" />
-		</provides>
-		<!--traffic amount="960*1280*3*8" type="byte_per_frame"/-->
+		<service> name="ROM" ref="out" 
+			<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
+		</service>
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
