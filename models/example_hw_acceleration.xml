@@ -560,6 +560,7 @@
 		<provides>
 			<service name="ROM" ref="out" />
 		</provides>
+		<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 		</requires>
@@ -621,6 +622,7 @@
 		<provides>
 			<service name="ROM" ref="out" />
 		</provides>
+		<!--traffic amount="960*1280*3*8" type="byte_per_frame"/-->
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
@@ -735,6 +737,7 @@
 		<provides>
 			<service name="ROM" ref="out" />
 		</provides>
+		<!--traffic amount="960*1280*3*8" type="byte_per_frame"/-->
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
