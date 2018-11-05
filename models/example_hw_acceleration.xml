@@ -127,7 +127,9 @@
 	<component name="nic_drv" singleton="true">
 		<function name="Network" />
 		<provides>
-			<service name="Nic" max_clients="1" />
+			<service name="Nic" max_clients="1">
+				<in-traffic size="10M" interval_ms="1000" />
+			</service>
 		</provides>
 		<requires>
 			<ram quantum="16" />
@@ -558,8 +560,8 @@
 	<composite name="OBJECT_PREPRO">
 		<function name="OBJECT_PREPRO" />
 		<provides>
-			<service> name="ROM" ref="out" 
-				<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
+			<service name="ROM" ref="out">
+				<out-traffic size="3600K" interval_ms="1000" />
 			</service>
 		</provides>
 		<requires>
@@ -620,9 +622,11 @@
 
 	<composite name="POSE_ESTIMATION_HW">
 		<function name="POSE_ESTIMATION_HW" />
-		<service> name="ROM" ref="out" 
-			<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
-		</service>
+		<provides>
+			<service name="ROM" ref="out">
+				<out-traffic size="3600K" interval_ms="1000" />
+			</service>
+		</provides>
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
@@ -734,9 +738,11 @@
 
 	<composite name="POSE_ESTIMATION_SW">
 		<function name="POSE_ESTIMATION_SW" />
-		<service> name="ROM" ref="out" 
-			<!--traffic amount="960*1280*3" type="byte_per_frame"/-->
-		</service>
+		<provides>
+			<service name="ROM" ref="out">
+				<out-traffic size="3600K" interval_ms="1000" />
+			</service>
+		</provides>
 		<requires>
 			<service name="ROM" function="CAMERA" ref="cam_left" />
 			<service name="ROM" function="CAMERA" ref="cam_right" />
