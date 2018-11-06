@@ -187,12 +187,12 @@
 
 		<pattern>
 			<component name="debay">
-				<route><service name="ROM"><external ref="cam"/></service></route>
+				<route><service name="ROM" ref="in"><external ref="cam"/></service></route>
 			</component>
 			<component name="rect">
-				<route><service name="ROM"><child name="debay" /></service></route>
+				<route><service name="ROM" ref="in"><child name="debay" /></service></route>
 				<expose ref="out">
-					<service name="ROM"/>
+					<service name="ROM" ref="out"/>
 				</expose>
 			</component>
 		</pattern>
@@ -211,12 +211,12 @@
 
 		<pattern>
 			<component name="remote_rom_client">
-				<expose>
-					<service name="ROM" />
-				</expose>
 				<route>
 					<service name="Nic"><external ref="to" /></service>
 				</route>
+				<expose>
+					<service name="ROM" />
+				</expose>
 			</component>
 			<component name="remote_rom_server">
 				<route>
@@ -229,22 +229,26 @@
 </repository>
 
 <platform>
-	<subsystem name="zynq">
-		<provides>
-			<spec name="zynq" />
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="zynq.config" />
-	</subsystem>
+	<component>
+		<subsystem name="zynq">
+			<provides>
+				<spec name="zynq" />
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="zynq.config" />
+		</subsystem>
+	</component>
 
-	<subsystem name="pc">
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="pc.config" />
-	</subsystem>
+	<component>
+		<subsystem name="pc">
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="pc.config" />
+		</subsystem>
+	</component>
 
 	<comm name="Network" />
 </platform>

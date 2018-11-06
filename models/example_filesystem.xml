@@ -69,15 +69,17 @@
 </repository>
 
 <platform>
-	<subsystem name="zynq">
-		<provides>
-			<spec name="zynq" />
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="zynq.config" />
-	</subsystem>
+    <component>
+	    <subsystem name="zynq">
+		    <provides>
+			    <spec name="zynq" />
+		    </provides>
+		    <requires>
+			    <comm name="Network" />
+		    </requires>
+		    <config name="zynq.config" />
+	    </subsystem>
+	</component>
 
 	<comm name="Network" />
 </platform>

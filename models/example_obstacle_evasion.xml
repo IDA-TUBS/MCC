@@ -374,12 +374,12 @@
 
 		<pattern>
             <component name="remote_rom_client">
-                <expose>
-                    <service name="ROM" />
-                </expose>
                 <route>
                     <service name="Nic"><external ref="to" /></service>
                 </route>
+                <expose>
+                    <service name="ROM" />
+                </expose>
             </component>
             <component name="remote_rom_server">
                 <route>
@@ -524,6 +524,7 @@
 </repository>
 
 <platform>
+ <component>
     <subsystem name="legacy_pc">
         <provides>
             <spec name="legacy_pc" />
@@ -533,27 +534,34 @@
         </requires>
         <config name="legacy_pc.config" />
     </subsystem>
+ </component>
 
+ <component>
     <subsystem name="nuc">
         <requires>
             <comm name="Network" />
         </requires>
         <config name="nuc.config" />
     </subsystem>
+ </component>
 
+ <component>
     <subsystem name="zynq">
         <requires>
             <comm name="Network" />
         </requires>
         <config name="zynq.config" />
     </subsystem>
+ </component>
 
+ <component>
     <subsystem name="dspace">
         <requires>
             <comm name="Network" />
         </requires>
         <config name="dspace.config" />
     </subsystem>
+ </component>
 
     <comm name="Network" />
 </platform>

@@ -34,6 +34,48 @@ class XMLParser:
 
 class Repository(XMLParser):
 
+    class ServiceIdentifier:
+        def __init__(self, xml_node, ref=None):
+            self.name = xml_node.get('name')
+
+            if ref is not None:
+                self.ref = ref
+            else:
+                self.ref  = xml_node.get('ref')
+
+        def match_all(self, candidates):
+            result = set()
+            for cand in candidates:
+                if self.ref is None:
+                    if self.name == cand.name:
+                        result.add(cand)
+                elif cand == self:
+                    result.add(cand)
+
+            return result
+
+        def find_match(self, repo, root):
+            if self.ref is None:
+                return repo._find_element_by_attribute("service", { "name" : self.name }, root)
+            else:
+                return repo._find_element_by_attribute("service", { "ref" : self.ref }, root)
+
+        def __eq__(self, rhs):
+            if rhs.ref == self.ref:
+                if self.ref is None:
+                    return self.name == rhs.name
+
+                return True
+
+            return False
+
+        def __hash__(self):
+            return hash('%s#%s' % (self.name, self.ref))
+
+        def __repr__(self):
+            return '%s#%s' % (self.name, self.ref)
+
+
     class Service:
         def __init__(self, xml_node):
             self.xml_node = xml_node
@@ -268,6 +310,9 @@ class Repository(XMLParser):
 
             return flattened
 
+    class NodeNotFoundError(Exception):
+        pass
+
     def __init__(self, config_model_file, xsd_file=None):
         XMLParser.__init__(self, config_model_file, xsd_file)
 
@@ -460,11 +505,12 @@ class Repository(XMLParser):
 
         provides = set()
         for p in component.find("provides").findall("service"):
+            identifier = '%s#%s' % (p.get("name"), p.get("ref"))
             # the same service cannot be provided twice
-            if p.get("name") in provides:
-                logging.error("Found multiple provision of service '%s'." % (p.get("name")))
+            if identifier in provides:
+                logging.error("Found multiple provision of service '%s'." % (identifier))
             else:
-                provides.add(p.get("name"))
+                provides.add(identifier)
 
     def _check_requirements(self, component):
         if component.find("requires") is None:
@@ -561,26 +607,26 @@ class Repository(XMLParser):
             for cspec in cspecs:
                 tmp = set()
                 for s in cspec.findall("./requires/service"):
-                    tmp.add(s.get("name"))
+                    tmp.add(Repository.ServiceIdentifier(s))
                 required_services[cname]["specified"].update(tmp)
 
                 tmp = set()
                 for s in cspec.findall("./provides/service"):
-                    tmp.add(s.get("name"))
+                    tmp.add(Repository.ServiceIdentifier(s))
                 provided_services[cname]["specified"].update(tmp)
 
             # additional requirements in composite spec
             for s in c.findall("./requires/service"):
-                sname = s.get('name')
+                sname = Repository.ServiceIdentifier(s)
                 required_services[cname]['specified'].add(sname)
 
             # references in <route> must be specified
             for s in c.findall("./route/service"):
-                sname = s.get("name")
+                sname = Repository.ServiceIdentifier(s)
                 required_services[cname]["used"].add(sname)
 
-                if sname not in required_services[cname]['specified']:
-                    logging.error("Routing of unknown service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
+                if len(sname.match_all(required_services[cname]['specified'])) != 1:
+                    logging.error("Routing of unknown/underspecified service requirement to '%s' found for component '%s' in composite '%s'." % (sname, cname, composite.get("name")))
 
                 if s.find("child") != None:
                     chname = s.find("child").get("name")
@@ -589,44 +635,44 @@ class Repository(XMLParser):
                     else:
                         provided_services[chname]["used"].add(sname)
 
-                if s.find("external") != None:
-                    required_services[cname]["external"].add(sname)
+                external = s.find('external')
+                if external != None:
+                    required_services[cname]["external"].add(Repository.ServiceIdentifier(s, external.get('ref')))
 
             # references in <expose> must be specified
-            if c.find("expose") is not None:
-                for s in c.find("expose").findall("service"):
-                    sname = s.get("name")
+            for e in c.findall('expose'):
+                for s in e.findall("service"):
+                    sname = Repository.ServiceIdentifier(s, e.get('ref'))
                     provided_services[cname]["used"].add(sname)
                     provided_services[cname]["exposed"].add(sname)
-                    if len(self._find_element_by_attribute("service", { "name" : sname }, composite.find("provides"))) == 0:
-                        loggin.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
+                    if (sname.find_match(self, composite.find("provides"))) == 0:
+                        logging.error("Exposed service '%s' does not match composite spec '%s'." % (sname, composite.get("name")))
 
         # required external service must be pending exactly once
         # or explicitly routed to external service
         for s in composite.findall("./requires/service"):
-            sname = s.get("name")
+            sname = Repository.ServiceIdentifier(s)
             pending_count = 0
             for r in required_services.values():
-                if sname in r['external']:
-                    pending_count = 1
+                externalmatch = sname.match_all(r['external'])
+                if len(externalmatch):
+                    pending_count = len(externalmatch)
                     break
 
-                if sname in r["specified"] - r["used"]:
-                    pending_count += 1
+                pending_count += len(sname.match_all(r["specified"] - r["used"]))
 
             if pending_count != 1:
+                print(r['external'])
                 logging.error("Service '%s' required by composite '%s' cannot be identified in pattern." % (sname, composite.get("name")))
 
         # provided external service must be either exposed or pending exactly once
         for s in composite.find("provides").findall("service"):
-            sname = s.get("name")
+            sname = self.ServiceIdentifier(s)
             exposed_count = 0
             pending_count = 0
             for p in provided_services.values():
-                if sname in p["exposed"]:
-                    exposed_count += 1
-                if sname in p["specified"] - p["used"]:
-                    pending_count += 1
+                exposed_count += len(sname.match_all(p['exposed']))
+                pending_count += len(sname.match_all(p['specified'] - p['used']))
 
             if exposed_count > 1:
                 logging.error("Service '%s' exposed multiple times in composite '%s'." % (sname, composite.get("name")))
@@ -768,93 +814,11 @@ class ChildQuery:
     def __setstate__(self, state):
         self._type, self._identifier, self._queryname = state
 
-class Subsystem:
-    """ .. deprecated:: X
-    """
-
-    class Child(ChildQuery):
-        def __init__(self, xml_node, subsystem):
-            self._subsystem = subsystem
-            ChildQuery.__init__(xml_node)
-
-            self._parse()
-
-        def subsystem(self):
-            return self._subsystem
-
-        def platform_component(self):
-            return self._subsystem
-
-    def __init__(self, xml_node, parent=None):
-        self._root   = xml_node
-        self._parent = parent
-        self._subsystems = set()
-        self._children = set()
-
-        self._parse()
-
-    def _parse(self):
-        for sub in self._root.findall("subsystem"):
-            self._subsystems.add(Subsystem(sub, parent=self))
-
-        for child in self._root.findall("child"):
-            self._children.add(Subsystem.Child(child, subsystem=self))
-
-    def specs(self):
-        specs = set()
-        if self._parent is not None:
-            specs = self._parent.specs()
-            
-        # parse <specs>
-        if self._root.find("provides") is not None:
-            for s in self._root.find("provides").findall("spec"):
-                specs.add(s.get("name"))
-
-        return specs
-
-    def rte(self):
-        # parse <rte>
-        node = self._root.find("./provides/rte")
-        if node is not None:
-            return node.get("name")
-
-        return "native"
-
-    def subsystems(self):
-        return self._subsystems
-
-    def parent(self):
-        return self._parent
-
-    def children(self):
-        return self._children
-
-    def name(self, default=None):
-        if 'name' in self._root.keys():
-            return self._root.get('name')
-
-        return default
-
-
-class SubsystemParser:
-    """ .. deprecated:: X
-            Use :class:`mcc.parser.PlatformParser` and :class:`mcc.parser.SystemParser` instead
-    """
-    def __init__(self, xml_file, xsd_file):
- 
-        XMLParser.__init__(self, xml_file, xsd_file)
-
-        if self._file is not None:
-            # find <system>
-            if self._root.tag != "system":
-                self._root = self._root.find("system")
-                if self._root == None:
-                    raise Exception("Cannot find <system> node.")
-
-    def root(self):
-        return Subsystem(self._root)
 
 class SystemParser:
+    class NodeNotFoundError(Exception):
+        pass
+
     def __init__(self, xml_file, xsd_file):
         XMLParser.__init__(self, xml_file, xsd_file)
 
@@ -880,6 +844,16 @@ class PlatformParser:
         def name(self):
             return self._root.get('name')
 
+        def config(self):
+            node = self._root.find('config')
+            if node is not None:
+                return node.get('name')
+
+            return None
+
+        def static(self):
+            return self.config() is None
+
         def comms(self):
             names = set()
             for r in self._root.findall('requires/comm'):
@@ -904,6 +878,9 @@ class PlatformParser:
         def __getstate__(self):
             return ( self.name() )
 
+    class NodeNotFoundError(Exception):
+        pass
+
     def __init__(self, xml_file, xsd_file):
         XMLParser.__init__(self, xml_file, xsd_file)
 
@@ -912,7 +889,7 @@ class PlatformParser:
             if self._root.tag != "platform":
                 self._root = self._root.find("platform")
                 if self._root == None:
-                    raise Exception("Cannot find <platform> node.")
+                    raise NodeNotFoundError("Cannot find <platform> node.")
 
         self._check()
 
@@ -924,8 +901,9 @@ class PlatformParser:
 
     def pf_components(self):
         result = set()
-        for c in self._root.findall("subsystem"):
-            result.add(self.PfComponent(c))
+        for c in self._root.findall("component"):
+            for s in c.findall("subsystem"):
+                result.add(self.PfComponent(s))
 
         return result
 

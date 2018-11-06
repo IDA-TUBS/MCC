@@ -268,12 +268,12 @@
 		<pattern>
 			<!-- TODO requires auto-generated policy //-->
             <component name="remote_rom_client">
-                <expose>
-                    <service name="ROM" />
-                </expose>
                 <route>
                     <service name="Nic"><external ref="to" /></service>
                 </route>
+                <expose>
+                    <service name="ROM" />
+                </expose>
             </component>
             <component name="remote_rom_server">
                 <route>
@@ -413,26 +413,30 @@
 
 <!-- example platform specification //-->
 <platform>
-	<subsystem name="zynq">
-		<provides>
-			<rte name="native" />
-			<spec name="zynq" />
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="zynq.config" />
-	</subsystem>
+	<component>
+		<subsystem name="zynq">
+			<provides>
+				<rte name="native" />
+				<spec name="zynq" />
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="zynq.config" />
+		</subsystem>
+	</component>
 
-	<subsystem name="pc">
-		<provides>
-			<rte name="native" />
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="pc.config" />
-	</subsystem>
+	<component>
+		<subsystem name="pc">
+			<provides>
+				<rte name="native" />
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="pc.config" />
+		</subsystem>
+	</component>
 
 	<comm name="Network" />
 

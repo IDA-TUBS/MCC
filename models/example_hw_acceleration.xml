@@ -815,35 +815,37 @@
 </repository>
 
 <platform>
-	<subsystem name="zynq">
-		<provides>
-			<spec name="zynq" />
-			<!--regions>
-				<region id="0" reconf_time="123" />
-				<region id="1" reconf_time="456" />
-			</regions>
-			<vdmas>
-				<vdma id="0" />
-				<vdma id="1" />
-			</vdmas-->
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="zynq.config" />
-			<!--resources>
-				<flipflop fit="123" />
-				<bram fit="456" />
-				<cmem fit="789" />
-			</resources-->
-	</subsystem>
+	<component>
+		<subsystem name="zynq">
+			<provides>
+				<spec name="zynq" />
+				<!--regions>
+					<region id="0" reconf_time="123" />
+					<region id="1" reconf_time="456" />
+				</regions>
+				<vdmas>
+					<vdma id="0" />
+					<vdma id="1" />
+				</vdmas-->
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="zynq.config" />
+				<!--resources>
+					<flipflop fit="123" />
+					<bram fit="456" />
+					<cmem fit="789" />
+				</resources-->
+		</subsystem>
 
-	<subsystem name="pc">
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="pc.config" />
-	</subsystem>
+		<subsystem name="pc">
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="pc.config" />
+		</subsystem>
+	</component>
 
 	<comm name="Network" />
 </platform>

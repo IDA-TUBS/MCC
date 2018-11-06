@@ -39,12 +39,9 @@ if __name__ == '__main__':
         pffile = args.file
 
     cfg = cfgparser.Repository(repofile, args.schema)
-    cfg.check_functions_unambiguous()
-    cfg.check_components_unambiguous()
-    cfg.check_classification_unambiguous()
-    cfg.check_binaries()
-    cfg.check_atomic_components()
-    cfg.check_composite_components()
-
     mcc = lib.SimpleMcc(repo=cfg)
     mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath, with_da=args.dependency_analysis)
+
+    # TODO implement Configurator (generate subsystem <config>s from model)
+
+    # TODO check generated config against Genode's config.xsd

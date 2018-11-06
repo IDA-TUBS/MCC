@@ -1,0 +1,118 @@
+<xml>
+<repository>
+
+	<!-- binaries //-->
+	<binary name="nic_drv" />
+	<binary name="nic_bridge" />
+	<binary name="timer" />
+
+	<!-- components //-->
+
+	<component name="core" singleton="true">
+		<provides>
+			<service name="LOG" />
+		</provides>
+	</component>
+
+	<component name="timer" singleton="true">
+		<provides>
+			<service name="Timer" />
+		</provides>
+		<requires>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="nic_drv" singleton="true">
+		<function name="Network" />
+		<provides>
+			<service name="Nic" max_clients="1">
+				<in-traffic size="10M" interval_ms="1000" />
+			</service>
+		</provides>
+		<requires>
+			<ram quantum="16" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="nic_bridge">
+		<mux service="Nic" />
+		<provides>
+			<service name="Nic" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+</repository>
+
+<platform>
+	<component>
+		<subsystem name="zynq-static">
+			<requires>
+				<comm name="Network" />
+			</requires>
+		</subsystem>
+
+		<subsystem name="zynq">
+			<provides>
+				<spec name="zynq" />
+				<!--regions>
+					<region id="0" reconf_time="123" />
+					<region id="1" reconf_time="456" />
+				</regions>
+				<vdmas>
+					<vdma id="0" />
+					<vdma id="1" />
+				</vdmas-->
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="zynq.config" />
+				<!--resources>
+					<flipflop fit="123" />
+					<bram fit="456" />
+					<cmem fit="789" />
+				</resources-->
+		</subsystem>
+	</component>
+	<component>
+		<subsystem name="pc-static">
+			<requires>
+				<comm name="Network" />
+			</requires>
+		</subsystem>
+
+		<subsystem name="pc">
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="pc.config" />
+		</subsystem>
+	</component>
+
+	<comm name="Network" />
+</platform>
+
+<!-- system //-->
+<system name="base">
+	<child name="nic" subsystem="zynq-static">
+		<function name="Network" />
+	</child>
+	<child name="timer" subsystem="zynq-static">
+		<component name="timer" />
+	</child>
+
+	<child name="nic" subsystem="pc-static">
+		<function name="Network" />
+	</child>
+	<child name="timer" subsystem="pc-static">
+		<component name="timer" />
+	</child>
+</system>
+</xml>

@@ -397,12 +397,12 @@
 
 		<pattern>
 			<component name="remote_rom_client">
-				<expose>
-					<service name="ROM" />
-				</expose>
 				<route>
 					<service name="Nic"><external ref="to" /></service>
 				</route>
+				<expose>
+					<service name="ROM" />
+				</expose>
 			</component>
 			<component name="remote_rom_server">
 				<route>
@@ -416,22 +416,26 @@
 </repository>
 
 <platform>
-	<subsystem name="zynq">
-		<provides>
-			<spec name="zynq" />
-		</provides>
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="zynq.config" />
-	</subsystem>
+	<component>
+		<subsystem name="zynq">
+			<provides>
+				<spec name="zynq" />
+			</provides>
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="zynq.config" />
+		</subsystem>
+	</component>
 
-	<subsystem name="pc">
-		<requires>
-			<comm name="Network" />
-		</requires>
-		<config name="pc.config" />
-	</subsystem>
+	<component>
+		<subsystem name="pc">
+			<requires>
+				<comm name="Network" />
+			</requires>
+			<config name="pc.config" />
+		</subsystem>
+	</component>
 
 	<comm name="Network" />
 </platform>
