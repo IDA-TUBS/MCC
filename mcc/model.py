@@ -11,6 +11,7 @@ Implements model-specific data structures which are used by our cross-layer mode
 
 from mcc.parser import *
 from mcc.framework import *
+from mcc.backtracking import *
 
 class ServiceConstraints:
     def __init__(self, name=None, function=None, to_ref=None, from_ref=None):
@@ -264,11 +265,11 @@ class FuncArchQuery(QueryModel):
             dotfile.write('}\n')
 
 
-class SystemModel(Registry):
+class SystemModel(BacktrackRegistry):
     """ Our cross-layer model.
     """
     def __init__(self, repo, platform, dotpath=None):
-        Registry.__init__(self)
+        super().__init__()
         self.add_layer(Layer('func_arch', nodetypes={ChildQuery}))
         self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy}))
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))

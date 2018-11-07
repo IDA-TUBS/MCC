@@ -12,7 +12,8 @@ import logging
 from mcc.framework import *
 from mcc.graph import *
 from mcc import model
-from mcc import parser 
+from mcc import parser
+from mcc.backtracking import AssignNode
 
 class MappingEngine(AnalysisEngine):
     def __init__(self, layer):
@@ -75,7 +76,7 @@ class ComponentDependencyEngine(AnalysisEngine):
             source_mapping = self.layer.get_param_value(self, 'mapping', obj.source)
             target_mapping = self.layer.get_param_value(self, 'mapping', obj.target)
             if source_mapping != target_mapping:
-                logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
+                # logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                 return False
             else:
                 return True
@@ -176,7 +177,7 @@ class ServiceEngine(AnalysisEngine):
         for src in source_ports:
             candidates.add(self.Connection(src, target_ports[0]))
 
-        return [candidates]
+        return set([frozenset(candidates)])
 
     def assign(self, obj, candidates):
         assert(isinstance(obj, Edge))
@@ -611,3 +612,30 @@ class GenodeSubsystemEngine(AnalysisEngine):
 
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
+
+class BacktrackingTestEngine(AnalysisEngine):
+    def __init__(self, layer, param, dep_graph, failure_rate=0, fail_once=False):
+        super().__init__(layer, param)
+        self.dep_graph    = dep_graph
+        self.failure_rate = 0
+        self.fail_once    = fail_once
+
+    def check(self, obj):
+
+        # check if for every assign node alle the candidates have been used
+        current = self.dep_graph.current
+        path = self.dep_graph.shortest_path(self.dep_graph.root, current)
+        for node in path:
+            if not isinstance(node, AssignNode):
+                continue
+            used_cands = self.dep_graph.get_used_candidates(node)
+            all_cands  = node.layer._get_params(node.value)[node.param]['candidates']
+
+            cands = all_cands - used_cands
+            if len(cands) == 0:
+                return False
+
+        return True
+
+    def node_types(self):
+        return []

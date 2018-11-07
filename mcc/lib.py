@@ -13,6 +13,8 @@ from mcc.framework import *
 from mcc.analyses import *
 from mcc.importexport import *
 
+from mcc.model_extractor import *
+
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
     """
@@ -181,8 +183,19 @@ class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
 
-    def __init__(self, repo):
+    def __init__(self, repo, test_backtracking=False):
         MccBase.__init__(self, repo)
+        self._test_backtracking = test_backtracking
+
+    def insert_random_backtracking_engine(self, model, failure_rate=0.0):
+        # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
+        #      if we then set failure_rate to 1.0, we can traverse the entire search space
+        assert(0 <= failure_rate <= 1.0)
+
+        source_layer = model.steps[len(model.steps)-1].source_layer;
+        # target_layer = self.ste[r-1].target_layer;
+        bt = BacktrackingTestEngine(source_layer, 'mapping', model.backtracking_graph(), failure_rate, fail_once=False)
+        model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, platform, system, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
@@ -238,7 +251,9 @@ class SimpleMcc(MccBase):
 
         # TODO implement transformation/merge into component instantiation
 
-        # TODO implement backtracking
+        # insert backtracking engine for testing (random rejection of candidates)
+        if self._test_backtracking:
+            self.insert_random_backtracking_engine(model, 0.05)
 
         model.print_steps()
         if outpath is not None:
@@ -255,6 +270,14 @@ class SimpleMcc(MccBase):
             da_step.add_operation(BatchAssign(da_engine))
             model.add_step_unsafe(da_step)
 
-        model.execute()
+        try:
+            model.execute()
+        except Exception as e:
+            print(e)
 
+        # model.write_analysis_engine_dependency_graph()
+        model_extractor = ModelExtractor(model.by_name, '/tmp/blub.xml', model.dep_graph)
+        model_extractor.write_modell()
+
+        # model.write_analysis_engine_dependency_graph()
         return model
