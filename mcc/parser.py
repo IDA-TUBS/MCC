@@ -32,6 +32,25 @@ class XMLParser:
             self._tree = ET.parse(self._file, parser=parser)
             self._root = self._tree.getroot()
 
+class AggregateRepository:
+    def __init__(self, *args):
+        self.repos = list()
+        for arg in args:
+            if isinstance(arg, list):
+                self.repos.extend(arg)
+            else:
+                self.repos.append(arg)
+
+    def _iterate_repos_and_find(self, func):
+        result = list()
+        for repo in self.repos:
+            result.extend(func(repo))
+
+        return result
+
+    def find_components_by_type(self, query, querytype):
+        return self._iterate_repos_and_find(lambda repo: repo.find_components_by_type(query, querytype))
+
 class Repository(XMLParser):
 
     class ServiceIdentifier:
@@ -828,6 +847,13 @@ class SystemParser:
                 self._root = self._root.find("system")
                 if self._root == None:
                     raise Exception("Cannot find <system> node.")
+
+    def name(self):
+        res = self._root.get('name')
+        if res is None:
+            res = ''
+
+        return res
 
     def children(self):
         result = set()

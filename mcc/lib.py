@@ -184,16 +184,14 @@ class SimpleMcc(MccBase):
     def __init__(self, repo):
         MccBase.__init__(self, repo)
 
-    def search_config(self, platform_xml, system_xml, xsd_file=None, outpath=None, with_da=False, da_path=None):
+    def search_config(self, platform, system, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
-            :param platform_xml: filename containing platform specification
-            :type  platform_xml: str
-            :param system_xml: filename containing abstract system configuruation
-            :type  system_xml: str
-            :param xsd_file: XSD filename for subsystem_xml
-            :type  xsd_file: str
+            :param platform: platform parser
+            :type  platform: parser object
+            :param system: system configuruation parser
+            :type  system: parser object
             :param outpath: output path/prefix
             :type  outpath: str
         """
@@ -201,13 +199,13 @@ class SimpleMcc(MccBase):
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 1) we parse the platform model
-        pf_model = SimplePlatformModel(PlatformParser(platform_xml, xsd_file))
+        pf_model = SimplePlatformModel(platform)
 
         # 2) we create a new system model
         model = SystemModel(self.repo, pf_model, dotpath=outpath)
 
         # 3) create query model 
-        query_model = FuncArchQuery(SystemParser(system_xml, xsd_file))
+        query_model = FuncArchQuery(system)
 
         # output query model
         if outpath is not None:
@@ -259,4 +257,4 @@ class SimpleMcc(MccBase):
 
         model.execute()
 
-        return True
+        return model

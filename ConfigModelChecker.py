@@ -7,14 +7,14 @@ from mcc import model
 from mcc import lib
 
 parser = argparse.ArgumentParser(description='Check config model XML.')
-parser.add_argument('file', metavar='xml_file', type=str, 
-        help='XML file to be processed')
+parser.add_argument('files', metavar='xml_file', type=str, nargs='+',
+        help='XML files to be processed (<system>)')
 parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
         help='XML Schema Definition (xsd)')
 parser.add_argument('--platform', type=str, default=None,
-        help='XML file with platform specification')
-parser.add_argument('--repo', type=str, default=None,
-        help='XML file with contract repository')
+        help='XML file with platform specification (<platform>)')
+#parser.add_argument('--repos', type=str, default=list, nargs='*',
+#        help='XML files with contract repository (<repository>)')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
 parser.add_argument('--dependency_analysis', action='store_true')
@@ -30,18 +30,37 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s: %(message)s')
     logging.getLogger().setLevel(logging.INFO)
 
-    repofile = args.repo
-    if repofile is None:
-        repofile = args.file
-
+    # take platform from the first file if not overridden with --platform
     pffile = args.platform
     if pffile is None:
-        pffile = args.file
+        pffile = args.files[0]
 
-    cfg = cfgparser.Repository(repofile, args.schema)
+    pf = cfgparser.PlatformParser(pffile, args.schema)
+
+    # try to create repositories from given files
+    repos = list()
+    for repofile in args.files:
+        try:
+            repo = cfgparser.Repository(repofile, args.schema)
+            repos.append(repo)
+        except:
+            continue
+
+    cfg = cfgparser.AggregateRepository(repos)
     mcc = lib.SimpleMcc(repo=cfg)
-    mcc.search_config(platform_xml=pffile, system_xml=args.file, xsd_file=args.schema, outpath=args.dotpath, with_da=args.dependency_analysis)
 
-    # TODO implement Configurator (generate subsystem <config>s from model)
 
-    # TODO check generated config against Genode's config.xsd
+    for sysfile in args.files:
+        try:
+            sys = cfgparser.SystemParser(sysfile, args.schema)
+            model = mcc.search_config(pf, sys, outpath=args.dotpath+'-'+sys.name()+'-', with_da=args.dependency_analysis)
+
+            # TODO store simplified model (inputs and results)
+
+            # generate <config> from model
+            # TODO implement Configurator (generate subsystem <config>s from model)
+            # TODO check generated config against Genode's config.xsd
+
+        except:
+            continue
+
