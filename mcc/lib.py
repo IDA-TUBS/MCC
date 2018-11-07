@@ -194,7 +194,7 @@ class SimpleMcc(MccBase):
 
         source_layer = model.steps[len(model.steps)-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', model.backtracking_graph(), failure_rate, fail_once=False)
+        bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, platform, system, outpath=None, with_da=False, da_path=None):
@@ -275,9 +275,14 @@ class SimpleMcc(MccBase):
         except Exception as e:
             print(e)
 
-        # model.write_analysis_engine_dependency_graph()
-        model_extractor = ModelExtractor(model.by_name, '/tmp/blub.xml', model.dep_graph)
-        model_extractor.write_modell()
+        model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
+        model.decision_graph().write_dot(outpath+'dec_graph.dot')
 
-        # model.write_analysis_engine_dependency_graph()
+        model_extractor = ModelExtractor(model.by_name)
+        model_extractor.write_xml(outpath+'blub.xml')
+
+        # FIXME decision graph extractor does not work
+        decision_extractor = DecisionGraphExtractor(model.decision_graph())
+#        decision_extractor.write_xml(outpath+'dec_graph.xml')
+
         return model

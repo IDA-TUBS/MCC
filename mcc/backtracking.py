@@ -25,53 +25,42 @@ class Node():
 
 class MapNode(Node):
     """Represents a Map Operation in the Dependency Graph"""
-    def __init__(self, layer, param, value, candidates):
+    def __init__(self, layer, param, obj, candidates):
         super().__init__()
         self.layer      = layer
         self.param      = param
-        self.value      = value
+        self.obj        = obj
         self.candidates = candidates
 
     def __str__(self):
-        return 'MapNode: Layer={}\n, Param={}\n, value={}\n, candidates={}\n'.format(self.layer, self.param, self.value, self.candidates)
+        return 'MapNode: layer={}\n, param={}\n, obj={}\n, candidates={}\n'.format(self.layer, self.param, self.obj, self.candidates)
 
 class AssignNode(Node):
     """Represents an Assign Operation in the Dependency Graph"""
-    def __init__(self, layer, param, value, match):
+    def __init__(self, layer, param, obj, value):
         super().__init__()
         self.layer = layer
         self.param = param
+        self.obj   = obj
         self.value = value
-        self.match = match
 
     def __str__(self):
-        return 'AssignNode: Layer= {}\n, Param={}\n, value={}\n, match={}\n'.format(self.layer, self.param, self.value, self.match)
+        return 'AssignNode: Layer= {}\n, param={}\n, obj={}\n, value={}\n'.format(self.layer, self.param, self.obj, self.value)
 
-class DependNode(Node):
-    """Represents parameters used in a Map operation"""
-    def __init__(self, layer, params, dep):
-        super().__init__()
-        self.layer  = layer
-        self.params = params
-        self.dep    = dep
-        self.param = ""
-
-    def __str__(self):
-        return 'DependNode: Layer={}\n, Params={}\n, Dependencies={}\n'.format(self.layer, self.params, self.dep)
 
 class TransformNode(Node):
     """Represents a Transform Operation in the Dependency Graph"""
-    def __init__(self, source_layer, target_layer, value, inserted):
+    def __init__(self, source_layer, target_layer, obj, inserted):
         super().__init__()
         self.source_layer = source_layer
         self.target_layer = target_layer
-        self.value        = value
+        self.obj          = obj
         self.inserted     = inserted
 
         def __str__(self):
-            return 'source_layer {}\n, Target_layer {}\n, value {}\n, inserted {}\n'.format(self.source_layer, self.target_layer, self.value, self.inserted)
+            return 'source_layer {}\n, Target_layer {}\n, obj {}\n, inserted {}\n'.format(self.source_layer, self.target_layer, self.obj, self.inserted)
 
-class DependencyGraph(Graph):
+class DecisionGraph(Graph):
     """ Dependency Graph saves Operations executed by the BacktrackingRegistry
         and is used to revert to a previous state.
     """
@@ -87,11 +76,7 @@ class DependencyGraph(Graph):
         self.last_step            = None
 
     def add_node(self, obj):
-        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, DependNode) or isinstance(obj, TransformNode))
-
-        if isinstance(obj, DependNode):
-            super().add_node(obj)
-            return
+        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, TransformNode))
 
         if self.root is None:
             self.root = obj
@@ -130,9 +115,7 @@ class DependencyGraph(Graph):
         for edge in self.out_edges(aprev):
             if not isinstance(edge.target, AssignNode):
                 continue
-            if isinstance(edge.target.match, set):
-                print(edge.target)
-            used_candidates.add(edge.target.match)
+            used_candidates.add(edge.target.value)
 
         return used_candidates
 
@@ -140,7 +123,7 @@ class DependencyGraph(Graph):
         return nx.shortest_path(self.graph, source, target)
 
     def append_node(self, node):
-        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, DependNode) or isinstance(node, TransformNode))
+        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, TransformNode))
 
         current              = self.current
         node.step_index      = self.last_step_index
@@ -176,9 +159,9 @@ class DependencyGraph(Graph):
         node.attribute_index = attr_index
         self.append_node(node)
 
-    def write_dot(self):
+    def write_dot(self, filename):
 
-        with open('DependencyGraph.dot', 'w') as file:
+        with open(filename, 'w') as file:
             file.write('digraph {\n')
 
             nodes = [node for node in self.graph.nodes()]
@@ -195,8 +178,6 @@ class DependencyGraph(Graph):
                     node_str = '"{0}" [label="{1}", shape=hexagon'.format(nodes.index(node), (node))
                 elif isinstance(node, AssignNode):
                     node_str = '"{0}" [label="{1}", shape=circle'.format(nodes.index(node), (node))
-                elif isinstance(node, DependNode):
-                    node_str = '"{0}" [label="{1}", shape=triangle'.format(nodes.index(node), (node))
                 elif isinstance(node, TransformNode):
                     node_str = '"{0}" [label="{1}", shape=egg'.format(nodes.index(node), (node))
 
@@ -219,7 +200,7 @@ class BacktrackRegistry(Registry):
     """
     def __init__(self):
         super().__init__()
-        self.dep_graph = DependencyGraph()
+        self.dec_graph = DecisionGraph()
         self.backtracking_try = 0
 
     def execute(self):
@@ -230,7 +211,6 @@ class BacktrackRegistry(Registry):
             pass
 
         self._output_layer(self.steps[-1].target_layer)
-        self.dep_graph.write_dot()
 
     def _backtrack_execute(self):
         print()
@@ -239,7 +219,7 @@ class BacktrackRegistry(Registry):
 
         last_step = 0
         if self.backtracking_try > 1:
-            last_step = self.dep_graph.last_step_index
+            last_step = self.dec_graph.last_step_index
 
         logging.info('Backtracking Try {}, Last Step {}'.format(self.backtracking_try, last_step))
         for step in self.steps[last_step:]:
@@ -251,32 +231,32 @@ class BacktrackRegistry(Registry):
                     self._output_layer(previous_step.target_layer)
 
             try:
-                self.dep_graph.set_step_index(self.steps.index(step))
-                step.execute(self.dep_graph)
+                self.dec_graph.set_step_index(self.steps.index(step))
+                step.execute(self.dec_graph)
 
             except ConstraintNotSatisfied as cns:
                 logging.info('{} failed:'.format(cns.obj))
 
-                current = self.dep_graph.current
+                current = self.dec_graph.current
 
                 head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
                 if head is None or self._candidates_exhausted(head):
-                    current = self.dep_graph.current
+                    current = self.dec_graph.current
                     head = self._get_last_valid_assign(current)
                     if head is None:
                         raise Exception('No config could be found')
 
-                    self._mark_subtree_as_bad(head.layer, head.param, head.value)
+                    self._mark_subtree_as_bad(head.layer, head.param, head.obj)
 
                 self._revert_subtree(head, current)
-                head = list(self.dep_graph.in_edges(head))[0].source
+                head = list(self.dec_graph.in_edges(head))[0].source
 
-                self.dep_graph.set_operation_index(head.operation_index)
-                self.dep_graph.set_step_index(head.step_index)
+                self.dec_graph.set_operation_index(head.operation_index)
+                self.dec_graph.set_step_index(head.step_index)
 
                 # reset the pointer at the dependency tree that points to the
                 # leaf in the current path
-                self.dep_graph.current = head
+                self.dec_graph.current = head
                 return False
 
             except Exception as ex:
@@ -288,7 +268,7 @@ class BacktrackRegistry(Registry):
 
     def _get_last_valid_assign(self, start):
 
-        for edge in self.dep_graph.in_edges(start):
+        for edge in self.dec_graph.in_edges(start):
             if not edge.source.valid:
                 continue
 
@@ -304,9 +284,9 @@ class BacktrackRegistry(Registry):
         return None
 
     def _candidates_exhausted(self, anode):
-        params = anode.layer._get_params(anode.value)
+        params = anode.layer._get_params(anode.obj)
         candidates = params[anode.param]['candidates']
-        used_candidates = self.dep_graph.get_used_candidates(anode)
+        used_candidates = self.dec_graph.get_used_candidates(anode)
 
         if candidates == used_candidates:
             return True
@@ -315,32 +295,32 @@ class BacktrackRegistry(Registry):
 
     def _revert_subtree(self, start, end):
         # iterate over the path, and revert the changes
-        for node in self.dep_graph.shortest_path(start, end):
+        for node in self.dec_graph.shortest_path(start, end):
             assert(not node.valid)
             if isinstance(node, AssignNode):
-                node.layer._set_param_value(node.param, node.value, None)
+                node.layer._set_param_value(node.param, node.obj, None)
             elif isinstance(node, MapNode):
-                node.layer._set_param_candidates(node.param, node.value, set())
+                node.layer._set_param_candidates(node.param, node.obj, set())
             elif isinstance(node, Transform):
-                node.source_layer._set_param_value(node.target_layer.name, node.value, set())
+                node.source_layer._set_param_value(node.target_layer.name, node.obj, set())
                 for o in node.inserted:
                     node.target_layer._set_param_value(node.source_layer.name, o, None)
 
     def _mark_subtree_as_bad(self, layer, param, culprit):
         # look for the last assign node that assings the culprit
-        for node in self.dep_graph.valid_nodes()[::-1]:
+        for node in self.dec_graph.valid_nodes()[::-1]:
             if not isinstance(node, AssignNode):
                 continue
 
-            if node.value == culprit and node.layer == layer and node.param == param:
+            if node.obj == culprit and node.layer == layer and node.param == param:
                 node.valid = False
-                self.dep_graph.mark_subtree_as_bad(node)
+                self.dec_graph.mark_subtree_as_bad(node)
                 return node
 
         return None
 
-    def backtracking_graph(self):
-        return self.dep_graph
+    def decision_graph(self):
+        return self.dec_graph
 
     def write_analysis_engine_dependency_graph(self, outfile='AeDepGraph.dot'):
         analysis_engines = set()

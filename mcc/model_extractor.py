@@ -8,18 +8,13 @@ from mcc.backtracking import *
 
 import networkx as nx
 
+class DecisionGraphExtractor():
+    def __init__(self, dec_graph):
+        self.dec_graph = dec_graph
 
-class ModelExtractor():
-    def __init__(self, layers, file_name, dep_graph=None):
-        self.layers = layers
-        self.file_name = file_name
-        self.dep_graph = dep_graph
-
-        # self.predecessors = nx.predecessors(self.dep_graph.graph)
-
-    def _write_dep_graph(self, filename):
+    def _write_dec_graph(self, filename):
         nodes = list()
-        for n in self.dep_graph.nodes():
+        for n in self.dec_graph.nodes():
             nodes.append(n)
 
         nodes = list(nodes)
@@ -27,10 +22,10 @@ class ModelExtractor():
         params = {}
 
         for (i, n) in enumerate(nodes):
-            if n.param not in params:
+            if hasattr(n, 'param') and n.param not in params:
                 params[n.param] = ET.SubElement(root, 'parameter', name=n.param)
 
-            parents = list(self.dep_graph.graph.predecessors(n))
+            parents = list(self.dec_graph.graph.predecessors(n))
 
             parent_index = -1
 
@@ -38,14 +33,14 @@ class ModelExtractor():
             if len(parents) > 0:
                 parent_index = nodes.index(parents[0])
 
-
+            # FIXME there is no param attribute in TransformNode
             node = ET.SubElement(params[n.param], 'node', id=str(i), valid=str(n.valid))
             parent_node = ET.SubElement(node, 'parent_node')
             # parent_node.text(parent_index)
 
             if not isinstance(n, TransformNode):
-                value_elem = ET.SubElement(node, 'value')
-                value_elem.text = str(n.value)
+                obj_elem = ET.SubElement(node, 'obj')
+                obj_elem.text = str(n.obj)
 
                 layer_elem = ET.SubElement(node, 'layer')
                 layer_elem.text = str(n.layer)
@@ -56,8 +51,8 @@ class ModelExtractor():
             if isinstance(n, AssignNode):
                 node.set('type', 'assign')
 
-                match_elem = ET.SubElement(node, 'match')
-                match_elem.text = str(n.match)
+                value_elem = ET.SubElement(node, 'match')
+                value_elem.text = str(n.value)
 
             if isinstance(n, MapNode):
                 node.set('type', 'map')
@@ -75,11 +70,20 @@ class ModelExtractor():
                 target_elem = ET.SubElement(node, 'target-layer')
                 target_elem.text = str(n.target_layer)
 
-                value_elem = ET.SubElement(node, 'value')
-                value_elem.text = str(n.value)
+                obj_elem = ET.SubElement(node, 'obj')
+                obj_elem.text = str(n.obj)
 
         layer_tree = ET.ElementTree(root)
         layer_tree.write(filename, pretty_print=True)
+
+    def write_xml(self, filename):
+        self._write_dec_graph(filename)
+        # nx.write_gml(self.dec_graph.graph, '/tmp/dec_graph.gml', stringizer=stringizer)
+
+
+class ModelExtractor():
+    def __init__(self, layers):
+        self.layers = layers
 
     def _write_layer(self):
         root = ET.Element('layers')
@@ -131,19 +135,11 @@ class ModelExtractor():
 
         return root
 
-    def _export_dep_graph(self):
-        if self.dep_graph is None:
-            return
-
-        self._write_dep_graph('/tmp/dep_graph.xml')
-        # nx.write_gml(self.dep_graph.graph, '/tmp/dep_graph.gml', stringizer=stringizer)
-
-    def write_modell(self):
+    def write_xml(self, filename):
         layer_xml = self._write_layer()
-        self._export_dep_graph()
 
         layer_tree = ET.ElementTree(layer_xml)
-        layer_tree.write(self.file_name, pretty_print=True)
+        layer_tree.write(filename, pretty_print=True)
 
 def stringizer(value):
     return str(value)
