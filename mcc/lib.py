@@ -15,6 +15,55 @@ from mcc.importexport import *
 
 from mcc.model_extractor import *
 
+class BaseModelQuery:
+    """ Stores existing component architecture and corresponding inputs.
+    """
+
+    def __init__(self):
+        # store queries (filenames and graphs) by name
+        self._queries    = dict()
+
+        # store component instances and mapping from components to corresponding queries
+        self._components = None
+
+    def _merge(self, components, query):
+        if self._components is not None:
+            # copy 'query' param from _components to components
+            for c in _components.graph.nodes():
+                for cnew in components.graph.nodes():
+                    if c.identifier() == cnew.identifier():
+                        q = self._components._get_param_value('query', c)
+                        components._set_param_value('query', cnew, q)
+
+        # replace _components
+        self._components = components
+
+        # new components are mapped to query
+        for c in self._components.graph.nodes():
+            if self._components._get_param_value('query', c) is None:
+                self._components._set_param_value('query', c, query)
+
+    def insert(self, name, query_graph, comp_inst, filename=None):
+        # insert name and query graph
+        self._queries[name] = { 'filename' : filename,
+                                'graph'    : query_graph }
+
+        # merge comp_inst into current components
+        self._merge(comp_inst, name)
+
+    def components(self):
+        return self._components
+
+    def functions(self):
+        # TODO return functions implemented by components for
+        #      each subsystem so that we can model the existing 
+        #      components by a compound
+        #      The result is a graph with one node for each subsystem;
+        #      each block represents the functions that are implemented
+        #      by the existing system.
+        #      The blocks are later expanded to the component instances.
+        raise NotImplementedError()
+
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
     """

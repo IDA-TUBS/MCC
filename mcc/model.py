@@ -31,6 +31,13 @@ class ServiceConstraints:
 
         return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post) 
 
+class Instance:
+    """ Wrapper for components for managing instantiations
+    """
+    def __init__(self, identifier, component):
+        self.identifier = identifier
+        self.component  = component
+
 class Proxy:
     """ Node type representing to-be-inserted proxies; used in comm_arch layer.
     """
@@ -275,7 +282,7 @@ class SystemModel(BacktrackRegistry):
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch', nodetypes={Repository.Component}))
-        self.add_layer(Layer('comp_inst', nodetypes={Repository.Component}))
+        self.add_layer(Layer('comp_inst', nodetypes={Instance}))
 
         self.platform = platform
         self.repo = repo
