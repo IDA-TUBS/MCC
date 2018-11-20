@@ -225,7 +225,7 @@ class Repository(XMLParser):
             assert(self.xml_node.tag != 'composite')
 
             return set([self])
-        
+
         def __repr__(self):
             return self.label()
 
@@ -859,6 +859,28 @@ class SystemParser:
         result = set()
         for c in self._root.findall('child'):
             result.add(ChildQuery(c))
+
+        return result
+
+class AggregateSystemParser:
+
+    def __init__(self):
+        self._parsers = list()
+
+    def append(self, parser):
+        self._parsers.append(parser)
+
+    def name(self):
+        names = list()
+        for parser in self._parsers:
+            names.append(parser.name())
+
+        return '+'.join(names)
+
+    def children(self):
+        result = set()
+        for parser in self._parsers:
+            result.update(parser.children())
 
         return result
 

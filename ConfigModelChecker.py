@@ -9,6 +9,8 @@ from mcc import lib
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('files', metavar='xml_file', type=str, nargs='+',
         help='XML files to be processed (<system>)')
+parser.add_argument('--base', type=str, required=True,
+        help='Base system specification')
 parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
         help='XML Schema Definition (xsd)')
 parser.add_argument('--platform', type=str, default=None,
@@ -47,23 +49,28 @@ if __name__ == '__main__':
             continue
 
     cfg = cfgparser.AggregateRepository(repos)
-    mcc = lib.SimpleMcc(repo=cfg)
+    mcc = lib.SimpleMcc(repo=cfg, test_backtracking=True)
 
+    basesys   = cfgparser.SystemParser(args.base, args.schema)
+    basemodel = mcc.search_config(pf, basesys,
+                    outpath=args.dotpath+'-'+basesys.name()+'-',
+                    with_da=False)
 
+    # TODO store basemodel in BaseModelQuery
+
+    sys = cfgparser.AggregateSystemParser()
     for sysfile in args.files:
-        try:
-            sys = cfgparser.SystemParser(sysfile, args.schema)
-            model = mcc.search_config(pf, sys, outpath=args.dotpath+'-'+sys.name()+'-', with_da=args.dependency_analysis)
+        sys.append(cfgparser.SystemParser(sysfile, args.schema))
 
-            # TODO store simplified model (inputs and results)
+    try:
+        model = mcc.search_config(pf, sys, outpath=args.dotpath+'-'+sys.name()+'-', with_da=args.dependency_analysis)
 
-            # generate <config> from model
-            # TODO implement Configurator (generate subsystem <config>s from model)
-            # TODO check generated config against Genode's config.xsd
+        # generate <config> from model
+        # TODO implement Configurator (generate subsystem <config>s from model)
+        # TODO check generated config against Genode's config.xsd
 
-        except Exception as e:
-            #import traceback
-            #traceback.print_exc()
-            print(e)
-            continue
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(e)
 
