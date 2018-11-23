@@ -922,10 +922,9 @@
 
 	<child subsystem="pc" >
         <component name="pose_estimation" />
-		<route>
-			<!--select composite as child here (OBJECT_PREPRO / POSE_SW / POSE_HW) /-->
-			<service name="ROM"><child name="POSE_SW" /></service>
-		</route>
+        <dependency>
+            <child name="POSE_SW" />
+        </dependency>
 	</child>
 
 	<child name="TRIGGER" subsystem="pc"><function name="TRIGGER" /></child>

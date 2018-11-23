@@ -573,24 +573,24 @@
     
     <child name="SENS_DATA_PREP" subsystem="legacy_pc">
         <function name="SENSOR_DATA_PREP" />
-        <route>
-            <service name="ROM"><child name="SENS_DATA_AQ" /></service>
-        </route>
+        <dependency>
+          <child name="SENS_DATA_AQ"/>
+        </dependency>
     </child>
     <child name="NIC1" subsystem="legacy_pc"><function name="Network" /></child>
 	
     <child name="GRID_BAYES" subsystem="nuc">
         <function name="GRID_LAYER_BAYES"/>
-        <route>
-            <service name="ROM"><child name="SENS_DATA_PREP" /></service>
-        </route>
+        <dependency>
+          <child name="SENS_DATA_PREP"/>
+        </dependency>
     </child>
     
     <child name="GRID_REFLECTANCE" subsystem="nuc">
         <function name="GRID_LAYER_REFLECTANCE"/>
-        <route>
-            <service name="ROM"><child name="SENS_DATA_PREP"/></service>
-        </route>
+        <dependency>
+          <child name="SENS_DATA_PREP"/>
+        </dependency>
     </child>
             
     <child name="TRISTATE" subsystem="nuc">
@@ -613,18 +613,18 @@
 		
     <child name="TRAJ_GEN" subsystem="zynq">
         <function name="TRAJECTORY_GENERATION" />
-        <route>
-            <service name="ROM"><child name="TARGET_POSE_GEN" /></service>
-        </route>
+        <dependency>
+           <child name="TARGET_POSE_GEN" />
+        </dependency>
     </child>
     
     <child name="NIC3" subsystem="zynq"><function name="Network" /></child>
 	
     <child name="VEHICLE_CTRL" subsystem="dspace">
         <function name="VEHICLE_CONTROL" />
-        <route>
-            <service name="ROM"><child name="TRAJ_GEN"/></service>
-        </route>
+        <dependency>
+           <child name="TRAJ_GEN" />
+        </dependency>
     </child>
     
     <child name="NIC4" subsystem="dspace"><function name="Network" /></child>

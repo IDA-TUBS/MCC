@@ -398,23 +398,13 @@
                                         <xs:attribute name="name" type="xs:string" use="required"/>
                                     </xs:complexType>
                                 </xs:element>
+                                <xs:element name="function">
+                                    <xs:complexType>
+                                        <xs:attribute name="name" type="xs:string" use="required"/>
+                                    </xs:complexType>
+                                </xs:element>
                              </xs:choice>
                          </xs:complexType>
-                     </xs:element>
-                     <xs:element name="route" minOccurs="0" maxOccurs="1">
-                       <xs:complexType>
-                         <xs:choice maxOccurs="unbounded">
-                           <xs:element name="service">
-                             <xs:complexType>
-                               <xs:all>
-                                 <xs:element name="child" type="NameType" />
-                               </xs:all>
-                               <xs:attribute name="name" type="xs:string" use="required"/>
-                               <xs:attribute name="label" type="xs:string"/>
-                             </xs:complexType>
-                           </xs:element>
-                         </xs:choice>
-                       </xs:complexType>
                      </xs:element>
                      <xs:element name="config" minOccurs="0" maxOccurs="1" />
                    </xs:sequence>
