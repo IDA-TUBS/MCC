@@ -99,6 +99,9 @@ class Repository(XMLParser):
         def __init__(self, xml_node):
             self.xml_node = xml_node
 
+        def max_clients(self):
+            return self.xml_node.get('max_clients')
+
         def label(self):
             return self.xml_node.get('label')
 
@@ -135,6 +138,9 @@ class Repository(XMLParser):
 
         def uid(self):
             return self.xml_node
+
+        def singleton(self):
+            return self.xml_node.get('singleton')
 
         def requires_rte(self):
             rte = self.xml_node.find('./requires/rte')
@@ -441,6 +447,18 @@ class Repository(XMLParser):
 
         return result
 
+    def find_muxers(self, service=None, query=None):
+        service = None
+        if query is not None:
+            service = query['service']
+
+        result = set()
+        for m in self._find_component_by_class('mux'):
+            if m.find('mux').get('service') == service:
+                result.add(m)
+
+        return result
+
     def find_protocolstacks(self, from_service=None, to_service=None, query=None):
         if query is not None:
             from_service = query['from_service']
@@ -459,7 +477,7 @@ class Repository(XMLParser):
         elif querytype == 'proxy':
             components = self.find_proxies(query=query)
         elif querytype == 'mux':
-            raise NotImplementedError()
+            components = self.find_muxers(query=query)
         elif querytype == 'proto':
             components = self.find_protocolstacks(query=query)
         else: # 'component' or 'composite'

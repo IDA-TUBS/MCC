@@ -787,7 +787,7 @@
 	<composite name="ROM_PROXY">
 		<proxy carrier="Nic" />
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" max_clients="1"/>
 		</provides>
 		<requires>
 			<service name="ROM" />

@@ -292,21 +292,134 @@ class MuxerEngine(AnalysisEngine):
     """ Selects 'muxer' parameter for nodes who have to many clients to a service.
     """
 
+    class Muxer:
+        def __init__(self, service, component, replicate=False):
+            self.service   = service
+            self.component = component
+            self.replicate = replicate
+            self.edges     = set()
+
+        def assign_edge(self, edge):
+            self.edges.add(edge)
+
+        def assigned(self, edge):
+            return edge in self.edges
+
+        def assigned_component(self, edge):
+            if self.replicate:
+                # return copy of component
+                return Repository.Component(self.component.xml_node, self.component.repo)
+            else:
+                return self.component
+
+        def assigned_service(self):
+            res = self.component.provides_services(self.service.name())
+            assert len(res) == 1, "Muxer service is ambiguous"
+            return res[0]
+
+        def source_service(self):
+            res = self.component.requires_services(self.service.name())
+            assert len(res) == 1, "Muxer service is ambiguous"
+            return res[0]
+
+        def target_service(self):
+            return self.service
+
     def __init__(self, layer, repo):
-        AnalysisEngine.__init__(self, layer, param='muxer')
+        acl = { layer : { 'reads' : set(['target-service',
+                                         'source-service',
+                                         'mapping'])} }
+        AnalysisEngine.__init__(self, layer, param='muxer', acl=acl)
         self.repo = repo
 
     def map(self, obj, candidates):
-        assert(not isinstance(obj, Edge))
+        if isinstance(obj, Edge):
+            # find muxer object at target node and map if service matches
+            muxer = self.layer.get_param_value(self, self.param, obj.target)
+            if muxer is not None:
+                if muxer.assigned(obj):
+                    return {muxer}
 
-        # FIXME we can have multiple services provided by this node
-        # shall we set the muxer to all corresponding edges?
-        # how do we then perform the transformation? insert muxer for each edge and later merge in comp_inst?
+            return {None}
+        else:
+            assert candidates is None
 
-        raise NotImplementedError()
+            # FIXME we can only handle a single client cardinality restriction
+            restricted_service = None
+            for s in obj.provides_services():
+                if s.max_clients() is not None:
+                    assert restricted_service is None, \
+                        "We can only handle a single max_client restriction per component."
+                    restricted_service = s
+
+            if restricted_service is None:
+                return {None}
+
+            affected_edges = set()
+            for e in self.layer.graph.in_edges(obj):
+                if self.layer.get_param_value(self, 'target-service', e).matches(restricted_service):
+                    affected_edges.add(e)
+
+            if len(affected_edges) == 0:
+                return {None}
+
+            # always insert muxer if available?
+            muxers = self.repo.find_components_by_type(query={'service' : restricted_service.name()},
+                                                       querytype='mux')
+            candidates = set()
+            for mux in muxers:
+                cand = self.Muxer(restricted_service, mux)
+                for e in affected_edges:
+                    cand.assign_edge(e)
+
+                candidates.add(cand)
+
+            if len(candidates) > 0:
+                return candidates
+
+            # if no muxer available but obj is not a singleton, we can replicate obj
+            if not obj.singleton():
+                cand = self.Muxer(restricted_service, obj)
+                for e in affected_edges:
+                    cand.assign_edge(e)
+
+                candidates.add(cand)
+
+            if len(candidates) > 0:
+                return candidates
+
+            return {None}
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
+
+    def transform(self, obj, target_layer):
+
+        if isinstance(obj, Edge):
+            muxer   = self.layer.get_param_value(self, self.param, obj)
+            if muxer is not None:
+                return GraphObj(Edge(obj.source, muxer.assigned_component(obj)),
+                    params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
+                            'target-service': muxer.assigned_service()})
+            else:
+                return GraphObj(obj,
+                    params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
+                            'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+        else:
+            mapping = self.layer.get_param_value(self, 'mapping', obj)
+            muxer   = self.layer.get_param_value(self, self.param, obj)
+            new_objs = {GraphObj(obj, params={'mapping':mapping})}
+            if muxer is not None:
+                new_objs.add(GraphObj(muxer.component, params={'mapping':mapping}))
+                new_objs.add(GraphObj(Edge(muxer.component, obj),
+                                      params={'source-service':muxer.source_service(),
+                                              'target-service':muxer.target_service()}))
+
+            return new_objs
+
+    def target_types(self):
+        # target layer has the same types as source layer
+        return self.layer.node_types()
 
 class QueryEngine(AnalysisEngine):
     """ Assigns 'mapping' parameter as suggested by the query model.

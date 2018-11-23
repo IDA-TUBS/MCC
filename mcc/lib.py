@@ -191,18 +191,18 @@ class MccBase:
         slayer = model.by_name[slayer]
         dlayer = model.by_name[dlayer]
 
-        # select muxers
+        # select muxers and transform
         me = MuxerEngine(slayer, self.repo)
         select = NodeStep(Map(me))
         select.add_operation(Assign(me))
+        select.add_operation(Transform(me, dlayer))
         model.add_step(select)
 
-        # TODO continue here
-
-        # copy & transform
-        model.add_step(CopyNodeStep(slayer, dlayer))
-        model.add_step(CopyMappingStep(slayer, dlayer))
-        model.add_step(CopyEdgeStep(slayer, dlayer))
+        # adapt edges to inserted muxers and transform
+        adapt_edges = EdgeStep(Map(me))
+        adapt_edges.add_operation(Assign(me))
+        adapt_edges.add_operation(Transform(me, dlayer))
+        model.add_step(adapt_edges)
 
         # check that service dependencies are satisfied and connections are local
         model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
@@ -306,8 +306,9 @@ class SimpleMcc(MccBase):
         # TODO test case for protocol stack insertion
         self._insert_protocolstacks(model, slayer='comp_arch-pre1', dlayer='comp_arch-pre2')
 
-        # TODO test case for muxer insertion
-#        self._insert_muxers(slayer='comp_arch-pre2', dlayer='comp_arch')
+        # insert muxers (if connections present and muxer is available)
+        # TODO test case for replication
+        self._insert_muxers(model, slayer='comp_arch-pre2', dlayer='comp_arch')
 
         # TODO implement transformation/merge into component instantiation
 
