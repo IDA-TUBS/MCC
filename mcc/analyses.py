@@ -339,16 +339,19 @@ class ComponentEngine(AnalysisEngine):
         assert(not isinstance(obj, Edge))
 
         assert(candidates is None)
+
+        if isinstance(obj, model.BaseChild):
+            return set([obj])
+
         components = self.repo.find_components_by_type(obj.query(), obj.type())
+
         if len(components) == 0:
             logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
-        else:
-            if len(components) > 1:
-                logging.info("Multiple candidates found for child %s '%s'." % (obj.type(), obj.identifier()))
+            return set()
+        elif len(components) > 1:
+            logging.info("Multiple candidates found for child %s '%s'." % (obj.type(), obj.query()))
 
-            return set(components)
-
-        return set()
+        return set(components)
 
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
@@ -477,7 +480,7 @@ class RteEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['mapping']) } }
         AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
-    def map(self, obj, candidates): 
+    def map(self, obj, candidates):
         """ Reduces set of 'mapping' candidates by checking the obj's rte requirements.
         """
         assert(not isinstance(obj, Edge))
@@ -590,7 +593,7 @@ class ReachabilityEngine(AnalysisEngine):
             # add dependencies to pcomp
             found = False
             for n in self.layer.graph.nodes():
-                if n.type() == 'function' and n.query() == pcomp:
+                if pcomp in n.functions():
                     if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source):
                         result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='to') }))
                         found = True

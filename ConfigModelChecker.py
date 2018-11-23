@@ -35,12 +35,19 @@ if __name__ == '__main__':
     # take platform from the first file if not overridden with --platform
     pffile = args.platform
     if pffile is None:
-        pffile = args.files[0]
+        if args.base is None:
+            pffile = args.files[0]
+        else:
+            pffile = args.base
 
     pf = cfgparser.PlatformParser(pffile, args.schema)
 
     # try to create repositories from given files
     repos = list()
+    if args.base is not None:
+        repo = cfgparser.Repository(args.base, args.schema)
+        repos.append(repo)
+
     for repofile in args.files:
         try:
             repo = cfgparser.Repository(repofile, args.schema)
@@ -49,21 +56,30 @@ if __name__ == '__main__':
             continue
 
     cfg = cfgparser.AggregateRepository(repos)
-    mcc = lib.SimpleMcc(repo=cfg, test_backtracking=True)
+    mcc = lib.SimpleMcc(repo=cfg, test_backtracking=False)
+
+    base = lib.BaseModelQuery()
 
     basesys   = cfgparser.SystemParser(args.base, args.schema)
-    basemodel = mcc.search_config(pf, basesys,
-                    outpath=args.dotpath+'-'+basesys.name()+'-',
-                    with_da=False)
+    query, basemodel = mcc.search_config(pf, basesys,
+                           outpath=args.dotpath+'-'+basesys.name()+'-',
+                           with_da=False)
 
-    # TODO store basemodel in BaseModelQuery
+    # store basemodel in BaseModelQuery
+    base.insert(name=basesys.name(),
+                query_graph=query,
+                comp_inst=basemodel.by_name['comp_arch-pre2'],
+                filename=args.base)
+
 
     sys = cfgparser.AggregateSystemParser()
     for sysfile in args.files:
         sys.append(cfgparser.SystemParser(sysfile, args.schema))
 
     try:
-        model = mcc.search_config(pf, sys, outpath=args.dotpath+'-'+sys.name()+'-', with_da=args.dependency_analysis)
+        query, model = mcc.search_config(pf, sys, base,
+                                  outpath=args.dotpath+'-'+sys.name()+'-',
+                                  with_da=args.dependency_analysis)
 
         # generate <config> from model
         # TODO implement Configurator (generate subsystem <config>s from model)

@@ -793,31 +793,31 @@ class ChildQuery:
     def type(self):
         return self._type
 
-    def routes(self):
-        # FIXME remove if we do not require explicit routing anymore
+    def functions(self):
+        if self.type() == 'function':
+            return set([self.query()])
+
+        return set()
+
+    def components(self):
+        if self.type() == 'component':
+            return set([self.query()])
+
+        return set()
+
+    def dependencies(self, dtype='child'):
+        assert dtype == 'child' or dtype == 'function'
+
         routes = list()
-        route = self._root.find("route")
-        if route is not None:
-            for s in self._root.find("route").findall("service"):
-                attribs = { "service" : s.get("name") }
-                if s.find("child") is not None:
-                    # collect attributes
-                    attribs['child'] = s.find("child").get("name")
-                    if 'label' in s.keys():
-                        attribs['label'] = s.get('label')
-
-                else:
-                    raise Exception("ERROR")
-
-                routes.append(attribs)
 
         dependency = self._root.find("dependency")
         if dependency is not None:
-            for c in self._root.find("dependency").findall("child"):
-                attribs = { "child" : c.get("name") }
+            for c in self._root.find("dependency").findall(dtype):
+                attribs = { dtype : c.get("name") }
                 routes.append(attribs)
 
         return routes
+
 
     def subsystem(self):
         return self._root.get('subsystem')
@@ -827,7 +827,7 @@ class ChildQuery:
 
     def __getstate__(self):
         return ( self._type,
-                 self._identifier, 
+                 self._identifier,
                  self._queryname )
 
     def __setstate__(self, state):
@@ -922,6 +922,9 @@ class PlatformParser:
                 return r.get('name')
             else:
                 return 'native'
+
+        def __repr__(self):
+            return self.name()
 
         def __getstate__(self):
             return ( self.name() )

@@ -38,6 +38,69 @@ class Instance:
         self.identifier = identifier
         self.component  = component
 
+class BaseChild:
+    def __init__(self, name, subsystem, components, subgraph):
+        self._name       = name
+        self._subsystem  = subsystem
+        self._components = components
+        self._subgraph   = subgraph
+
+    ########################
+    # ChildQuery interface #
+    ########################
+
+    def subsystem(self):
+        return self._subsystem
+
+    def routes(self):
+        return set()
+
+    def dependencies(self, dtype):
+        return set()
+
+    def label(self):
+        return self._name
+
+    def functions(self):
+        functions = set()
+        for c in self._components:
+            functions.add(c.function())
+
+        return functions
+
+    def components(self):
+        return self._components
+
+    #######################
+    # Component interface #
+    #######################
+
+    def requires_rte(self):
+        # all components have the same RTE requirement
+        return list(self._components)[0].requires_rte()
+
+    def requires_specs(self):
+        # aggregate spec requirements
+        specs = set()
+        for c in self._components:
+            specs.update(c.requires_specs())
+
+        return specs
+
+    def requires_functions(self):
+        return set()
+
+    def patterns(self):
+        return {self}
+
+    ##############################
+    # PatternComponent interface #
+    ##############################
+
+    def flatten(self):
+        return self._subgraph
+
+
 class Proxy:
     """ Node type representing to-be-inserted proxies; used in comm_arch layer.
     """
@@ -141,7 +204,7 @@ class SimplePlatformModel(PlatformModel):
             reachability_map[comm] = set()
 
         for c in self.parser.pf_components():
-            self.platform_graph.add_node(c)
+            self.platform_graph.add_node(c, {self.parser.PfComponent})
             for comm in c.comms():
                 reachability_map[comm].add(c)
 
@@ -236,11 +299,11 @@ class FuncArchQuery(QueryModel):
 
     def _parse(self):
         for child in self.parser.children():
-            self.query_graph.add_node(child)
+            self.query_graph.add_node(child, {ChildQuery})
 
         # parse and add explicit routes
         for child in self.query_graph.nodes():
-            for route in child.routes():
+            for route in child.dependencies('child'):
                 target = self.find_child(route['child'])
                 if target is not None:
                     e = self.query_graph.create_edge(child, target)
@@ -277,8 +340,8 @@ class SystemModel(BacktrackRegistry):
     """
     def __init__(self, repo, platform, dotpath=None):
         super().__init__()
-        self.add_layer(Layer('func_arch', nodetypes={ChildQuery}))
-        self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy}))
+        self.add_layer(Layer('func_arch', nodetypes={ChildQuery,BaseChild}))
+        self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy,BaseChild}))
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component}))
         self.add_layer(Layer('comp_arch', nodetypes={Repository.Component}))
@@ -305,13 +368,48 @@ class SystemModel(BacktrackRegistry):
         self.dot_styles[self.by_name['comp_arch-pre1']] = self.dot_styles[self.by_name['comp_arch']]
         self.dot_styles[self.by_name['comp_arch-pre2']] = self.dot_styles[self.by_name['comp_arch']]
 
+    def connect_functions(self):
+        fa = self.by_name['func_arch']
+
+        for c in fa.graph.nodes():
+            # for each dependency
+            for dep in c.dependencies('function'):
+                # edge exists?
+                satisfied = False
+                for e in fa.graph.out_edges():
+                    sc = fa._get_param_value(e, 'service')
+                    if sc.function == dep:
+                        satisfied = True
+
+                if not satisfied:
+                    # find providing child
+                    for provider in fa.graph.nodes():
+                        if provider is not c:
+                            if dep in provider.functions():
+                                e = fa.create_edge(c, provider)
+                                fa._set_param_value('service', e, ServiceConstraints(function=dep))
+                                satisfied = True
+
+                assert satisfied, "Cannot satisfy function dependency '%s' from '%s'" % (dep, c)
+
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:
             self.write_dot_layer(layer.name, self.dotpath+layer.name+suffix+".dot")
 
-    def from_query(self, query_model):
+    def _insert_base(self, base):
+        fa = self.by_name['func_arch']
+
+        for bcomp in base.base_arch():
+            fa.add_node(bcomp)
+            pf_comp = self.platform.find_by_name(bcomp.subsystem())
+            fa._set_param_candidates('mapping', bcomp, set([pf_comp]))
+
+    def from_query(self, query_model, base=None):
         fa = self.by_name['func_arch']
         self.reset(fa)
+
+        if base is not None:
+            self._insert_base(base)
 
         # insert nodes
         for child in query_model.children():
@@ -324,9 +422,13 @@ class SystemModel(BacktrackRegistry):
             if 'service' in query_model.query_graph.edge_attributes(route):
                 fa._set_param_value('service', e, ServiceConstraints(name=query_model.query_graph.edge_attributes(route)['service']))
             else:
+                functions = route.target.functions()
+                assert len(functions) <= 1, "Dependency to child with multiple functions (%s) detected." % functions
+
                 function = None
-                if route.target.type() == 'function':
-                    function = route.target.query()
+                if len(functions) == 1:
+                    function = list(functions)[0]
+
                 fa._set_param_value('service', e, ServiceConstraints(function=function))
 
     def _insert_query(self, child):
@@ -334,7 +436,7 @@ class SystemModel(BacktrackRegistry):
 
         # add node to functional architecture layer
         fa = self.by_name['func_arch']
-        fa.graph.add_node(child)
+        fa.add_node(child)
 
         # set pre-defined mapping
         if hasattr(child, "platform_component"):
@@ -396,8 +498,8 @@ class SystemModel(BacktrackRegistry):
                 # add components of this subsystem
                 for comp in layer.graph.nodes():
                     # only process children in this subsystem
-                    if layer._get_param_value('mapping', comp) is not None \
-                       and sub.name() != layer._get_param_value('mapping', comp).name():
+                    if layer._get_param_value('mapping', comp) is None \
+                       or sub.name() != layer._get_param_value('mapping', comp).name():
                         continue
 
                     layer.graph.node_attributes(comp)['id'] = "c%d" % n

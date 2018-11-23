@@ -263,6 +263,15 @@ class Layer:
         self.used_params = set()
         self.tracking    = False
 
+    def add_node(self, obj):
+        return self.graph.add_node(obj, self.node_types())
+
+    def add_edge(self, obj):
+        return self.graph.add_edge(obj)
+
+    def create_edge(self, s, t):
+        return self.graph.create_edge(s, t)
+
     def node_types(self):
         """
         Returns:
@@ -326,15 +335,15 @@ class Layer:
         elif isinstance(obj, GraphObj):
             if obj.is_edge():
                 if not nodes_only:
-                    o = self.graph.add_edge(obj.obj)
+                    o = self.add_edge(obj.obj)
                     self._set_params(o, obj.params())
                     inserted.add(o)
             else:
-                o = self.graph.add_node(obj.obj)
+                o = self.add_node(obj.obj)
                 self._set_params(o, obj.params())
                 inserted.add(o)
         else:
-            inserted.add(self.graph.add_node(obj))
+            inserted.add(self.add_node(obj))
 
         return inserted
 
@@ -1212,11 +1221,8 @@ class Transform(Operation):
 
             for o in inserted:
                 if not isinstance(o, Edge):
-                    if not isinstance(o, self.target_layer.node_types()):
-                        print(type(o))
-                        print(self.target_layer.node_types())
-
-                    assert(isinstance(o, self.target_layer.node_types()))
+                    assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
+                            self.target_layer.node_types())
 
             if dec_graph is not None:
                 dec_graph.add_transform_node(self.source_layer, self.target_layer,

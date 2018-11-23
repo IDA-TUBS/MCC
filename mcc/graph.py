@@ -44,6 +44,12 @@ class GraphObj:
 
         return self._params
 
+    def __repr__(self):
+        if self.is_edge():
+            return "Edge(%s, params=%s)" % (self.obj, self.params())
+        else:
+            return "Node(%s, params=%s)" % (self.obj, self.params())
+
 class Edge:
     """ Edge object used by :class:`Graph`.
     """
@@ -62,7 +68,8 @@ class Graph:
     def __init__(self):
         self.graph = MultiDiGraph()
 
-    def add_node(self, obj):
+    def add_node(self, obj, types):
+        assert isinstance(obj, tuple(types)), "%s is does not match types %s" % (obj, types)
         self.graph.add_node(obj)
         return obj
 
@@ -138,6 +145,22 @@ class Graph:
 
     def nodes(self):
         return self.graph.node.keys()
+
+    def subgraph(self, nodes):
+        result = set()
+        for n in nodes:
+            assert n in self.graph.node.keys()
+            attribs = self.node_attributes(n)
+            params = attribs['params'] if 'params' in attribs else None
+            result.add(GraphObj(n, None))
+
+        for e in self.edges():
+            if e.source in nodes and e.target in nodes:
+                attribs = self.edge_attributes(n)
+                params = attribs['params'] if 'params' in attribs else None
+                result.add(GraphObj(e, params))
+
+        return result
 
     def export_filter(self, node_params, edge_params):
         self._node_params = node_params

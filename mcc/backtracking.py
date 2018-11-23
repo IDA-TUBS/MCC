@@ -82,7 +82,7 @@ class DecisionGraph(Graph):
             self.root = obj
 
         self.current = obj
-        super().add_node(obj)
+        super().add_node(obj, {type(obj)})
 
     def set_operation(self, operation):
         self.last_operation = operation

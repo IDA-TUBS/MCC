@@ -49,20 +49,27 @@ class BaseModelQuery:
                                 'graph'    : query_graph }
 
         # merge comp_inst into current components
+        assert len(comp_inst.graph.nodes()) > 0, "inserting empty graph"
         self._merge(comp_inst, name)
 
-    def components(self):
-        return self._components
+    def base_arch(self):
+        # For each subsystem, return an object that aggregates
+        # the existing functions and components.
 
-    def functions(self):
-        # TODO return functions implemented by components for
-        #      each subsystem so that we can model the existing 
-        #      components by a compound
-        #      The result is a graph with one node for each subsystem;
-        #      each block represents the functions that are implemented
-        #      by the existing system.
-        #      The blocks are later expanded to the component instances.
-        raise NotImplementedError()
+        subsystems = dict()
+
+        # aggregate components per subsystem
+        for c in self._components.graph.nodes():
+            name = self._components._get_param_value('mapping', c).name()
+            if name not in subsystems:
+                subsystems[name] = set()
+            subsystems[name].add(c)
+
+        arch = set()
+        for name, comps in subsystems.items():
+            arch.add(BaseChild('base', name, comps, self._components.graph.subgraph(comps)))
+
+        return arch
 
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
@@ -246,10 +253,12 @@ class SimpleMcc(MccBase):
         bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
-    def search_config(self, platform, system, outpath=None, with_da=False, da_path=None):
+    def search_config(self, platform, system, base=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
+            :param base: base model (existing functions/components)
+            :param base: BaseModelQuery object
             :param platform: platform parser
             :type  platform: parser object
             :param system: system configuruation parser
@@ -274,11 +283,13 @@ class SimpleMcc(MccBase):
             query_model.write_dot(outpath+"query_graph.dot")
             pf_model.write_dot(outpath+"platform.dot")
 
-        # 4a) create system model from query model
-        model.from_query(query_model)
+        # 4a) create system model from query model and base
+        model.from_query(query_model, base)
 
-#        # 4b) solve function dependencies (if already known)
-#        self.model.connect_functions()
+        # 4b) solve function dependencies (if already known)
+        #      currently, we assume that all functional dependencies
+        #      are predefined in the query
+        model.connect_functions()
 
         # remark: 'mapping' is already fixed in func_arch
         #  we thus assign just assign nodes to platform components as queried
@@ -323,15 +334,18 @@ class SimpleMcc(MccBase):
             model.execute()
         except Exception as e:
             print(e)
+            model_extractor = ModelExtractor(model.by_name)
+            model_extractor.write_xml(outpath+'model-error.xml')
+            raise e
 
         model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
         model.decision_graph().write_dot(outpath+'dec_graph.dot')
 
         model_extractor = ModelExtractor(model.by_name)
-        model_extractor.write_xml(outpath+'blub.xml')
+        model_extractor.write_xml(outpath+'model.xml')
 
         # FIXME decision graph extractor does not work
         decision_extractor = DecisionGraphExtractor(model.decision_graph())
 #        decision_extractor.write_xml(outpath+'dec_graph.xml')
 
-        return model
+        return (query_model, model)
