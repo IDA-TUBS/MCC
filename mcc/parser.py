@@ -208,6 +208,9 @@ class Repository(XMLParser):
             else:
                 return 'anonymous'
 
+        def unique_label(self):
+            return "%s-%s" % (self.label(), id(self))
+
         def patterns(self):
             result = set()
             if self.xml_node.tag == 'composite':

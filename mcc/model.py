@@ -29,7 +29,7 @@ class ServiceConstraints:
         fr = '' if self.from_ref is None else self.from_ref
         to = '' if self.to_ref is None else self.to_ref
 
-        return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post) 
+        return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post)
 
 class Instance:
     """ Wrapper for components for managing instantiations
@@ -37,6 +37,82 @@ class Instance:
     def __init__(self, identifier, component):
         self.identifier = identifier
         self.component  = component
+        self.replaces = set()
+
+    def is_component(self, rhs):
+        return self.component.uid() == rhs.uid()
+
+    def component_uid(self):
+        return self.component.uid()
+
+    def register_replacement(self, instance):
+        self.replaces.add(instance)
+
+    def replaces(self, ):
+        return self.replaces
+
+class InstanceFactory:
+    """ Stores instances
+    """
+
+    def __init__(self):
+        self.instances = dict()
+        self.identifiers = dict()
+
+    def unique_name(self, component):
+        # build unique name from component name, object id and sequence number
+        if component.unique_label() not in self.identifiers:
+            self.identifiers[component.unique_label()] = 1
+        else:
+            self.identifiers[component.unique_label()] += 1
+
+        return "%s-%s" % (component.unique_label(), self.identifiers[component.unique_label()])
+
+    def insert_existing_instances(self, subsystem, existing):
+        if subsystem not in self.instances:
+            self.instances[subsystem] = { 'shared' : dict(),
+                                          'dedicated' : dict() }
+
+        for inst in existing:
+            self.instances[subsystem]['shared'][inst.component_uid()] = inst
+            self.instances[subsystem]['dedicated'][inst.component]    = inst
+
+
+    def dedicated_instance(self, subsystem, component):
+        """ create and return dedicated instance
+        """
+        if subsystem not in self.instances:
+            self.instances[subsystem] = { 'shared' : dict(),
+                                          'dedicated' : dict() }
+
+        if component not in self.instances[subsystem]['dedicated']:
+            new_inst = Instance(self.unique_name(component), component)
+
+            self.instances[subsystem]['dedicated'][component] = new_inst
+
+            # insert new_inst as shared instance is there is none yet
+            if component.uid() not in self.instances[subsystem]['shared']:
+                self.instances[subsystem]['shared'][component.uid()] = new_inst
+            else: # register new_inst at shared instance
+                self.instances[subsystem]['shared'][component.uid()].register_replacement(new_inst)
+
+        return self.instances[subsystem]['dedicated'][component]
+
+    def shared_instance(self, subsystem, component):
+        """ return matching shared instance from same subsystem
+        """
+        if subsystem in self.instances:
+            if component in self.instances[subsystem]['shared']:
+                return self.instances[subsystem]['shared'][component]
+
+        return self.dedicated_instance(subsystem, component)
+
+    def parent_instance(self, subsystem, component):
+        """ return matching shared instance from parent
+        """
+        # TODO allow mapping to instance from parent subsystems?
+        raise NotImplementedError()
+
 
 class BaseChild:
     def __init__(self, name, subsystem, components, subgraph):

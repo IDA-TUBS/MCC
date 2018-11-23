@@ -71,6 +71,10 @@ class BaseModelQuery:
 
         return arch
 
+    def instances(self, subsystem):
+        # TODO return instances of given subsystem
+        raise NotImplementedError()
+
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
     """
@@ -234,6 +238,33 @@ class MccBase:
         # perform arc split
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
+    def _merge_components(self, model, slayer, dlayer):
+        """ Merge components into component instantiations.
+
+        Args:
+            :param model: cross-layer model
+            :type  model: :class:`mcc.framework.Registry`
+            :param slayer: source layer
+            :param dlayer: target layer
+        """
+
+        ca = model.by_name[slayer]
+        ci = model.by_name[dlayer]
+
+        ie = InstantiationEngine(ca, ci)
+
+        # TODO select instances
+        #      - get dedicated instance object and shared instance object from factory
+        #      - map components to dedicated instance object and shared instance object
+        #      - assign instance
+
+        # TODO node transform
+        #      - if selected instance already present -> None
+        #      - else: instance object
+
+        # TODO edge transform
+        #      - new object with selected instances as source/target
+
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
@@ -310,7 +341,12 @@ class SimpleMcc(MccBase):
         # TODO test case for replication
         self._insert_muxers(model, slayer='comp_arch-pre2', dlayer='comp_arch')
 
+        # create instance factory and insert existing instance from base
+        instance_factory = InstanceFactory()
+        # TODO for each subsystem insert existing instances into factory
+
         # TODO implement transformation/merge into component instantiation
+        self._merge_components(model, slayer='comp_arch', dlayer='comp_inst', 
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
