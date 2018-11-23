@@ -94,9 +94,12 @@ class ModelExtractor():
             layer_root = ET.SubElement(root, 'layer', name=layer_name)
 
             for node in graph.nodes():
+
+                node_root = ET.SubElement(layer_root, 'node', name=str(node))
+
                 n_attributes = graph.node_attributes(node)
                 for param in n_attributes['params']:
-                    param_root = ET.SubElement(layer_root, 'param', name=param) 
+                    param_root = ET.SubElement(node_root, 'param', name=param) 
 
                     value = n_attributes['params'][param]['value']
                     candidates = n_attributes['params'][param]['candidates']
@@ -115,9 +118,13 @@ class ModelExtractor():
                         can_node.text = str(can)
 
             for edge in graph.edges():
+
+                edge_root = ET.SubElement(layer_root, 'edge', source=str(edge.source),
+                                                              target=str(edge.target))
+
                 n_attributes = graph.edge_attributes(edge)
                 for param in n_attributes['params']:
-                    param_root = ET.SubElement(layer_root, 'param', name=param)
+                    param_root = ET.SubElement(edge_root, 'param', name=param)
 
                     value = n_attributes['params'][param]['value']
                     candidates = n_attributes['params'][param]['candidates']
@@ -136,6 +143,7 @@ class ModelExtractor():
         return root
 
     def write_xml(self, filename):
+        # FIXME create GEXF format instead custom XML
         layer_xml = self._write_layer()
 
         layer_tree = ET.ElementTree(layer_xml)
