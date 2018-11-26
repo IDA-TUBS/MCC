@@ -1190,7 +1190,7 @@ class Transform(Operation):
         for t in ae.target_types():
             if compatible:
                 break
-            
+
             for expected in self.target_layer.node_types():
                 if issubclass(t, expected):
                     compatible = True
@@ -1213,9 +1213,10 @@ class Transform(Operation):
         logging.info("Executing %s" % self)
 
         for (index ,obj) in enumerate(iterable):
-            # TODO shall we also return the existing objects (for comp_inst)?
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             assert new_objs, "transform() did not return any object"
+
+            # remark: also returns already existing objects
             inserted = self.target_layer.insert_obj(new_objs)
             assert len(inserted) > 0
 

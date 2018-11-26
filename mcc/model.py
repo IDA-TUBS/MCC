@@ -48,8 +48,20 @@ class Instance:
     def register_replacement(self, instance):
         self.replaces.add(instance)
 
-    def replaces(self, ):
+    def replaces(self):
         return self.replaces
+
+    def shared(self):
+        return len(self.replaces) > 0
+
+    def label(self):
+        return self.identifier
+
+    def requires_services(self):
+        return self.component.requires_services()
+
+    def provides_services(self):
+        return self.component.provides_services()
 
 class InstanceFactory:
     """ Stores instances
@@ -74,6 +86,7 @@ class InstanceFactory:
                                           'dedicated' : dict() }
 
         for inst in existing:
+            assert isinstance(inst, Instance)
             self.instances[subsystem]['shared'][inst.component_uid()] = inst
             self.instances[subsystem]['dedicated'][inst.component]    = inst
 
@@ -113,12 +126,15 @@ class InstanceFactory:
         # TODO allow mapping to instance from parent subsystems?
         raise NotImplementedError()
 
+    def types(self):
+        return {Instance}
+
 
 class BaseChild:
-    def __init__(self, name, subsystem, components, subgraph):
+    def __init__(self, name, subsystem, instances, subgraph):
         self._name       = name
         self._subsystem  = subsystem
-        self._components = components
+        self._instances  = instances
         self._subgraph   = subgraph
 
     ########################
@@ -139,13 +155,13 @@ class BaseChild:
 
     def functions(self):
         functions = set()
-        for c in self._components:
-            functions.add(c.function())
+        for inst in self._instances:
+            functions.add(inst.component.function())
 
         return functions
 
     def components(self):
-        return self._components
+        return self._instances
 
     #######################
     # Component interface #
@@ -153,13 +169,13 @@ class BaseChild:
 
     def requires_rte(self):
         # all components have the same RTE requirement
-        return list(self._components)[0].requires_rte()
+        return list(self._instances)[0].component.requires_rte()
 
     def requires_specs(self):
         # aggregate spec requirements
         specs = set()
-        for c in self._components:
-            specs.update(c.requires_specs())
+        for inst in self._instances:
+            specs.update(inst.component.requires_specs())
 
         return specs
 
@@ -418,9 +434,9 @@ class SystemModel(BacktrackRegistry):
         super().__init__()
         self.add_layer(Layer('func_arch', nodetypes={ChildQuery,BaseChild}))
         self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy,BaseChild}))
-        self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component}))
-        self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component}))
-        self.add_layer(Layer('comp_arch', nodetypes={Repository.Component}))
+        self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component,Instance}))
+        self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component,Instance}))
+        self.add_layer(Layer('comp_arch', nodetypes={Repository.Component,Instance}))
         self.add_layer(Layer('comp_inst', nodetypes={Instance}))
 
         self.platform = platform

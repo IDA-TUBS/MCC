@@ -72,8 +72,13 @@ class BaseModelQuery:
         return arch
 
     def instances(self, subsystem):
-        # TODO return instances of given subsystem
-        raise NotImplementedError()
+        # return instances of given subsystem
+        instances = set()
+        for c in self._components.graph.nodes():
+            if subsystem == self._components._get_param_value('mapping', c).name():
+                instances.add(c)
+
+        return instances
 
 class MccBase:
     """ MCC base class. Implements helper functions for common transformation steps.
@@ -238,7 +243,7 @@ class MccBase:
         # perform arc split
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
-    def _merge_components(self, model, slayer, dlayer):
+    def _merge_components(self, model, slayer, dlayer, factory):
         """ Merge components into component instantiations.
 
         Args:
@@ -246,25 +251,24 @@ class MccBase:
             :type  model: :class:`mcc.framework.Registry`
             :param slayer: source layer
             :param dlayer: target layer
+            :param factory: instance factory
+            :type  factory: :class:`mcc.model.InstanceFactory`
         """
 
         ca = model.by_name[slayer]
         ci = model.by_name[dlayer]
 
-        ie = InstantiationEngine(ca, ci)
+        ie = InstantiationEngine(ca, ci, factory)
 
-        # TODO select instances
-        #      - get dedicated instance object and shared instance object from factory
-        #      - map components to dedicated instance object and shared instance object
-        #      - assign instance
+        instantiate = NodeStep(Map(ie, 'instantiate'))
+        instantiate.add_operation(Assign(ie, 'instantiate'))
+        instantiate.add_operation(Transform(ie, ci, 'instantiate'))
+        model.add_step(instantiate)
+        model.add_step(EdgeStep(Transform(ie, ci, 'copy edges')))
 
-        # TODO node transform
-        #      - if selected instance already present -> None
-        #      - else: instance object
-
-        # TODO edge transform
-        #      - new object with selected instances as source/target
-
+        # TODO continue here
+        # TODO check singleton (per PfComponent)
+        # TODO check client cardinality
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
@@ -306,7 +310,7 @@ class SimpleMcc(MccBase):
         # 2) we create a new system model
         model = SystemModel(self.repo, pf_model, dotpath=outpath)
 
-        # 3) create query model 
+        # 3) create query model
         query_model = FuncArchQuery(system)
 
         # output query model
@@ -343,10 +347,15 @@ class SimpleMcc(MccBase):
 
         # create instance factory and insert existing instance from base
         instance_factory = InstanceFactory()
-        # TODO for each subsystem insert existing instances into factory
 
-        # TODO implement transformation/merge into component instantiation
-        self._merge_components(model, slayer='comp_arch', dlayer='comp_inst', 
+        if base is not None:
+            # for each subsystem insert existing instances into factory
+            for pfc in pf_model.platform_graph.nodes():
+                instance_factory.insert_existing_instances(pfc.name(), base.instances(pfc.name()))
+
+
+        # implement transformation/merge into component instantiation
+        self._merge_components(model, slayer='comp_arch', dlayer='comp_inst', factory=instance_factory)
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:

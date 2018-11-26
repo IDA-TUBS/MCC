@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # store basemodel in BaseModelQuery
     base.insert(name=basesys.name(),
                 query_graph=query,
-                comp_inst=basemodel.by_name['comp_arch-pre2'],
+                comp_inst=basemodel.by_name['comp_inst'],
                 filename=args.base)
 
 

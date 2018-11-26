@@ -755,3 +755,56 @@ class BacktrackingTestEngine(AnalysisEngine):
 
     def node_types(self):
         return []
+
+class InstantiationEngine(AnalysisEngine):
+    def __init__(self, layer, target_layer, factory):
+        acl = { layer : { 'reads' : set(['mapping', 'source-service', 'target-service']) }}
+        AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
+        self.factory      = factory
+        self.target_layer = target_layer
+
+    def map(self, obj, candidates):
+        """ Get and map to dedicated and shared instance object from factory
+        """
+        assert not isinstance(obj, Edge)
+        assert candidates is None
+
+        # if it's already an instance
+        if isinstance(obj, model.Instance):
+            return {obj}
+
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+        ded    = self.factory.dedicated_instance(pfc.name(), obj)
+        shared = self.factory.shared_instance   (pfc.name(), obj)
+
+        return {ded, shared}
+
+    def assign(self, obj, candidates):
+        """ Assigns shared candidate if present
+        """
+        assert not isinstance(obj, Edge)
+        assert len(candidates) > 0
+
+        for c in candidates:
+            if c.shared():
+                return c
+
+        return list(candidates)[0]
+
+    def transform(self, obj, target_layer):
+
+        if isinstance(obj, Edge):
+            source = self.layer.get_param_value(self, self.param, obj.source)
+            target = self.layer.get_param_value(self, self.param, obj.target)
+
+            return GraphObj(Edge(source,target),
+                params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
+                        'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+
+        else:
+            return GraphObj(self.layer.get_param_value(self, self.param, obj),
+                            params={'mapping':self.layer.get_param_value(self, 'mapping', obj)})
+
+    def target_types(self):
+        return self.factory.types()

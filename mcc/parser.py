@@ -209,7 +209,7 @@ class Repository(XMLParser):
                 return 'anonymous'
 
         def unique_label(self):
-            return "%s-%s" % (self.label(), id(self))
+            return "%s-%s" % (self.label(), hex(id(self.xml_node)))
 
         def patterns(self):
             result = set()
