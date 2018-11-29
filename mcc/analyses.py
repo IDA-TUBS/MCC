@@ -816,7 +816,7 @@ class InstantiationEngine(AnalysisEngine):
 
 class SingletonEngine(AnalysisEngine):
     def __init__(self, layer, platform_model):
-        acl = { layer : { 'reads' : set(['mapping']) }}
+        acl = { layer : { 'reads' : set(['mapping', 'target-service']) }}
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
         self.pf_model = platform_model
 
@@ -835,6 +835,24 @@ class SingletonEngine(AnalysisEngine):
 
         # second, every service provision with a max_clients restriction must have at most n clients
         # TODO implement
+        restrictions = dict()
+        for s in obj.provides_services():
+            clients = 0
+            if s.max_clients() is not None:
+                restrictions[s] = { 'max' : int(s.max_clients()), 'cur' : 0 }
+
+        if len(restrictions) == 0:
+            return True
+
+        for e in self.layer.graph.in_edges(obj):
+            s = self.layer.get_param_value(self, 'target-service', e)
+            if s in restrictions:
+                restrictions[s]['cur'] += 1
+
+        for s in restrictions:
+            if restrictions[s]['cur'] > restrictions[s]['max']:
+                logging.error('Instance %s has to many clients for service %s.' % (obj, s))
+                return False
 
         return True
 
