@@ -39,7 +39,7 @@ class DependencyEngine(AnalysisEngine):
     def _find_provider_recursive(self, node, function):
         for con in self.layer.graph.out_edges(node):
             comp2 = self.layer.get_param_value(self, 'component', con.target)
-            if comp2.function() == function:
+            if function in comp2.functions():
                 return True
             elif comp2.type() == 'proxy':
                 return self._find_provider_recursive(con.target, function)
@@ -75,7 +75,7 @@ class ComponentDependencyEngine(AnalysisEngine):
         if isinstance(obj, Edge):
             source_mapping = self.layer.get_param_value(self, 'mapping', obj.source)
             target_mapping = self.layer.get_param_value(self, 'mapping', obj.target)
-            if source_mapping != target_mapping:
+            if not source_mapping.in_native_domain(target_mapping):
                 # logging.error("Service connection '%s' from component '%s' to '%s' crosses platform components." % (s, obj, comp2))
                 return False
             else:
@@ -707,11 +707,16 @@ class ReachabilityEngine(AnalysisEngine):
             found = False
             for n in self.layer.graph.nodes():
                 if pcomp in n.functions():
-                    if self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.source):
-                        result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='to') }))
+                    pfc  = self.layer.get_param_value(self, 'mapping', n)
+                    pfc_source = self.layer.get_param_value(self, 'mapping', obj.source)
+                    pfc_target = self.layer.get_param_value(self, 'mapping', obj.target)
+                    if pfc.in_native_domain(pfc_source):
+                        result.append(GraphObj(Edge(proxy, n), params={ 'service' :
+                            model.ServiceConstraints(name=carrier, from_ref='to', function=pcomp) }))
                         found = True
-                    elif self.layer.get_param_value(self, 'mapping', n) == self.layer.get_param_value(self, 'mapping', obj.target):
-                        result.append(GraphObj(Edge(proxy, n), params={ 'service' : model.ServiceConstraints(name=carrier, from_ref='from') }))
+                    elif pfc.in_native_domain(pfc_target):
+                        result.append(GraphObj(Edge(proxy, n), params={ 'service' :
+                            model.ServiceConstraints(name=carrier, from_ref='from', function=pcomp) }))
                         found = True
 
             assert found, "Cannot find function '%s' required by proxy" % (pcomp)
@@ -808,3 +813,28 @@ class InstantiationEngine(AnalysisEngine):
 
     def target_types(self):
         return self.factory.types()
+
+class SingletonEngine(AnalysisEngine):
+    def __init__(self, layer, platform_model):
+        acl = { layer : { 'reads' : set(['mapping']) }}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+        self.pf_model = platform_model
+
+    def check(self, obj):
+        assert not isinstance(obj, Edge)
+
+        # first, every node, which is a singleton component, must only be present once per PfComponent
+        subsys = self.layer.get_param_value(self, 'mapping', obj)
+        if obj.component.singleton():
+            for n in self.layer.graph.nodes() - {obj}:
+                if n.is_component(obj.component):
+                    other_subsys = self.layer.get_param_value(self, 'mapping', n)
+                    if subsys.same_singleton_domain(other_subsys):
+                        logging.error("%s is instantiated in %s and %s" % (obj.component, subsys, other_subsys))
+                        return False
+
+        # second, every service provision with a max_clients restriction must have at most n clients
+        # TODO implement
+
+        return True
+

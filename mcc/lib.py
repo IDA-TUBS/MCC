@@ -243,7 +243,7 @@ class MccBase:
         # perform arc split
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
 
-    def _merge_components(self, model, slayer, dlayer, factory):
+    def _merge_components(self, model, slayer, dlayer, factory, pf_model):
         """ Merge components into component instantiations.
 
         Args:
@@ -266,8 +266,11 @@ class MccBase:
         model.add_step(instantiate)
         model.add_step(EdgeStep(Transform(ie, ci, 'copy edges')))
 
+        # check singleton (per PfComponent)
+        se = SingletonEngine(ci, pf_model)
+        model.add_step(NodeStep(Check(se, 'check singleton and cardinality')))
+
         # TODO continue here
-        # TODO check singleton (per PfComponent)
         # TODO check client cardinality
 
 class SimpleMcc(MccBase):
@@ -355,7 +358,8 @@ class SimpleMcc(MccBase):
 
 
         # implement transformation/merge into component instantiation
-        self._merge_components(model, slayer='comp_arch', dlayer='comp_inst', factory=instance_factory)
+        self._merge_components(model, slayer='comp_arch', dlayer='comp_inst',
+                factory=instance_factory, pf_model=pf_model)
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:

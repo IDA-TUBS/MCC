@@ -137,6 +137,13 @@ class Repository(XMLParser):
             self.xml_node = xml_node
 
         def uid(self):
+            # TODO replace with __eq__() and __hash__?
+
+            # if singleton, return (binary) name
+            if self.singleton():
+                return self.repo.get_binary_name(self.label())
+
+            # else:
             return self.xml_node
 
         def singleton(self):
@@ -188,6 +195,13 @@ class Repository(XMLParser):
 
             return None
 
+        def functions(self):
+            func = self.function()
+            if func is None:
+                return {}
+
+            return {func}
+
         def type(self):
             classes = self.repo._get_component_classes(self.xml_node)
             assert(len(classes) <= 1)
@@ -209,7 +223,7 @@ class Repository(XMLParser):
                 return 'anonymous'
 
         def unique_label(self):
-            return "%s-%s" % (self.label(), hex(id(self.xml_node)))
+            return "%s-%s" % (self.label(), self.repo.get_binary_name(self.label()))
 
         def patterns(self):
             result = set()
@@ -488,6 +502,18 @@ class Repository(XMLParser):
                          self._find_element_by_attribute('composite', { "name" : query })
 
         return [Repository.Component(c, self) for c in components]
+
+    def get_binary_name(self, component_name):
+        cand = self._root.find("binary[@name='%s']" % component_name)
+        if cand is not None:
+            return cand.get('name')
+
+        cand = self._root.find("binary/component[@name='%s']/.." % component_name)
+        if cand is not None:
+            return cand.get('name')
+
+        logging.error("No binary found for component '%s'" % component_name)
+        return None
 
     # check whether all function names are only provided once
     def check_functions_unambiguous(self):
@@ -907,8 +933,19 @@ class AggregateSystemParser:
 
 class PlatformParser:
     class PfComponent:
-        def __init__(self, xml_node):
+        def __init__(self, xml_node, parent=None):
             self._root = xml_node
+            self._parent = parent
+
+        def _domain(self):
+            domain = { self }
+            if self._parent is not None:
+                if hasattr(self._parent, '_domain'):
+                    domain.update(self._parent._domain())
+                else:
+                    domain.add(self._parent)
+
+            return domain
 
         def name(self):
             return self._root.get('name')
@@ -944,6 +981,12 @@ class PlatformParser:
             else:
                 return 'native'
 
+        def same_singleton_domain(self, rhs):
+            return len(self._domain() & rhs._domain()) > 0
+
+        def in_native_domain(self, rhs):
+            return len(self._domain() & rhs._domain()) > 0
+
         def __repr__(self):
             return self.name()
 
@@ -975,7 +1018,7 @@ class PlatformParser:
         result = set()
         for c in self._root.findall("component"):
             for s in c.findall("subsystem"):
-                result.add(self.PfComponent(s))
+                result.add(self.PfComponent(s, parent=c))
 
         return result
 

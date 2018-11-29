@@ -60,8 +60,14 @@ class Instance:
     def requires_services(self):
         return self.component.requires_services()
 
-    def provides_services(self):
-        return self.component.provides_services()
+    def provides_services(self, name=None, ref=None):
+        return self.component.provides_services(name, ref)
+
+    def uid(self):
+        return self
+
+    def __repr__(self):
+        return self.identifier
 
 class InstanceFactory:
     """ Stores instances
@@ -184,6 +190,26 @@ class BaseChild:
 
     def patterns(self):
         return {self}
+
+    def provides_services(self, name=None, ref=None):
+        services = set()
+        for inst in self._instances:
+            services.update(inst.provides_services(name, ref))
+
+        return services
+
+    def providing_component(self, service, function=None, to_ref=None):
+        for inst in self._instances:
+            if function is not None and inst.component.function() != function:
+                continue
+
+            for s in inst.provides_services(service, to_ref):
+                # we found a match
+                return inst, to_ref
+
+        logging.error("Cannot find providing component for %s %s %s" % (service, function, to_ref))
+        return None, None
+
 
     ##############################
     # PatternComponent interface #
@@ -355,7 +381,7 @@ class SimplePlatformModel(PlatformModel):
         assert isinstance(from_component, PlatformParser.PfComponent)
         assert isinstance(to_component, PlatformParser.PfComponent)
 
-        if from_component == to_component:
+        if from_component.in_native_domain(to_component):
             return True, 'native', from_component
         else:
             # FIXME automatically determine carrier from contract repository
