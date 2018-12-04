@@ -367,6 +367,8 @@ class SimpleMcc(MccBase):
         self._merge_components(model, slayer='comp_arch', dlayer='comp_inst',
                 factory=instance_factory, pf_model=pf_model)
 
+        # TODO assign and check resource consumptions (RAM, caps)
+
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
             self.insert_random_backtracking_engine(model, 0.05)

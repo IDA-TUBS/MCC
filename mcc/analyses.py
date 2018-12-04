@@ -15,6 +15,25 @@ from mcc import model
 from mcc import parser
 from mcc.backtracking import AssignNode
 
+class CapsEngine(AnalysisEngine):
+    def __init__(self, layer, threshold=1000):
+        acl = { layer        : {'reads' : set(['mapping']) }}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+        self.threshold = 1000
+
+    def check(self, obj, first):
+        # for each subsystem, sum of caps must be below the specified threshold
+        if first:
+            self.state = dict()
+
+        pfc = self.layer.get_param_value(self, obj, 'mapping')
+        if pfc not in self.state:
+            self.state[pfc] = self.threshold
+
+        self.state[pfc] -= obj.component.caps()
+
+        return self.state[pfc] >= 0
+
 class StaticEngine(AnalysisEngine):
     def __init__(self, layer):
         AnalysisEngine.__init__(self, layer, param='mapping')
@@ -34,7 +53,7 @@ class MappingEngine(AnalysisEngine):
         acl = { layer        : {'reads' : set(['mapping']) }}
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Checks whether a platform mapping is assigned to all nodes.
         """
         assert(not isinstance(obj, Edge))
@@ -60,7 +79,7 @@ class DependencyEngine(AnalysisEngine):
 
         return False
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Checks whether all functional dependencies are satisfied by the selected component.
         """
         assert(not isinstance(obj, Edge))
@@ -81,7 +100,7 @@ class ComponentDependencyEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['mapping', 'source-service']) } }
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Checks that 
             a) all service requirements are satisfied once and (nodes)
             b) that service connections are local (edges).
@@ -157,7 +176,7 @@ class ServiceEngine(AnalysisEngine):
 
         return source_ports, target_ports
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Check ServiceConstraints object for compatibility with connected provider
         """
         assert(isinstance(obj, Edge))
@@ -420,7 +439,6 @@ class MuxerEngine(AnalysisEngine):
                     params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
                             'target-service': self.layer.get_param_value(self, 'target-service', obj)})
         else:
-            # TODO inherit mapping from clients? do not map to static subsystem
             mapping = self.layer.get_param_value(self, 'mapping', obj)
             muxer   = self.layer.get_param_value(self, self.param, obj)
             new_objs = {GraphObj(obj, params={'mapping':mapping})}
@@ -490,7 +508,7 @@ class ComponentEngine(AnalysisEngine):
 
         return list(candidates)[0]
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Sanity check.
         """
         return self.layer.get_param_value(self, self.param, obj) is not None
@@ -518,7 +536,7 @@ class PatternEngine(AnalysisEngine):
 
         return list(candidates)[0]
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Checks whether a pattern was assigned.
         """
         if isinstance(obj, Edge):
@@ -578,7 +596,7 @@ class SpecEngine(AnalysisEngine):
 
         return keep
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Sanity check.
         """
         assert(not isinstance(obj, Edge))
@@ -628,7 +646,7 @@ class RteEngine(AnalysisEngine):
 
         return keep
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Sanity check
         """
         assert(not isinstance(obj, Edge))
@@ -756,7 +774,7 @@ class BacktrackingTestEngine(AnalysisEngine):
         self.failure_rate = 0
         self.fail_once    = fail_once
 
-    def check(self, obj):
+    def check(self, obj, first):
 
         # check if for every assign node alle the candidates have been used
         current = self.dec_graph.current
@@ -835,7 +853,7 @@ class SingletonEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
         self.pf_model = platform_model
 
-    def check(self, obj):
+    def check(self, obj, first):
         assert not isinstance(obj, Edge)
 
         # first, every node, which is a singleton component, must only be present once per PfComponent

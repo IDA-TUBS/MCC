@@ -607,7 +607,7 @@ class AnalysisEngine:
         """
         raise NotImplementedError()
 
-    def check(self, obj):
+    def check(self, obj, first):
         """ Must be implemented by derived classes.
 
         Raises:
@@ -737,7 +737,7 @@ class ExternalAnalysisEngine(AnalysisEngine):
 
         return self._parse_assign(obj)
 
-    def check(self, obj):
+    def check(self, obj, first):
         raise NotImplementedError()
 
     def transform(self, obj, target_layer):
@@ -757,7 +757,7 @@ class DummyEngine(AnalysisEngine):
 
         return obj
 
-    def check(self, obj):
+    def check(self, obj, first):
         return True
 
     def target_types(self):
@@ -1245,11 +1245,14 @@ class Check(Operation):
         logging.info("Executing %s" % self)
 
         for ae in self.analysis_engines:
+            first = True
             for obj in iterable:
                 assert(self.check_source_type(obj))
 
-                if not ae.check(obj):
+                if not ae.check(obj, first):
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
+
+                first = False
 
         return True
 
