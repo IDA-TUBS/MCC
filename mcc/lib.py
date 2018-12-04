@@ -91,6 +91,10 @@ class MccBase:
         """
         self.repo = repo
 
+    def _complete_mapping(self, model, layer):
+        # inherit mapping from all neighbours (excluding static platform components)
+        model.add_step(InheritFromBothStep(layer, 'mapping', operations={Map(StaticEngine(layer))}))
+
     def _select_components(self, model, slayer, dlayer):
         """ Selects components for nodes in source layer and transforms into target layer.
 
@@ -140,8 +144,10 @@ class MccBase:
         connect.add_operation(Transform(se, ca, name='connect'))
         model.add_step(connect)
 
+        # copy mapping from slayer to dlayer
         model.add_step(CopyMappingStep(fc, ca))
-        model.add_step(InheritFromBothStep(ca, 'mapping'))
+
+        self._complete_mapping(model, ca)
 
         # check mapping
         model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
@@ -181,7 +187,7 @@ class MccBase:
         model.add_step(CopyServicesStep(slayer, dlayer))
 
         # derive mapping
-        model.add_step(InheritFromBothStep(dlayer, 'mapping'))
+        self._complete_mapping(model, dlayer)
 
         # check that service dependencies are satisfied and connections are local
         model.add_step(EdgeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
@@ -212,6 +218,9 @@ class MccBase:
         adapt_edges.add_operation(Assign(me))
         adapt_edges.add_operation(Transform(me, dlayer))
         model.add_step(adapt_edges)
+
+        # derive mapping
+        self._complete_mapping(model, dlayer)
 
         # check that service dependencies are satisfied and connections are local
         model.add_step(NodeStep(Check(ComponentDependencyEngine(dlayer), name='service dependencies')))
@@ -269,9 +278,6 @@ class MccBase:
         # check singleton (per PfComponent)
         se = SingletonEngine(ci, pf_model)
         model.add_step(NodeStep(Check(se, 'check singleton and cardinality')))
-
-        # TODO continue here
-        # TODO check client cardinality
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.

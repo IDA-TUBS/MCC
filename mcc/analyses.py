@@ -15,6 +15,20 @@ from mcc import model
 from mcc import parser
 from mcc.backtracking import AssignNode
 
+class StaticEngine(AnalysisEngine):
+    def __init__(self, layer):
+        AnalysisEngine.__init__(self, layer, param='mapping')
+
+    def map(self, obj, candidates):
+        assert candidates is not None
+
+        exclude = set()
+        for obj in candidates:
+            if obj.static():
+                exclude.add(obj)
+
+        return candidates - exclude
+
 class MappingEngine(AnalysisEngine):
     def __init__(self, layer):
         acl = { layer        : {'reads' : set(['mapping']) }}
@@ -406,11 +420,12 @@ class MuxerEngine(AnalysisEngine):
                     params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
                             'target-service': self.layer.get_param_value(self, 'target-service', obj)})
         else:
+            # TODO inherit mapping from clients? do not map to static subsystem
             mapping = self.layer.get_param_value(self, 'mapping', obj)
             muxer   = self.layer.get_param_value(self, self.param, obj)
             new_objs = {GraphObj(obj, params={'mapping':mapping})}
             if muxer is not None:
-                new_objs.add(GraphObj(muxer.component, params={'mapping':mapping}))
+                new_objs.add(GraphObj(muxer.component))
                 new_objs.add(GraphObj(Edge(muxer.component, obj),
                                       params={'source-service':muxer.source_service(),
                                               'target-service':muxer.target_service()}))
@@ -834,7 +849,6 @@ class SingletonEngine(AnalysisEngine):
                         return False
 
         # second, every service provision with a max_clients restriction must have at most n clients
-        # TODO implement
         restrictions = dict()
         for s in obj.provides_services():
             clients = 0
