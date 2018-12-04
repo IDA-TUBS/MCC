@@ -54,7 +54,8 @@
 	<component name="gpio_drv" singleton="true">
 		<function name="GPIO" />
 		<provides>
-			<service name="GPIO" max_clients="1" />
+			<!-- TODO drop max_clients restriction since there are multiple connections specified-->
+			<service name="GPIO" max_clients="2" />
 		</provides>
 		<requires>
 			<ram quantum="1" />
@@ -81,7 +82,8 @@
 	<component name="vdma_drv" singleton="true">
 		<function name="VDMA" />
 		<provides>
-			<service name="VDMA" max_clients="1" />
+			<!-- TODO drop max_clients restriction since there are multiple connections specified-->
+			<service name="VDMA" max_clients="2" />
 		</provides>
 		<requires>
 			<ram quantum="1" />
@@ -102,7 +104,8 @@
 	<component name="pl_irq_drv" singleton="true">
 		<function name="PL_IRQ" />
 		<provides>
-			<service name="PL_IRQ" max_clients="1" />
+			<!-- TODO drop max_clients restriction since there are multiple connections specified-->
+			<service name="PL_IRQ" max_clients="2" />
 		</provides>
 		<requires>
 			<ram quantum="1" />
