@@ -15,22 +15,26 @@ from mcc import model
 from mcc import parser
 from mcc.backtracking import AssignNode
 
-class CapsEngine(AnalysisEngine):
-    def __init__(self, layer, threshold=1000):
+class QuantumEngine(AnalysisEngine):
+    def __init__(self, layer, name):
         acl = { layer        : {'reads' : set(['mapping']) }}
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
-        self.threshold = 1000
+        self.name = name
 
     def check(self, obj, first):
         # for each subsystem, sum of caps must be below the specified threshold
         if first:
             self.state = dict()
 
-        pfc = self.layer.get_param_value(self, obj, 'mapping')
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
         if pfc not in self.state:
-            self.state[pfc] = self.threshold
+            self.state[pfc] = pfc.quantum(self.name)
 
-        self.state[pfc] -= obj.component.caps()
+        self.state[pfc] -= obj.component.requires_quantum(self.name)
+
+        if self.state[pfc] < 0:
+            logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
+                                                                 pfc.quantum(self.name)))
 
         return self.state[pfc] >= 0
 

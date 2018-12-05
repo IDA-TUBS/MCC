@@ -279,6 +279,22 @@ class MccBase:
         se = SingletonEngine(ci, pf_model)
         model.add_step(NodeStep(Check(se, 'check singleton and cardinality')))
 
+    def _assign_resources(self, model, layer):
+        layer = model.by_name[layer]
+
+        # TODO actually assign resources as specified in repo
+        #      currently, we just take the resources as specified but check
+        #      whether they exceed any threshold
+        ce = QuantumEngine(layer, name='caps')
+
+        resources = NodeStep(Check(ce, 'caps'))
+
+        re = QuantumEngine(layer, name='ram')
+        resources.add_operation(Check(re, 'ram'))
+
+        model.add_step(resources)
+
+
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
@@ -367,7 +383,8 @@ class SimpleMcc(MccBase):
         self._merge_components(model, slayer='comp_arch', dlayer='comp_inst',
                 factory=instance_factory, pf_model=pf_model)
 
-        # TODO assign and check resource consumptions (RAM, caps)
+        # assign and check resource consumptions (RAM, caps)
+        self._assign_resources(model, layer='comp_inst')
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:

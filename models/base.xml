@@ -53,6 +53,10 @@
 <platform>
 	<component>
 		<subsystem name="zynq-static">
+			<provides>
+			    <ram quantum="128"/>
+			    <caps quantum="1000"/>
+			</provides>
 			<requires>
 				<comm name="Network" />
 			</requires>
@@ -69,6 +73,8 @@
 					<vdma id="0" />
 					<vdma id="1" />
 				</vdmas-->
+			    <ram quantum="768"/>
+			    <caps quantum="10000"/>
 			</provides>
 			<requires>
 				<comm name="Network" />
@@ -83,12 +89,20 @@
 	</component>
 	<component>
 		<subsystem name="pc-static">
+			<provides>
+			    <ram quantum="128"/>
+			    <caps quantum="1000"/>
+			</provides>
 			<requires>
 				<comm name="Network" />
 			</requires>
 		</subsystem>
 
 		<subsystem name="pc">
+			<provides>
+			    <ram quantum="1024"/>
+			    <caps quantum="10000"/>
+			</provides>
 			<requires>
 				<comm name="Network" />
 			</requires>

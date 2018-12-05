@@ -149,6 +149,13 @@ class Repository(XMLParser):
         def singleton(self):
             return self.xml_node.get('singleton')
 
+        def requires_quantum(self, name):
+            quantum = self.xml_node.find('./requires/%s' % name)
+            if quantum is not None:
+                return int(quantum.get('quantum'))
+            else:
+                return 0
+
         def requires_rte(self):
             rte = self.xml_node.find('./requires/rte')
             if rte is not None:
@@ -980,6 +987,13 @@ class PlatformParser:
                 return r.get('name')
             else:
                 return 'native'
+
+        def quantum(self, name):
+            q = self._root.find('provides/%s' % name)
+            if q is not None:
+                return int(q.get('quantum'))
+            else:
+                return 0
 
         def same_singleton_domain(self, rhs):
             return len(self._domain() & rhs._domain()) > 0
