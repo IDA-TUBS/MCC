@@ -93,7 +93,7 @@ class MccBase:
 
     def _complete_mapping(self, model, layer):
         # inherit mapping from all neighbours (excluding static platform components)
-        model.add_step(InheritFromBothStep(layer, 'mapping', operations={Map(StaticEngine(layer))}))
+        model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
 
     def _select_components(self, model, slayer, dlayer):
         """ Selects components for nodes in source layer and transforms into target layer.

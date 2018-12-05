@@ -1438,10 +1438,11 @@ class InheritFromBothStep(NodeStep):
     """ Inherits a parameter value from neighbouring source and target nodes.
     """
 
-    def __init__(self, layer, param, operations=None):
+    def __init__(self, layer, param, engines=None):
         ie = InheritEngine(layer, param='mapping')
-        NodeStep.__init__(self, Map(ie))
-        if operations is not None:
-            for op in operations:
-                self.add_operation(op)
+        op = Map(ie)
+        if engines is not None:
+            for ae in engines:
+                op.register_ae(ae)
+        NodeStep.__init__(self, op)
         self.add_operation(Assign(ie))
