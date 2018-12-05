@@ -137,8 +137,6 @@ class Repository(XMLParser):
             self.xml_node = xml_node
 
         def uid(self):
-            # TODO replace with __eq__() and __hash__?
-
             # if singleton, return (binary) name
             if self.singleton():
                 return self.repo.get_binary_name(self.label())
@@ -187,7 +185,7 @@ class Repository(XMLParser):
 
             return services
 
-        def provides_services(self, name=None, ref=None):
+        def provides_services(self, name=None, ref=None, function=None):
             services = list()
             for s in self.xml_node.findall("./provides/service"):
                 if name is None or s.get('name') == name:

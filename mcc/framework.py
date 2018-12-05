@@ -374,7 +374,9 @@ class Layer:
             set of candidate values for the given param and object. Empty set if parameter is not present.
         """
         assert(ae.check_acl(self, param, 'reads'))
+        return self._get_param_candidates(param, obj)
 
+    def _get_param_candidates(self, param, obj):
         params = self._get_params(obj)
 
         if self.tracking and param is not None:

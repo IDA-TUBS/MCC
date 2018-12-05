@@ -37,20 +37,6 @@
 
 	<!-- components //-->
 
-	<component name="parent" singleton="true">
-		<!-- This is a dummy component that provides base system services such as Timer and LOG 
-			Those services should be part of a base system in future.-->
-		<function name="PARENT" />
-		<provides>
-			<service name="Timer" />
-			<service name="LOG"  />
-		</provides>
-		<requires>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
 	<component name="gpio_drv" singleton="true">
 		<function name="GPIO" />
 		<provides>
@@ -88,7 +74,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
-			<service name="Timer" />
+			<service name="Timer" function="TIMER"/>
 		</requires>
 		<defaults>
 			<config>
@@ -110,7 +96,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
-			<service name="Timer" />
+			<service name="Timer" function="TIMER" />
 		</requires>
 		<defaults>
 			<config>
@@ -214,7 +200,7 @@
 			<service name="Dpr" max_clients="1"/>
 		</provides>
 		<requires>
-			<service name="Timer" function="PARENT"/>
+			<service name="Timer" function="TIMER"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
 			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_1"/>
 			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
@@ -249,7 +235,7 @@
 			<service name="Dpr" function="Dpr" />
 			<service name="ROM" ref="cam_left" />
 			<service name="ROM" ref="cam_right" />
-			<service name="Timer" function="PARENT"/>
+			<service name="Timer" function="TIMER" />
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
@@ -267,7 +253,7 @@
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
 			<service name="ROM" function="TRIGGER" />
-			<service name="Timer" function="PARENT"/>
+			<service name="Timer" function="TIMER"/>
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
@@ -580,12 +566,7 @@
 	<composite name="FILE_SYSTEM">
 		<function name="FILE_SYSTEM"/>
 		<provides>
-			<service name="ROM" ref="debayer_region_0" />
-			<service name="ROM" ref="debayer_region_1" />
-			<service name="ROM" ref="rectify_region_1" />
-			<service name="ROM" ref="stereomatching_region_1" />
-			<service name="ROM" ref="disp2pc_region_0" />
-			<service name="ROM" ref="disp2pc_region_1" />
+			<service name="ROM" />
 		</provides>
 		<requires>
 			<service name="Block" function="SD_CARD" ref="in" />
@@ -601,12 +582,7 @@
 				<route>
 					<service name="File_system"><child name="fatfs_fs" /></service>
 				</route>
-				<expose ref="debayer_region_0" ><service name="ROM" ref="rom"/></expose>
-				<expose ref="debayer_region_1"><service name="ROM" ref="rom"/></expose>
-				<expose ref="rectify_region_1"><service name="ROM" /></expose>
-				<expose ref="stereomatching_region_1"><service name="ROM" /></expose>
-				<expose ref="disp2pc_region_0"><service name="ROM" /></expose>
-				<expose ref="disp2pc_region_1"><service name="ROM" /></expose>
+				<expose><service name="ROM" ref="rom"/></expose>
 			</component>
 		</pattern>
 	</composite>
@@ -625,7 +601,7 @@
 			<service name="PL_IRQ" function="PL_IRQ" ref="irq"/>
 			<service name="GPIO" function="GPIO" ref="gpio"/>
 			<service name="Dpr" function="Dpr" ref="dpr"/>
-			<service name="Timer" function="PARENT" ref="timer" />
+			<service name="Timer" function="TIMER" ref="timer" />
 		</requires>
 		<timing>
 			<on-signal from_ref="preproc">
@@ -851,7 +827,7 @@
 			<child name="VDMA" />
 			<child name="PL_IRQ" />
 			<child name="TRIGGER" />
-			<child name="base_component"/>
+			<function name="TIMER" />
 		</dependency>
 	</child>
 
@@ -877,15 +853,15 @@
             <child name="PL_IRQ" />
             <child name="GPIO" />
 			<child name="Dpr" />
-			<child name="base_component" />
+			<function name="TIMER" />
         </dependency>
 	</child>
 
 	<child name="Dpr" subsystem="zynq">
 		<function name="Dpr" />
-		<dependency> 
+		<dependency>
 			<child name="FILE_SYSTEM" />
-			<child name="base_component"/>
+			<function name="TIMER" />
 		</dependency>
 	</child>
 
@@ -898,10 +874,17 @@
 
 	<child name="I2C" subsystem="zynq"><function name="I2C" /></child>
 	<child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
-	<child name="VDMA" subsystem="zynq"><function name="VDMA" /><dependency><child name="base_component"/></dependency></child>
-	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /><dependency><child name="base_component"/></dependency></child>
+	<child name="VDMA" subsystem="zynq"><function name="VDMA" />
+		<dependency>
+			<function name="TIMER" />
+		</dependency>
+	</child>
+	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" />
+		<dependency>
+			<function name="TIMER" />
+		</dependency>
+	</child>
 	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
-	<child name="base_component" subsystem="zynq"><function name="PARENT" /></child>
 	
 	<!--child name="object_recog" >
 		<component name="object_recog" />

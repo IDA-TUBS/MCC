@@ -50,6 +50,13 @@ class StaticEngine(AnalysisEngine):
             if obj.static():
                 exclude.add(obj)
 
+        candidates -= exclude
+
+        if len(candidates) > 1:
+            logging.warning("Still cannot inherit mapping unambigously.")
+        elif len(candidates) == 1 and len(exclude) > 0:
+            logging.warning("Mapping was reduced by excluding static subsystems.")
+
         return candidates - exclude
 
 class MappingEngine(AnalysisEngine):
@@ -79,7 +86,8 @@ class DependencyEngine(AnalysisEngine):
             if function in comp2.functions():
                 return True
             elif comp2.type() == 'proxy':
-                return self._find_provider_recursive(con.target, function)
+                if self._find_provider_recursive(con.target, function):
+                    return True
 
         return False
 
@@ -159,7 +167,7 @@ class ServiceEngine(AnalysisEngine):
         assert(constraints is not None)
 
         source_ports = source_comp.requires_services()
-        target_ports = target_comp.provides_services()
+        target_ports = target_comp.provides_services(function=constraints.function)
 
         if constraints.name is not None:
             source_ports = [p for p in source_ports if p.name() == constraints.name]
@@ -191,10 +199,10 @@ class ServiceEngine(AnalysisEngine):
         target_comp = self.layer.get_param_value(self, 'component', obj.target)
 
         if len(source_ports) > 1:
-            logging.warning("Service requirement is under constrained for %s by %s" % (source_comp, constraints))
+            logging.warning("Service requirement %s by %s requires multiple connections: %s" % (source_comp, constraints, source_ports))
 
         if len(target_ports) > 1:
-            logging.warning("Service provision is under constrained for %s by %s" % (target_comp, constraints))
+            logging.warning("Service provision is under constrained for %s by %s: %s" % (target_comp, constraints, target_ports))
 
         if len(source_ports) == 0:
             logging.error("Service requirement is over constrained for %s by %s" % ( source_comp, constraints))

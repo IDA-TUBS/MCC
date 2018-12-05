@@ -31,6 +31,7 @@ class ServiceConstraints:
 
         return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post)
 
+
 class Instance:
     """ Wrapper for components for managing instantiations
     """
@@ -191,12 +192,13 @@ class BaseChild:
     def patterns(self):
         return {self}
 
-    def provides_services(self, name=None, ref=None):
+    def provides_services(self, name=None, ref=None, function=None):
         services = set()
         for inst in self._instances:
-            services.update(inst.provides_services(name, ref))
+            if function is None or function == inst.component.function():
+                services.update(inst.provides_services(name, ref))
 
-        return services
+        return list(services)
 
     def providing_component(self, service, function=None, to_ref=None):
         for inst in self._instances:
@@ -210,6 +212,8 @@ class BaseChild:
         logging.error("Cannot find providing component for %s %s %s" % (service, function, to_ref))
         return None, None
 
+    def type(self):
+        return 'function'
 
     ##############################
     # PatternComponent interface #
@@ -492,23 +496,39 @@ class SystemModel(BacktrackRegistry):
         for c in fa.graph.nodes():
             # for each dependency
             for dep in c.dependencies('function'):
+                depfunc = dep['function']
                 # edge exists?
                 satisfied = False
-                for e in fa.graph.out_edges():
-                    sc = fa._get_param_value(e, 'service')
-                    if sc.function == dep:
+                for e in fa.graph.out_edges(c):
+                    sc = fa._get_param_value('service', e)
+                    if sc.function == depfunc:
                         satisfied = True
 
                 if not satisfied:
                     # find providing child
+                    local_match = None
+                    remote_match = None
+                    pf_component = list(fa._get_param_candidates('mapping', c))[0]
                     for provider in fa.graph.nodes():
                         if provider is not c:
-                            if dep in provider.functions():
-                                e = fa.create_edge(c, provider)
-                                fa._set_param_value('service', e, ServiceConstraints(function=dep))
-                                satisfied = True
+                            if depfunc in provider.functions():
+                                if list(fa._get_param_candidates('mapping', provider))[0].in_native_domain(pf_component):
+                                    local_match = provider
+                                else:
+                                    remote_match = provider
 
-                assert satisfied, "Cannot satisfy function dependency '%s' from '%s'" % (dep, c)
+                    provider = None
+                    if local_match is not None:
+                        provider = local_match
+                    elif remote_match is not None:
+                        provider = remote_match
+
+                    if provider is not None:
+                        e = fa.create_edge(c, provider)
+                        fa._set_param_value('service', e, ServiceConstraints(function=depfunc))
+                        satisfied = True
+
+                assert satisfied, "Cannot satisfy function dependency '%s' from '%s'" % (depfunc, c)
 
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:

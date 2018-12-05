@@ -15,6 +15,7 @@
 	</component>
 
 	<component name="timer" singleton="true">
+	    <function name="TIMER" />
 		<provides>
 			<service name="Timer" />
 		</provides>
