@@ -144,6 +144,9 @@ class Repository(XMLParser):
             # else:
             return self.xml_node
 
+        def binary_name(self):
+            return self.repo.get_binary_name(self.label())
+
         def singleton(self):
             return self.xml_node.get('singleton')
 

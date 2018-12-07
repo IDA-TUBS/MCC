@@ -149,6 +149,16 @@ class GenodeConfigurator:
             self.routes.append(route)
 
         def generate_xml(self, root):
+            start  = ET.SubElement(root,  'start',
+                                   name=self.name,
+                                   caps=str(self.component.requires_quantum('caps')))
+            binary = ET.SubElement(start, 'binary',
+                                   name=self.component.binary_name())
+
+            ram = ET.SubElement(start, 'resource',
+                                name='RAM',
+                                quantum='%dM'%self.component.requires_quantum('ram'))
+
             raise NotImplementedError()
 
 
@@ -183,10 +193,12 @@ class GenodeConfigurator:
             root = ET.Element('config')
 
             self._write_header(root)
-            node.write_xml(root)
+            for node in self.start_nodes.values():
+                node.generate_xml(root)
             self._write_footer(root)
 
-            root.write(self.filename, pretty_print=True)
+            tree = ET.ElementTree(root)
+            tree.write(self.filename, pretty_print=True)
 
             self._check_schema(root)
 
@@ -203,7 +215,7 @@ class GenodeConfigurator:
         for pfc in self.platform.platform_graph.nodes():
             config = pfc.config()
             if config is not None:
-                self.configs[pfc] = self.ConfigXML(self.outpath+'/'+config, pfc)
+                self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc)
 
     def create_configs(self, layer):
         for inst in layer.graph.nodes():
