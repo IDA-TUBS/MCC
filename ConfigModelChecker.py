@@ -5,6 +5,7 @@ import argparse
 from mcc import parser as cfgparser
 from mcc import model
 from mcc import lib
+from mcc.configurator import GenodeConfigurator
 
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('files', metavar='xml_file', type=str, nargs='+',
@@ -41,6 +42,7 @@ if __name__ == '__main__':
             pffile = args.base
 
     pf = cfgparser.PlatformParser(pffile, args.schema)
+    pf_model = model.SimplePlatformModel(pf)
 
     # try to create repositories from given files
     repos = list()
@@ -61,7 +63,7 @@ if __name__ == '__main__':
     base = lib.BaseModelQuery()
 
     basesys   = cfgparser.SystemParser(args.base, args.schema)
-    query, basemodel = mcc.search_config(pf, basesys,
+    query, basemodel = mcc.search_config(pf_model, basesys,
                            outpath=args.dotpath+'-'+basesys.name()+'-',
                            with_da=False)
 
@@ -71,19 +73,18 @@ if __name__ == '__main__':
                 comp_inst=basemodel.by_name['comp_inst'],
                 filename=args.base)
 
-
     sys = cfgparser.AggregateSystemParser()
     for sysfile in args.files:
         sys.append(cfgparser.SystemParser(sysfile, args.schema))
 
     try:
-        query, model = mcc.search_config(pf, sys, base,
+        query, model = mcc.search_config(pf_model, sys, base,
                                   outpath=args.dotpath+'-'+sys.name()+'-',
                                   with_da=args.dependency_analysis)
 
         # generate <config> from model
-        # TODO implement Configurator (generate subsystem <config>s from model)
-        # TODO check generated config against Genode's config.xsd
+        configurator = GenodeConfigurator(args.dotpath+'-'+sys.name()+'-', pf_model)
+        configurator.create_configs(model.by_name['comp_inst'])
 
     except Exception as e:
         import traceback

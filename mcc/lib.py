@@ -313,7 +313,7 @@ class SimpleMcc(MccBase):
         bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
-    def search_config(self, platform, system, base=None, outpath=None, with_da=False, da_path=None):
+    def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -328,9 +328,6 @@ class SimpleMcc(MccBase):
         """
 
         # check function/composite/component references, compatibility and routes in system and subsystems
-
-        # 1) we parse the platform model
-        pf_model = SimplePlatformModel(platform)
 
         # 2) we create a new system model
         model = SystemModel(self.repo, pf_model, dotpath=outpath)
