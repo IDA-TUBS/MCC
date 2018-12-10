@@ -291,8 +291,12 @@ class GenodeConfigurator:
             self.default_caps = 300
 
         def _check_schema(self, root):
-            if self.xsd_file is not None:
-                raise NotImplementedError()
+            if self.xsd_file is not None and hasattr(ET, "XMLSchema"):
+                schema = ET.XMLSchema(file=self.xsd_file)
+                if not schema.validate(root):
+                    logging.error("Schema validation (%s) failed" % self.filename)
+                else:
+                    logging.info("Schema validation (%s) succeeded" % self.filename)
 
         def create_start_node(self, name, component, config=None):
             assert name not in self.start_nodes
@@ -337,19 +341,19 @@ class GenodeConfigurator:
             self._check_schema(root)
 
 
-    def __init__(self, outpath, platform_model):
+    def __init__(self, outpath, platform_model, config_xsd=None):
         self.outpath  = outpath
         self.platform = platform_model
         self.configs  = dict()
 
-        self._prepare_files()
+        self._prepare_files(config_xsd)
 
-    def _prepare_files(self):
+    def _prepare_files(self, config_xsd):
         # create ConfigXML for each non-static subsystem
         for pfc in self.platform.platform_graph.nodes():
             config = pfc.config()
             if config is not None:
-                self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc)
+                self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc, xsd_file=config_xsd)
 
     def create_configs(self, layer):
         for inst in layer.graph.nodes():

@@ -20,6 +20,8 @@ parser.add_argument('--platform', type=str, default=None,
 #        help='XML files with contract repository (<repository>)')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
+parser.add_argument('--config_xsd', type=str, default='genode_xsd/config.xsd',
+        help='Config XSD schema.')
 parser.add_argument('--dependency_analysis', action='store_true')
 
 args = parser.parse_args()
@@ -83,7 +85,8 @@ if __name__ == '__main__':
                                   with_da=args.dependency_analysis)
 
         # generate <config> from model
-        configurator = GenodeConfigurator(args.dotpath+'-'+sys.name()+'-', pf_model)
+        configurator = GenodeConfigurator(args.dotpath+'-'+sys.name()+'-', pf_model,
+                                          args.config_xsd)
         configurator.create_configs(model.by_name['comp_inst'])
 
     except Exception as e:
