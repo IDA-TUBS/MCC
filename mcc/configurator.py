@@ -77,13 +77,13 @@ class GenodeConfigurator:
                 self.to_label = to_label
 
         def any_child(self):
-            return self.service is None
+            return self.server is None
 
         def parent(self):
             return self.server == 'parent'
 
         def any_service(self):
-            return self.server is None
+            return self.service is None
 
         def __lt__(self, rhs):
             # for sorting: specific rules take precedence over generic rules
@@ -137,21 +137,74 @@ class GenodeConfigurator:
             self.component = component
             self.routes    = list()
 
-        def _append_default_routes():
+        def _append_default_routes(self):
             # must be sorted before
-            self.routes.append(Route(server='parent')) # route any-service to parent
-            self.routes.append(Route())                # route any-service to any-child
+            self.routes.append(GenodeConfigurator.Route(server='parent')) # route any-service to parent
+            self.routes.append(GenodeConfigurator.Route())                # route any-service to any-child
 
-        def _sort_routes():
+        def _sort_routes(self):
             self.routes = sorted(self.routes)
 
         def add_route(self, route):
             self.routes.append(route)
 
-        def generate_xml(self, root):
+        def _provides_xml(self, startnode):
+            seen = set()
+            services = self.component.provides_services()
+            if len(services) == 0:
+                return
+
+            provides = ET.SubElement(startnode, 'provides')
+            for s in services:
+                if s.name() in seen:
+                    continue
+                ET.SubElement(provides, 'service', name=s.name())
+
+        def _routes_xml(self, startnode):
+            if len(self.routes) == 0:
+                return
+
+            route = ET.SubElement(startnode, 'route')
+
+            curserv = None
+            for r in self.routes:
+                if curserv is None or curserv.get('name') != r.service \
+                  or curserv.get('label') != r.from_label.label \
+                  or curserv.get('label_prefix') != r.from_label.prefix \
+                  or curserv.get('label_suffix') != r.from_label.suffix:
+
+                    if r.any_service():
+                        curserv = ET.SubElement(route, 'any-service')
+                    else:
+                        curserv = ET.SubElement(route, 'service',
+                                                name=r.service)
+
+                        if not r.from_label.empty():
+                            curserv.set('label', r.from_label.label)
+                            curserv.set('label-prefix', r.from_label.prefix)
+                            curserv.set('label-suffix', r.from_label.suffix)
+
+                # target
+                if r.parent():
+                    ET.SubElement(curserv, 'parent')
+                elif r.any_child():
+                    ET.SubElement(curserv, 'any-child')
+                else:
+                    child = ET.SubElement(curserv, 'child',
+                                          name=r.server)
+
+                    if not r.to_label.empty():
+                        child.set('label', r.to_label.label)
+                        child.set('label-prefix', r.to_label.prefix)
+                        child.set('label-suffix', r.to_label.suffix)
+
+        def generate_xml(self, root, default_caps):
             start  = ET.SubElement(root,  'start',
-                                   name=self.name,
-                                   caps=str(self.component.requires_quantum('caps')))
+                                   name=self.name)
+            caps = self.component.requires_quantum('caps')
+            if caps != default_caps:
+                start.set('caps', str(caps))
+
             binary = ET.SubElement(start, 'binary',
                                    name=self.component.binary_name())
 
@@ -159,8 +212,17 @@ class GenodeConfigurator:
                                 name='RAM',
                                 quantum='%dM'%self.component.requires_quantum('ram'))
 
-            raise NotImplementedError()
+            # generate <provides>
+            self._provides_xml(start)
 
+            # generate <route>
+            self._sort_routes()
+            self._append_default_routes()
+            self._routes_xml(start)
+
+            # generate <config>
+            # TODO generate per-component <config> via ConfigGenerator
+            ET.SubElement(start, 'config')
 
     class ConfigXML:
 
@@ -169,6 +231,11 @@ class GenodeConfigurator:
             self.subsystem = subsystem
             self.xsd_file  = xsd_file
             self.start_nodes = dict()
+
+            self.parent_services = { "CAP", "LOG", "RM", "SIGNAL", "IO_MEM",
+                                     "IRQ", "ROM", "RAM", "IO_PORT", "PD", "CPU"}
+
+            self.default_caps = 300
 
         def _check_schema(self, root):
             if self.xsd_file is not None:
@@ -184,17 +251,31 @@ class GenodeConfigurator:
             return self.start_nodes[name]
 
         def _write_header(self, root):
-            raise NotImplementedError()
+            # generate <parent-provides>
+            provides = ET.SubElement(root, 'parent-provides')
+            for s in self.parent_services:
+                ET.SubElement(provides, 'service', name=s)
+
+            # generate <default-routes>
+            routes    = ET.SubElement(root, 'default-routes')
+            any_serv  = ET.SubElement(routes, 'any-service')
+            parent    = ET.SubElement(any_serv, 'parent')
+            any_child = ET.SubElement(any_serv, 'any-child')
+
+            # generate <default caps='x'>
+            caps = ET.SubElement(root, 'default',
+                                 caps=str(self.default_caps))
 
         def _write_footer(self, root):
-            raise NotImplementedError()
+            # nothing to be done here
+            return
 
         def write_xml(self):
             root = ET.Element('config')
 
             self._write_header(root)
             for node in self.start_nodes.values():
-                node.generate_xml(root)
+                node.generate_xml(root, self.default_caps)
             self._write_footer(root)
 
             tree = ET.ElementTree(root)
