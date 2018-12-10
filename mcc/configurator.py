@@ -20,6 +20,46 @@ try:
 except ImportError:
     from xml.etree import ElementTree as ET
 
+class EmptyConfigGenerator():
+    def xml(self, root):
+        return
+
+class DefaultConfigGenerator():
+    def __init__(self, xml_node, config_override=None):
+        self.xml_node        = xml_node
+        self.config_override = config_override
+
+    def xml(self, root):
+        for sub in self.xml_node.findall('./'):
+            if sub.tag == 'config' and self.config_override is not None:
+                root.append(ET.fromstring(ET.tostring(self.config_override)))
+            else:
+                root.append(ET.fromstring(ET.tostring(sub)))
+
+class DynamicConfigGenerator():
+    def __init__(self, name):
+        self.name = name
+
+        self.supported = { 'remote_rom_server' : self._rom_server_xml,
+                           'remote_rom_client' : self._rom_client_xml,
+                           'report_rom'        : self._report_rom_xml}
+
+        if name not in self.supported:
+            raise NotImplementedError()
+
+    def _rom_server_xml(self, root):
+        raise NotImplementedError()
+
+    def _rom_client_xml(self, root):
+        raise NotImplementedError()
+
+    def _report_rom_xml(self, root):
+        raise NotImplementedError()
+
+    def xml(self, root):
+        self.supported[self.name](root)
+
+
 class GenodeConfigurator:
     """ Converts component instantiation layer into a Genode <config> xml.
     """
@@ -132,15 +172,25 @@ class GenodeConfigurator:
 
     class StartNode:
 
-        def __init__(self, name, component):
+        def __init__(self, name, component, config=None):
             self.name      = name
             self.component = component
+            self.config    = config
             self.routes    = list()
+
+        def _create_generator(self):
+            default = self.component.defaults()
+            if default is not None:
+                if default.get('dynamic') is None:
+                    return DefaultConfigGenerator(default, self.config)
+                else:
+                    return DynamicConfigGenerator(self.component.binary_name())
+            else:
+                return EmptyConfigGenerator()
 
         def _append_default_routes(self):
             # must be sorted before
             self.routes.append(GenodeConfigurator.Route(server='parent')) # route any-service to parent
-            self.routes.append(GenodeConfigurator.Route())                # route any-service to any-child
 
         def _sort_routes(self):
             self.routes = sorted(self.routes)
@@ -166,12 +216,15 @@ class GenodeConfigurator:
 
             route = ET.SubElement(startnode, 'route')
 
-            curserv = None
+            curserv   = None
+            lastchild = None
             for r in self.routes:
                 if curserv is None or curserv.get('name') != r.service \
                   or curserv.get('label') != r.from_label.label \
                   or curserv.get('label_prefix') != r.from_label.prefix \
                   or curserv.get('label_suffix') != r.from_label.suffix:
+
+                    lastchild = None
 
                     if r.any_service():
                         curserv = ET.SubElement(route, 'any-service')
@@ -189,14 +242,14 @@ class GenodeConfigurator:
                     ET.SubElement(curserv, 'parent')
                 elif r.any_child():
                     ET.SubElement(curserv, 'any-child')
-                else:
-                    child = ET.SubElement(curserv, 'child',
+                elif lastchild is None or lastchild.get('name') != r.server:
+                    lastchild = ET.SubElement(curserv, 'child',
                                           name=r.server)
 
                     if not r.to_label.empty():
-                        child.set('label', r.to_label.label)
-                        child.set('label-prefix', r.to_label.prefix)
-                        child.set('label-suffix', r.to_label.suffix)
+                        lastchild.set('label', r.to_label.label)
+                        lastchild.set('label-prefix', r.to_label.prefix)
+                        lastchild.set('label-suffix', r.to_label.suffix)
 
         def generate_xml(self, root, default_caps):
             start  = ET.SubElement(root,  'start',
@@ -221,8 +274,8 @@ class GenodeConfigurator:
             self._routes_xml(start)
 
             # generate <config>
-            # TODO generate per-component <config> via ConfigGenerator
-            ET.SubElement(start, 'config')
+            generator = self._create_generator()
+            generator.xml(start)
 
     class ConfigXML:
 
@@ -241,9 +294,9 @@ class GenodeConfigurator:
             if self.xsd_file is not None:
                 raise NotImplementedError()
 
-        def create_start_node(self, name, component):
+        def create_start_node(self, name, component, config=None):
             assert name not in self.start_nodes
-            self.start_nodes[name] = GenodeConfigurator.StartNode(name, component)
+            self.start_nodes[name] = GenodeConfigurator.StartNode(name, component, config)
 
             return self.start_nodes[name]
 
@@ -253,11 +306,11 @@ class GenodeConfigurator:
         def _write_header(self, root):
             # generate <parent-provides>
             provides = ET.SubElement(root, 'parent-provides')
-            for s in self.parent_services:
+            for s in sorted(self.parent_services):
                 ET.SubElement(provides, 'service', name=s)
 
-            # generate <default-routes>
-            routes    = ET.SubElement(root, 'default-routes')
+            # generate <default-route>
+            routes    = ET.SubElement(root, 'default-route')
             any_serv  = ET.SubElement(routes, 'any-service')
             parent    = ET.SubElement(any_serv, 'parent')
             any_child = ET.SubElement(any_serv, 'any-child')
@@ -274,8 +327,8 @@ class GenodeConfigurator:
             root = ET.Element('config')
 
             self._write_header(root)
-            for node in self.start_nodes.values():
-                node.generate_xml(root, self.default_caps)
+            for name in sorted(self.start_nodes.keys()):
+                self.start_nodes[name].generate_xml(root, self.default_caps)
             self._write_footer(root)
 
             tree = ET.ElementTree(root)
@@ -302,16 +355,25 @@ class GenodeConfigurator:
         for inst in layer.graph.nodes():
             pfc = layer._get_param_value('mapping', inst)
             if pfc in self.configs:
-                node = self.configs[pfc].create_start_node(inst.identifier, inst.component)
+
+                node = self.configs[pfc].create_start_node(inst.identifier, inst.component,
+                                                           layer._get_param_value('config', inst))
 
                 # add routes
                 for e in layer.graph.out_edges(inst):
                     source_service = layer._get_param_value('source-service', e)
                     target_service = layer._get_param_value('target-service', e)
-                    node.add_route(self.Route(server=e.target.identifier,
-                                              service=source_service.name(),
-                                              from_label=source_service.label(),
-                                              to_label=target_service.label()))
+                    target_pfc     = layer._get_param_value('mapping', e.target)
+                    if target_pfc == pfc:
+                        node.add_route(self.Route(server=e.target.identifier,
+                                                  service=source_service.name(),
+                                                  from_label=source_service.label(),
+                                                  to_label=target_service.label()))
+                    else:
+                        node.add_route(self.Route(server='parent',
+                                                  service=source_service.name(),
+                                                  from_label=source_service.label(),
+                                                  to_label=target_service.label()))
 
         for cfg in self.configs.values():
             cfg.write_xml()

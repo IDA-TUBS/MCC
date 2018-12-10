@@ -230,8 +230,16 @@ class Repository(XMLParser):
             else:
                 return 'anonymous'
 
+        def defaults(self):
+            return self.xml_node.find('./defaults')
+
         def unique_label(self):
-            return "%s-%s" % (self.label(), self.repo.get_binary_name(self.label()))
+            label  = self.label()
+            binary = self.binary_name()
+            if label != binary:
+                return "%s-%s" % (label, binary)
+            else:
+                return label
 
         def patterns(self):
             result = set()
@@ -325,6 +333,9 @@ class Repository(XMLParser):
                 return list(result)[0], ref
 
             return None, None
+
+        def config(self):
+            return self.xml_node.find('config')
 
         def flatten(self):
             # fill set with atomic components and their edges as specified in the pattern
