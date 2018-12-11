@@ -186,6 +186,12 @@ class MccBase:
         model.add_step(EdgeStep(Transform(pe, dlayer)))
         model.add_step(CopyServicesStep(slayer, dlayer))
 
+        # copy pattern-config
+        ce = CopyEngine(dlayer, 'pattern-config', slayer)
+        pcfg = NodeStep(Map(ce))
+        pcfg.add_operation(Assign(ce))
+        model.add_step(pcfg)
+
         # derive mapping
         self._complete_mapping(model, dlayer)
 
@@ -218,6 +224,12 @@ class MccBase:
         adapt_edges.add_operation(Assign(me))
         adapt_edges.add_operation(Transform(me, dlayer))
         model.add_step(adapt_edges)
+
+        # copy pattern-config
+        ce = CopyEngine(dlayer, 'pattern-config', slayer)
+        pcfg = NodeStep(Map(ce))
+        pcfg.add_operation(Assign(ce))
+        model.add_step(pcfg)
 
         # derive mapping
         self._complete_mapping(model, dlayer)

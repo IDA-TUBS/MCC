@@ -35,16 +35,20 @@ class ServiceConstraints:
 class Instance:
     """ Wrapper for components for managing instantiations
     """
-    def __init__(self, identifier, component):
+    def __init__(self, identifier, component, config=None):
         self.identifier = identifier
         self.component  = component
+        self.config     = config
         self.replaces = set()
 
     def is_component(self, rhs):
         return self.component.uid() == rhs.uid()
 
     def component_uid(self):
-        return self.component.uid()
+        if self.config is None:
+            return self.component.uid()
+        else:
+            return '%s-%s' % (self.component.uid(), hash(self.config))
 
     def register_replacement(self, instance):
         self.replaces.add(instance)
@@ -98,7 +102,7 @@ class InstanceFactory:
             self.instances[subsystem]['dedicated'][inst.component]    = inst
 
 
-    def dedicated_instance(self, subsystem, component):
+    def dedicated_instance(self, subsystem, component, config=None):
         """ create and return dedicated instance
         """
         if subsystem not in self.instances:
@@ -106,26 +110,28 @@ class InstanceFactory:
                                           'dedicated' : dict() }
 
         if component not in self.instances[subsystem]['dedicated']:
-            new_inst = Instance(self.unique_name(component), component)
+            new_inst = Instance(self.unique_name(component), component, config)
 
             self.instances[subsystem]['dedicated'][component] = new_inst
 
             # insert new_inst as shared instance is there is none yet
-            if component.uid() not in self.instances[subsystem]['shared']:
-                self.instances[subsystem]['shared'][component.uid()] = new_inst
+            if new_inst.component_uid() not in self.instances[subsystem]['shared']:
+                self.instances[subsystem]['shared'][new_inst.component_uid()] = new_inst
             else: # register new_inst at shared instance
-                self.instances[subsystem]['shared'][component.uid()].register_replacement(new_inst)
+                self.instances[subsystem]['shared'][new_inst.component_uid()].register_replacement(new_inst)
 
         return self.instances[subsystem]['dedicated'][component]
 
-    def shared_instance(self, subsystem, component):
+    def shared_instance(self, subsystem, component, config=None):
         """ return matching shared instance from same subsystem
         """
-        if subsystem in self.instances:
-            if component in self.instances[subsystem]['shared']:
-                return self.instances[subsystem]['shared'][component]
+        dedicated = self.dedicated_instance(subsystem, component, config)
 
-        return self.dedicated_instance(subsystem, component)
+        if subsystem in self.instances:
+            if dedicated.component_uid() in self.instances[subsystem]['shared']:
+                return self.instances[subsystem]['shared'][dedicated.component_uid()]
+
+        return dedicated
 
     def parent_instance(self, subsystem, component):
         """ return matching shared instance from parent

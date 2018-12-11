@@ -808,7 +808,7 @@ class BacktrackingTestEngine(AnalysisEngine):
 
 class InstantiationEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, factory):
-        acl = { layer : { 'reads' : set(['mapping', 'source-service', 'target-service']) }}
+        acl = { layer : { 'reads' : {'mapping', 'source-service', 'target-service', 'pattern-config'} }}
         AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
         self.factory      = factory
         self.target_layer = target_layer
@@ -825,8 +825,10 @@ class InstantiationEngine(AnalysisEngine):
 
         pfc = self.layer.get_param_value(self, 'mapping', obj)
 
-        ded    = self.factory.dedicated_instance(pfc.name(), obj)
-        shared = self.factory.shared_instance   (pfc.name(), obj)
+        ded    = self.factory.dedicated_instance(pfc.name(), obj,
+                        self.layer.get_param_value(self, 'pattern-config', obj))
+        shared = self.factory.shared_instance   (pfc.name(), obj,
+                        self.layer.get_param_value(self, 'pattern-config', obj))
 
         return {ded, shared}
 

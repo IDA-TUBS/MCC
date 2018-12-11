@@ -30,9 +30,15 @@ class DefaultConfigGenerator():
         self.config_override = config_override
 
     def xml(self, root):
+        if self.config_override is not None:
+            root.append(ET.fromstring(ET.tostring(self.config_override)))
+
+        if self.xml_node is None:
+            return
+
         for sub in self.xml_node.findall('./'):
             if sub.tag == 'config' and self.config_override is not None:
-                root.append(ET.fromstring(ET.tostring(self.config_override)))
+                continue
             else:
                 root.append(ET.fromstring(ET.tostring(sub)))
 
@@ -185,6 +191,8 @@ class GenodeConfigurator:
                     return DefaultConfigGenerator(default, self.config)
                 else:
                     return DynamicConfigGenerator(self.component.binary_name())
+            elif self.config is not None:
+                return DefaultConfigGenerator(None, self.config)
             else:
                 return EmptyConfigGenerator()
 
@@ -361,7 +369,7 @@ class GenodeConfigurator:
             if pfc in self.configs:
 
                 node = self.configs[pfc].create_start_node(inst.identifier, inst.component,
-                                                           layer._get_param_value('config', inst))
+                                                           inst.config)
 
                 # add routes
                 for e in layer.graph.out_edges(inst):

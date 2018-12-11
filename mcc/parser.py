@@ -347,9 +347,15 @@ class Repository(XMLParser):
             for c in self.xml_node.findall("component"):
                 components = self.repo.find_components_by_type(c.get('name'), querytype='component')
                 name_lookup[c.get('name')] = components[0]
-                child_lookup[c] = components[0]
                 # FIXME, we might have multiple options here
-                flattened.add(GraphObj(components[0]))
+                assert len(components) == 1, 'Cannot resolve component in pattern unambiguously'
+
+                child_lookup[c] = components[0]
+                params = dict()
+                config = c.find('./config')
+                if config is not None:
+                    params['pattern-config'] = config
+                flattened.add(GraphObj(components[0], params))
 
             # second, add connections
             for c in self.xml_node.findall("component"):
