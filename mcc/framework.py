@@ -1233,7 +1233,14 @@ class Transform(Operation):
 
             self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
             for o in inserted:
-                self.target_layer._set_param_value(self.source_layer.name, o, obj)
+                src = self.target_layer._get_param_value(self.source_layer.name, o)
+                if src is None:
+                    src = obj
+                elif isinstance(src, set):
+                    src.add(obj)
+                else:
+                    src = { src, obj }
+                self.target_layer._set_param_value(self.source_layer.name, o, src)
 
         return True
 
