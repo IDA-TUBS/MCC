@@ -43,17 +43,29 @@ class DefaultConfigGenerator():
                 root.append(ET.fromstring(ET.tostring(sub)))
 
 class DynamicConfigGenerator():
-    def __init__(self, name):
+    def __init__(self, name, platform, routes):
         self.name = name
+        self.platform = platform
+        self.routes   = routes
 
         self.supported = { 'remote_rom_server' : self._rom_server_xml,
                            'remote_rom_client' : self._rom_client_xml,
                            'report_rom'        : self._report_rom_xml}
 
+        if not hasattr(self.platform, 'nm'):
+            self.platform.nm = NetworkManager([192, 168, 0, 0], 24)
+
         if name not in self.supported:
             raise NotImplementedError()
 
     def _rom_server_xml(self, root):
+        for route in routes:
+            if route.service != 'ROM':
+                continue
+
+            label  = route.from_label.label
+            # TODO construct ROM name and generate IPs
+            # TODO also make this available to the corresponding rom client
         raise NotImplementedError()
 
     def _rom_client_xml(self, root):
@@ -178,10 +190,11 @@ class GenodeConfigurator:
 
     class StartNode:
 
-        def __init__(self, name, component, config=None):
+        def __init__(self, name, component, parent, config=None):
             self.name      = name
             self.component = component
             self.config    = config
+            self.parent    = parent
             self.routes    = list()
 
         def _create_generator(self):
@@ -190,7 +203,7 @@ class GenodeConfigurator:
                 if default.get('dynamic') is None:
                     return DefaultConfigGenerator(default, self.config)
                 else:
-                    return DynamicConfigGenerator(self.component.binary_name())
+                    return DynamicConfigGenerator(self.component.binary_name(), self.parent.platform, self.routes)
             elif self.config is not None:
                 return DefaultConfigGenerator(None, self.config)
             else:
@@ -287,9 +300,10 @@ class GenodeConfigurator:
 
     class ConfigXML:
 
-        def __init__(self, filename, subsystem, xsd_file=None):
+        def __init__(self, filename, subsystem, platform, xsd_file=None):
             self.filename  = filename
             self.subsystem = subsystem
+            self.platform  = platform
             self.xsd_file  = xsd_file
             self.start_nodes = dict()
 
@@ -308,7 +322,7 @@ class GenodeConfigurator:
 
         def create_start_node(self, name, component, config=None):
             assert name not in self.start_nodes
-            self.start_nodes[name] = GenodeConfigurator.StartNode(name, component, config)
+            self.start_nodes[name] = GenodeConfigurator.StartNode(name, component, self, config)
 
             return self.start_nodes[name]
 
@@ -361,7 +375,7 @@ class GenodeConfigurator:
         for pfc in self.platform.platform_graph.nodes():
             config = pfc.config()
             if config is not None:
-                self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc, xsd_file=config_xsd)
+                self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc, self.platform, xsd_file=config_xsd)
 
     def create_configs(self, layer):
         for inst in layer.graph.nodes():

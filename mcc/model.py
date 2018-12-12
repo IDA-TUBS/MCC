@@ -32,6 +32,30 @@ class ServiceConstraints:
         return '%s%s%s%s%s%s%s' % (f, n, pre, fr, mid, to, post)
 
 
+class NetworkManager:
+    def __init__(self, subnet, prefix_len=24):
+        assert prefix_len < 32
+        self.num_ips  = 2**(32-prefix_len) - 1
+
+        self.start_ip   = self._ip_to_integer(subnet)
+        self.end_ip     = self.start_ip + self.num_ips
+        self.current_ip = self.start_ip
+
+    def _ip_to_integer(self, ip):
+        assert isinstance(ip, list) and len(ip) == 4
+
+        return ip[0] << 24 | ip[1] << 16 | ip[2] << 8 | ip[1];
+
+    def _integer_to_ip(self, i):
+        return (i & 0xFF) | ((i >> 8) & 0xFF) | ((i >> 16) & 0xFF) | ((i >> 24) & 0xFF)
+
+    def allocate_ip(self):
+        self.current_ip += 1
+        assert self.current_ip <= self.end_ip
+
+        return self._integer_to_ip(self.current_ip)
+
+
 class Instance:
     """ Wrapper for components for managing instantiations
     """
