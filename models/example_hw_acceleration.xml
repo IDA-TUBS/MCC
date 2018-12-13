@@ -230,8 +230,8 @@
 			<service name="PL_IRQ" function="PL_IRQ" />
 			<service name="GPIO" function="GPIO" />
 			<service name="Dpr" function="Dpr" />
-			<service name="ROM" ref="cam_left" />
-			<service name="ROM" ref="cam_right" />
+			<service name="ROM" ref="cam_left" label="img_left" />
+			<service name="ROM" ref="cam_right" label="img_right" />
 			<service name="Timer" function="TIMER" />
 			<ram quantum="32" />
 			<caps quantum="300" />
@@ -249,7 +249,7 @@
 			<service name="GPIO" function="GPIO" />
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
-			<service name="ROM" function="TRIGGER" />
+			<service name="ROM" function="TRIGGER" label="trigger_remote" />
 			<service name="Timer" function="TIMER"/>
 			<ram quantum="36" />
 			<caps quantum="300" />
@@ -450,7 +450,7 @@
 	<component name="disp_to_pc">
 		<function name="DISP_TO_PC" />
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" label="pointcloud" />
 		</provides>
 		<requires>
 			<service name="ROM" ref="disp" />

@@ -98,13 +98,7 @@
                   <xs:attribute name="max_clients" type="xs:integer"/>
                   <xs:attribute name="filter" type="xs:string"/>
                   <xs:attribute name="ref" type="xs:string"/>
-                  <xs:attribute name="type" default="native">
-                   <xs:simpleType>
-                    <xs:restriction base="xs:string">
-                         <xs:pattern value="legacy|network|native" />
-                    </xs:restriction>
-                   </xs:simpleType>
-                  </xs:attribute>
+                  <xs:attribute name="label" type="xs:string"/>
                </xs:extension>
             </xs:complexContent>
           </xs:complexType>

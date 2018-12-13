@@ -26,6 +26,9 @@ class EmptyConfigGenerator():
     def xml(self, root):
         return
 
+    def adapt_routes(self):
+        return
+
 class DefaultConfigGenerator():
     def __init__(self, xml_node, config_override=None):
         self.xml_node        = xml_node
@@ -44,14 +47,20 @@ class DefaultConfigGenerator():
             else:
                 root.append(ET.fromstring(ET.tostring(sub)))
 
+    def adapt_routes(self):
+        return
+
 class DynamicConfigGenerator():
     def __init__(self, name, start_node):
         self.name = name
         self.start_node = start_node
 
-        self.supported = { 'remote_rom_server' : self._rom_server_xml,
-                           'remote_rom_client' : self._rom_client_xml,
-                           'report_rom'        : self._report_rom_xml}
+        self.supported = { 'remote_rom_server' : { 'config' : self._rom_server_xml,
+                                                   'route'  : self._rom_server_route },
+                           'remote_rom_client' : { 'config' : self._rom_client_xml,
+                                                   'route'  : lambda: None },
+                           'report_rom'        : { 'config' : self._report_rom_xml,
+                                                   'route'  : lambda: None }}
 
         platform = self.start_node.parent.platform
         if not hasattr(platform, 'nm'):
@@ -62,6 +71,12 @@ class DynamicConfigGenerator():
         if name not in self.supported:
             raise NotImplementedError()
 
+    def _remote_rom_ips_uid(self, remotename):
+        ips = self.network_manager.lookup_or_allocate(remotename, 2)
+        remote_uid = '%s-%d-%d' % (remotename, ips[0][3], ips[1][3])
+
+        return ips, remote_uid
+
     def _rom_server_xml(self, root):
         model = self.start_node.model
         layer = self.start_node.layer
@@ -71,9 +86,7 @@ class DynamicConfigGenerator():
         config = ET.SubElement(root, 'config')
         for p in parents:
             remotename = parent_layer._get_param_value('remotename', p)
-
-            ips = self.network_manager.lookup_or_allocate(remotename, 2)
-            remote_uid = '%s-%d-%d' % (remotename, ips[0][3], ips[1][3])
+            ips, remote_uid = self._remote_rom_ips_uid(remotename)
 
             src_ip = ips[0]
             dst_ip = ips[1]
@@ -93,9 +106,7 @@ class DynamicConfigGenerator():
         config = ET.SubElement(root, 'config')
         for p in parents:
             remotename = parent_layer._get_param_value('remotename', p)
-
-            ips = self.network_manager.lookup_or_allocate(remotename, 2)
-            remote_uid = '%s-%d-%d' % (remotename, ips[0][3], ips[1][3])
+            ips, remote_uid = self._remote_rom_ips_uid(remotename)
 
             src_ip = ips[1]
             dst_ip = ips[0]
@@ -109,7 +120,32 @@ class DynamicConfigGenerator():
         raise NotImplementedError()
 
     def xml(self, root):
-        self.supported[self.name](root)
+        self.supported[self.name]['config'](root)
+
+    def _rom_server_route(self):
+        model = self.start_node.model
+        layer = self.start_node.layer
+        obj   = self.start_node.layer_obj
+
+        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        for p in parents:
+            remotename = parent_layer._get_param_value('remotename', p)
+            ips, remote_uid = self._remote_rom_ips_uid(remotename)
+
+            # find ROM service without label and correct child
+            found = False
+            for r in self.start_node.routes:
+                if r.service == 'ROM' and r.from_label.empty():
+                    # only if routed to correct child
+                    for e in layer.graph.out_edges(obj):
+                        if e.target.identifier == r.server:
+                            r.from_label.label = remote_uid
+                            found = True
+
+            assert found, 'Remote ROM label rewrite failed'
+
+    def adapt_routes(self):
+        self.supported[self.name]['route']()
 
 
 class GenodeConfigurator:
@@ -158,12 +194,12 @@ class GenodeConfigurator:
             self.server     = server
             self.service    = service
 
-            if from_label is None or not isinstance(from_label, SessionLabel):
+            if from_label is None or not isinstance(from_label, GenodeConfigurator.SessionLabel):
                 self.from_label = GenodeConfigurator.SessionLabel(label=from_label)
             else:
                 self.from_label = from_label
 
-            if to_label is None or not isinstance(to_label, SessionLabel):
+            if to_label is None or not isinstance(to_label, GenodeConfigurator.SessionLabel):
                 self.to_label = GenodeConfigurator.SessionLabel(label=to_label)
             else:
                 self.to_label = to_label
@@ -292,9 +328,12 @@ class GenodeConfigurator:
                                                 name=r.service)
 
                         if not r.from_label.empty():
-                            curserv.set('label', r.from_label.label)
-                            curserv.set('label-prefix', r.from_label.prefix)
-                            curserv.set('label-suffix', r.from_label.suffix)
+                            if r.from_label.label is not None:
+                                curserv.set('label', r.from_label.label)
+                            if r.from_label.prefix is not None:
+                                curserv.set('label-prefix', r.from_label.prefix)
+                            if r.from_label.suffix is not None:
+                                curserv.set('label-suffix', r.from_label.suffix)
 
                 # target
                 if r.parent():
@@ -306,9 +345,12 @@ class GenodeConfigurator:
                                           name=r.server)
 
                     if not r.to_label.empty():
-                        lastchild.set('label', r.to_label.label)
-                        lastchild.set('label-prefix', r.to_label.prefix)
-                        lastchild.set('label-suffix', r.to_label.suffix)
+                        if r.to_label.label is not None:
+                            lastchild.set('label', r.to_label.label)
+                        if r.to_label.prefix is not None:
+                            lastchild.set('label-prefix', r.to_label.prefix)
+                        if r.to_label.suffix is not None:
+                            lastchild.set('label-suffix', r.to_label.suffix)
 
         def generate_xml(self, root, default_caps):
             start  = ET.SubElement(root,  'start',
@@ -327,13 +369,15 @@ class GenodeConfigurator:
             # generate <provides>
             self._provides_xml(start)
 
+            generator = self._create_generator()
+            generator.adapt_routes()
+
             # generate <route>
             self._sort_routes()
             self._append_default_routes()
             self._routes_xml(start)
 
             # generate <config>
-            generator = self._create_generator()
             generator.xml(start)
 
     class ConfigXML:
