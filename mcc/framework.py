@@ -44,6 +44,19 @@ class Registry:
         else:
             return None
 
+    def _prev_layer(self, layer):
+        if layer in self.by_name.keys():
+            current_layer = self.by_name[layer.name]
+        else:
+            assert layer in self.by_name.values()
+            current_layer = layer
+
+        idx = self.by_order.index(current_layer)
+        if len(self.by_order) > 0:
+            return self.by_order[idx-1]
+        else:
+            return None
+
     def add_layer(self, layer):
         """ Adds layer.
 

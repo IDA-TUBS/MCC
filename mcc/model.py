@@ -41,13 +41,26 @@ class NetworkManager:
         self.end_ip     = self.start_ip + self.num_ips
         self.current_ip = self.start_ip
 
+        self.registry = dict()
+
     def _ip_to_integer(self, ip):
         assert isinstance(ip, list) and len(ip) == 4
 
         return ip[0] << 24 | ip[1] << 16 | ip[2] << 8 | ip[1];
 
     def _integer_to_ip(self, i):
-        return (i & 0xFF) | ((i >> 8) & 0xFF) | ((i >> 16) & 0xFF) | ((i >> 24) & 0xFF)
+        return [(i >> 24) & 0xFF,
+                (i >> 16) & 0xFF,
+                (i >> 8)  & 0xFF,
+                i & 0xFF]
+
+    def lookup_or_allocate(self, idx, num=1):
+        if idx not in self.registry:
+            self.registry[idx] = list()
+            for i in range(num):
+                self.registry[idx].append(self.allocate_ip())
+
+        return self.registry[idx]
 
     def allocate_ip(self):
         self.current_ip += 1
@@ -519,6 +532,40 @@ class SystemModel(BacktrackRegistry):
         self.dot_styles[self.by_name['comp_inst']]      = self.dot_styles[self.by_name['comp_arch']]
         self.dot_styles[self.by_name['comp_arch-pre1']] = self.dot_styles[self.by_name['comp_arch']]
         self.dot_styles[self.by_name['comp_arch-pre2']] = self.dot_styles[self.by_name['comp_arch']]
+
+    def find_parents(self, child, cur_layer, in_layer=None, parent_type=None):
+        """ Find nodes in upper layer `in_layer` or of type `parent_type` that have a correspondence
+            connection to `child`.
+        """
+        assert in_layer is not None or parent_type is not None
+        assert in_layer is None or in_layer in self.by_name.keys() or in_layer in self.by_name.values()
+        assert cur_layer in self.by_name.keys() or cur_layer in self.by_name.values()
+
+        layer    = self.by_name[cur_layer] if cur_layer in self.by_name.keys() else cur_layer
+
+        if in_layer is not None:
+            in_layer = self.by_name[in_layer] if in_layer in self.by_name.keys() else in_layer
+
+            if cur_layer is in_layer:
+                return ({ child }, cur_layer)
+        else:
+            if isinstance(child, parent_type):
+                return ({ child }, cur_layer)
+
+        parent_layer = self._prev_layer(layer)
+        if parent_layer is None:
+            return set()
+
+        # perform a breadth-first search
+        parents = layer._get_param_value(parent_layer.name, child)
+        if isinstance(parents, set):
+            result = set()
+            for p in parents:
+                found, layer = self.find_parents(p, parent_layer, in_layer, parent_type)
+                result.update(found)
+            return result, layer
+        else:
+            return self.find_parents(parents, parent_layer, in_layer, parent_type)
 
     def connect_functions(self):
         fa = self.by_name['func_arch']

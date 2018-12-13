@@ -87,7 +87,7 @@ if __name__ == '__main__':
         # generate <config> from model
         configurator = GenodeConfigurator(args.dotpath+'-'+sys.name()+'-', pf_model,
                                           args.config_xsd)
-        configurator.create_configs(model.by_name['comp_inst'])
+        configurator.create_configs(model, layer_name='comp_inst')
 
     except Exception as e:
         import traceback

@@ -11,6 +11,8 @@ Implements configurators that create (sub)system configurations from a model.
 
 import logging
 from mcc.framework import *
+from mcc.model import Proxy
+from mcc.model import NetworkManager
 
 try:
     from lxml import objectify
@@ -43,33 +45,65 @@ class DefaultConfigGenerator():
                 root.append(ET.fromstring(ET.tostring(sub)))
 
 class DynamicConfigGenerator():
-    def __init__(self, name, platform, routes):
+    def __init__(self, name, start_node):
         self.name = name
-        self.platform = platform
-        self.routes   = routes
+        self.start_node = start_node
 
         self.supported = { 'remote_rom_server' : self._rom_server_xml,
                            'remote_rom_client' : self._rom_client_xml,
                            'report_rom'        : self._report_rom_xml}
 
-        if not hasattr(self.platform, 'nm'):
-            self.platform.nm = NetworkManager([192, 168, 0, 0], 24)
+        platform = self.start_node.parent.platform
+        if not hasattr(platform, 'nm'):
+            platform.nm = NetworkManager([192, 168, 0, 0], 24)
+
+        self.network_manager = platform.nm
 
         if name not in self.supported:
             raise NotImplementedError()
 
     def _rom_server_xml(self, root):
-        for route in routes:
-            if route.service != 'ROM':
-                continue
+        model = self.start_node.model
+        layer = self.start_node.layer
+        obj   = self.start_node.layer_obj
 
-            label  = route.from_label.label
-            # TODO construct ROM name and generate IPs
-            # TODO also make this available to the corresponding rom client
-        raise NotImplementedError()
+        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        config = ET.SubElement(root, 'config')
+        for p in parents:
+            remotename = parent_layer._get_param_value('remotename', p)
+
+            ips = self.network_manager.lookup_or_allocate(remotename, 2)
+            remote_uid = '%s-%d-%d' % (remotename, ips[0][3], ips[1][3])
+
+            src_ip = ips[0]
+            dst_ip = ips[1]
+
+            ET.SubElement(config, 'remote_rom',
+                          name=remote_uid,
+                          src='%d.%d.%d.%d' % (src_ip[0], src_ip[1], src_ip[2], src_ip[3]),
+                          dst='%d.%d.%d.%d' % (dst_ip[0], dst_ip[1], dst_ip[2], dst_ip[3]),
+                          binary='True')
 
     def _rom_client_xml(self, root):
-        raise NotImplementedError()
+        model = self.start_node.model
+        layer = self.start_node.layer
+        obj   = self.start_node.layer_obj
+
+        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        config = ET.SubElement(root, 'config')
+        for p in parents:
+            remotename = parent_layer._get_param_value('remotename', p)
+
+            ips = self.network_manager.lookup_or_allocate(remotename, 2)
+            remote_uid = '%s-%d-%d' % (remotename, ips[0][3], ips[1][3])
+
+            src_ip = ips[1]
+            dst_ip = ips[0]
+
+            ET.SubElement(config, 'remote_rom',
+                          name=remote_uid,
+                          src='%d.%d.%d.%d' % (src_ip[0], src_ip[1], src_ip[2], src_ip[3]),
+                          dst='%d.%d.%d.%d' % (dst_ip[0], dst_ip[1], dst_ip[2], dst_ip[3]))
 
     def _report_rom_xml(self, root):
         raise NotImplementedError()
@@ -190,10 +224,14 @@ class GenodeConfigurator:
 
     class StartNode:
 
-        def __init__(self, name, component, parent, config=None):
-            self.name      = name
-            self.component = component
-            self.config    = config
+        def __init__(self, inst, parent, model, layer):
+            self.model     = model
+            self.layer     = layer
+            self.layer_obj = inst
+
+            self.name      = inst.identifier
+            self.component = inst.component
+            self.config    = inst.config
             self.parent    = parent
             self.routes    = list()
 
@@ -203,7 +241,7 @@ class GenodeConfigurator:
                 if default.get('dynamic') is None:
                     return DefaultConfigGenerator(default, self.config)
                 else:
-                    return DynamicConfigGenerator(self.component.binary_name(), self.parent.platform, self.routes)
+                    return DynamicConfigGenerator(self.component.binary_name(), self)
             elif self.config is not None:
                 return DefaultConfigGenerator(None, self.config)
             else:
@@ -320,9 +358,10 @@ class GenodeConfigurator:
                 else:
                     logging.info("Schema validation (%s) succeeded" % self.filename)
 
-        def create_start_node(self, name, component, config=None):
+        def create_start_node(self, inst, model, layer):
+            name = inst.identifier
             assert name not in self.start_nodes
-            self.start_nodes[name] = GenodeConfigurator.StartNode(name, component, self, config)
+            self.start_nodes[name] = GenodeConfigurator.StartNode(inst, self, model, layer)
 
             return self.start_nodes[name]
 
@@ -377,13 +416,13 @@ class GenodeConfigurator:
             if config is not None:
                 self.configs[pfc] = self.ConfigXML(self.outpath+config, pfc, self.platform, xsd_file=config_xsd)
 
-    def create_configs(self, layer):
+    def create_configs(self, model, layer_name):
+        layer = model.by_name[layer_name]
         for inst in layer.graph.nodes():
             pfc = layer._get_param_value('mapping', inst)
             if pfc in self.configs:
 
-                node = self.configs[pfc].create_start_node(inst.identifier, inst.component,
-                                                           inst.config)
+                node = self.configs[pfc].create_start_node(inst, model, layer)
 
                 # add routes
                 for e in layer.graph.out_edges(inst):

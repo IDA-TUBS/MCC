@@ -735,8 +735,9 @@ class ReachabilityEngine(AnalysisEngine):
             assert carrier is not None, "not implemented"
             # FIXME automatically determine carrier from contract repo
 
-            proxy = model.Proxy(carrier=carrier, service=self.layer.get_param_value(self, 'service', obj))
-            result = [proxy]
+            service = self.layer.get_param_value(self, 'service', obj)
+            proxy = model.Proxy(carrier=carrier, service=service)
+            result = [GraphObj(proxy, params={'remotename' : service.function})]
 
             src_map = self.layer.get_param_value(self, target_layer.name, obj.source)
             dst_map = self.layer.get_param_value(self, target_layer.name, obj.target)

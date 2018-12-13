@@ -132,7 +132,7 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
-		<defaults>
+		<defaults dynamic='true'>
 			<config>
 				<remote_rom binary="false" name="trigger_remote" src="192.168.0.110" dst="192.168.0.111">
 				</remote_rom>
@@ -147,7 +147,7 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
-		<defaults>
+		<defaults dynamic='true'>
 			<config>
 				<remote_rom binary="true" localname="img_pointcloud" name="image_remote_pointcloud" src="192.168.0.110" dst="192.168.0.111"> </remote_rom>
 			</config>
