@@ -268,7 +268,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" ref="in"/>
+			<service name="ROM" ref="in" label="image_bayer_left"/>
 			<ram quantum="8" />
 			<caps quantum="300" />
 		</requires>
@@ -278,7 +278,7 @@
 			</on-signal>
 		</timing>
 		<defaults>
-			<config rom="left" />
+			<config rom="image_bayer_left" />
 		</defaults>
 	</component>
 
@@ -288,7 +288,7 @@
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" ref="in"/>
+			<service name="ROM" ref="in" label="image_bayer_right"/>
 			<ram quantum="8" />
 			<caps quantum="300" />
 		</requires>
@@ -298,7 +298,7 @@
 			</on-signal>
 		</timing>
 		<defaults>
-			<config rom="right" />
+			<config rom="image_bayer_right" />
 		</defaults>
 	</component>
 
@@ -828,19 +828,23 @@
 		</dependency>
 	</child>
 
+	<!--
 	<child name="OBJECT_PREPRO" subsystem="zynq">
 		<function name="OBJECT_PREPRO" />
 		<dependency>
             <child name="CAM" />
         </dependency>
 	</child>
+	//-->
 
+<!--
 	<child name="POSE_SW" subsystem="zynq">
 		<function name="POSE_ESTIMATION_SW" />
 		<dependency>
             <child name="CAM" />
         </dependency>
 	</child>
+//-->
 
 	<child name="POSE_HW" subsystem="zynq">
 		<function name="POSE_ESTIMATION_HW" />
@@ -893,7 +897,7 @@
 	<child subsystem="pc" >
         <component name="pose_estimation" />
         <dependency>
-            <child name="POSE_SW" />
+            <child name="POSE_HW" />
         </dependency>
 	</child>
 
