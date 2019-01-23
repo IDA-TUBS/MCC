@@ -1,487 +1,61 @@
 <xml>
-<repository>
-
-	<!-- binaries //-->
-	<binary name="gpio_drv" />
-	<binary name="i2c_drv" />
-	<binary name="vdma_drv" />
-	<binary name="pl_irq_drv" />
-	<binary name="nic_drv" />
-	<binary name="nic_bridge" />
-	<binary name="remote_rom_client" />
-	<binary name="remote_rom_server" />
-	<binary name="camera" />
-	<binary name="debay">
-		<component name="debay_left" />
-		<component name="debay_right" />
-	</binary>
-	<binary name="rect">
-		<component name="rect_left" />
-		<component name="rect_right" />
-	</binary>
-	<binary name="stereo_match" />
-	<binary name="disp_to_pc" />
-	<binary name="pose_estimation" />
-
-	<!-- components //-->
-	<component name="gpio_drv" singleton="true">
-		<function name="GPIO" />
-		<provides>
-			<service name="GPIO" max_clients="1" />
-		</provides>
-		<requires>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="i2c_drv" singleton="true">
-		<function name="I2C" />
-		<provides>
-			<service name="I2C" max_clients="1" />
-		</provides>
-		<requires>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="vdma_drv" singleton="true">
-		<function name="VDMA" />
-		<provides>
-			<service name="VDMA" max_clients="1" />
-		</provides>
-		<requires>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="pl_irq_drv" singleton="true">
-		<function name="PL_IRQ" />
-		<provides>
-			<service name="PL_IRQ" max_clients="1" />
-		</provides>
-		<requires>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="nic_drv" singleton="true">
-		<function name="Network" />
-		<provides>
-			<service name="Nic" max_clients="1" />
-		</provides>
-		<requires>
-			<ram quantum="16" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="nic_bridge">
-		<mux service="Nic" />
-		<provides>
-			<service name="Nic" />
-		</provides>
-		<requires>
-			<service name="Nic" />
-			<ram quantum="32" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="remote_rom_client">
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="Nic" />
-			<ram quantum="32" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="remote_rom_server">
-		<requires>
-			<service name="Nic" />
-			<service name="ROM" />
-			<ram quantum="32" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="camera" singleton="true">
-		<function name="CAMERA" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<spec name="zynq" />
-			<service name="GPIO" function="GPIO" />
-			<service name="I2C" function="I2C" />
-			<service name="VDMA" function="VDMA" />
-			<service name="PL_IRQ" function="PL_IRQ" />
-			<ram quantum="16" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="debay_left">
-		<filter>
-			<add tag="debay" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="left" ref="in"/>
-			<ram quantum="8" />
-			<caps quantum="300" />
-		</requires>
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-	</component>
-
-	<component name="rect_left">
-		<filter>
-			<add tag="rect" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="left debay" ref="in" />
-			<ram quantum="16" />
-			<caps quantum="400" />
-		</requires>
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-	</component>
-
-	<component name="debay_right">
-		<filter>
-			<add tag="debay" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="right" ref="in"/>
-			<ram quantum="8" />
-			<caps quantum="300" />
-		</requires>
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="right" />
-		</defaults>
-	</component>
-
-	<component name="rect_right">
-		<filter>
-			<add tag="rect" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="right debay" ref="in" />
-			<ram quantum="16" />
-			<caps quantum="400" />
-		</requires>
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="right" />
-		</defaults>
-	</component>
-
-	<component name="stereo_match">
-		<filter>
-			<reset tag="disp" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="left" ref="left" />
-			<service name="ROM" filter="right" ref="right" />
-			<ram quantum="64" />
-			<caps quantum="500" />
-		</requires>
-		<timing>
-			<on-signal from_ref="left">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-	</component>
-
-	<component name="disp_to_pc">
-		<filter>
-			<reset tag="pointcloud" />
-		</filter>
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" filter="disp" ref="disp" />
-			<service name="ROM" filter="left rect" ref="img" />
-			<ram quantum="256" />
-			<caps quantum="500" />
-		</requires>
-		<timing>
-			<on-signal from_ref="disp">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-	</component>
-
-	<component name="pose_estimation">
-		<requires>
-			<service name="ROM" filter="pointcloud" ref="in" />
-			<ram quantum="256" />
-			<caps quantum="500" />
-		</requires>
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-	</component>
-
-	<!-- composites //-->
-	<composite>
-		<function name="STEREO_MATCH" />
-		<provides>
-			<service name="ROM" ref="out"/>
-		</provides>
-		<requires>
-			<service name="ROM" function="CAMERA" ref="camleft"/>
-			<service name="ROM" function="CAMERA" ref="camright"/>
-		</requires>
-		<timing>
-			<on-signal from_ref="camleft">
-				<task wcet="100" bcet="80"/>
-			</on-signal>
-		</timing>
-
-		<pattern>
-			<component name="debay_left">
-				<route><service name="ROM"><external ref="camleft"/></service></route>
-			</component>
-			<component name="debay_right">
-				<route><service name="ROM"><external ref="camright"/></service></route>
-			</component>
-			<component name="rect_left">
-				<route><service name="ROM"><child name="debay_left" /></service></route>
-			</component>
-			<component name="rect_right">
-				<route><service name="ROM"><child name="debay_right" /></service></route>
-			</component>
-			<component name="stereo_match">
-				<route>
-					<service name="ROM" ref="left"><child name="rect_left" /></service>
-					<service name="ROM" ref="right"><child name="rect_right" /></service>
-				</route>
-				<expose ref="out">
-					<service name="ROM"/>
-				</expose>
-			</component>
-		</pattern>
-
-		<pattern>
-			<component name="rect_left">
-				<route><service name="ROM"><external ref="camleft"/></service></route>
-			</component>
-			<component name="rect_right">
-				<route><service name="ROM"><external ref="camright"/></service></route>
-			</component>
-			<component name="stereo_match">
-				<route>
-					<service name="ROM" ref="left"><child name="rect_left" /></service>
-					<service name="ROM" ref="right"><child name="rect_right" /></service>
-				</route>
-				<expose ref="out">
-					<service name="ROM"/>
-				</expose>
-			</component>
-		</pattern>
-	</composite>
-
-	<composite name="DISP_TO_PC">
-		<function name="DISP_TO_PC" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" function="CAMERA" ref="cam" />
-			<service name="ROM" function="STEREO_MATCH" ref="out" />
-		</requires>
-
-		<pattern>
-			<component name="debay_left">
-				<route><service name="ROM"><external ref="cam"/></service></route>
-			</component>
-
-			<component name="rect_left">
-				<route><service name="ROM"><child name="debay_left" /></service></route>
-			</component>
-
-			<component name="disp_to_pc">
-				<route>
-					<service name="ROM" ref="img"><child name="rect_left" /></service>
-					<service name="ROM" ref="disp"><external ref="out"/></service>
-				</route>
-				<expose>
-					<service name="ROM" />
-				</expose>
-				<config>
-					<left />
-				</config>
-			</component>
-		</pattern>
-
-		<pattern>
-			<component name="debay_right">
-				<route><service name="ROM"><external ref="cam"/></service></route>
-			</component>
-
-			<component name="rect_right">
-				<route><service name="ROM"><child name="debay_right" /></service></route>
-			</component>
-
-			<component name="disp_to_pc">
-				<route>
-					<service name="ROM" ref="img"><child name="rect_right" /></service>
-					<service name="ROM" ref="disp"><external ref="out"/></service>
-				</route>
-				<expose>
-					<service name="ROM" />
-				</expose>
-				<config>
-					<right />
-				</config>
-			</component>
-		</pattern>
-	</composite>
-
-	<composite name="ROM_PROXY">
-		<proxy carrier="Nic" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" />
-			<service name="Nic" function="Network" ref="from"/>
-			<service name="Nic" function="Network" ref="to"/>
-		</requires>
-
-		<pattern>
-			<component name="remote_rom_client">
-				<route>
-					<service name="Nic"><external ref="to" /></service>
-				</route>
-				<expose>
-					<service name="ROM" />
-				</expose>
-			</component>
-			<component name="remote_rom_server">
-				<route>
-					<service name="ROM"><external /></service>
-					<service name="Nic"><external ref="from" /></service>
-				</route>
-			</component>
-		</pattern>
-	</composite>
-
-</repository>
-
-<platform>
-	<component>
-		<subsystem name="zynq">
-			<provides>
-				<spec name="zynq" />
-			</provides>
-			<requires>
-				<comm name="Network" />
-			</requires>
-			<config name="zynq.config" />
-		</subsystem>
-	</component>
-
-	<component>
-		<subsystem name="pc">
-			<requires>
-				<comm name="Network" />
-			</requires>
-			<config name="pc.config" />
-		</subsystem>
-	</component>
-
-	<comm name="Network" />
-</platform>
 
 <!-- system //-->
-<system name="pose_estimation"> 
-		<child name="CAM" subsystem="zynq">
-			<function name="CAMERA" />
-			<dependency>
-				<child name="GPIO" />
-				<child name="VDMA" />
-				<child name="I2C" />
-				<child name="PL_IRQ" />
-			</dependency>
-		</child>
-		
-        <child name="STEREO" subsystem="zynq">
-            <function name="STEREO_MATCH" />
-            <dependency>
-                <child name="CAM" />
-            </dependency>
-        </child>
+<system name="pose_estimation_sw"> 
+	<child name="CAM" subsystem="zynq">
+		<function name="CAMERA" />
+		<dependency>
+			<child name="I2C" />
+			<child name="GPIO" />
+			<child name="VDMA" />
+			<child name="PL_IRQ" />
+			<child name="TRIGGER" />
+			<function name="TIMER" />
+		</dependency>
+	</child>
 
-        <child name="PC" subsystem="zynq">
-            <function name="DISP_TO_PC" />
-            <dependency>
-                <child name="CAM" />
-                <child name="STEREO" />
-            </dependency>
-        </child>
+	<child name="OBJECT_PREPRO" subsystem="zynq">
+		<function name="OBJECT_PREPRO" />
+		<dependency>
+            <child name="CAM" />
+        </dependency>
+	</child>
+	<child name="POSE" subsystem="zynq">
+		<function name="POSE_ESTIMATION_SW" />
+		<dependency>
+            <child name="CAM" />
+        </dependency>
+	</child>
 
-		  <!-- remark: this could be automatically inserted once we add a step 
-		               which checks and adds missing functional dependencies  //-->
-        <child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
-        <child name="VDMA" subsystem="zynq"><function name="VDMA" /></child>
-        <child name="I2C" subsystem="zynq"><function name="I2C" /></child>
-        <child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" /></child>
-        <child name="NIC1" subsystem="zynq"><function name="Network" /></child>
+	<child name="FILE_SYSTEM" subsystem="zynq">
+		<function name="FILE_SYSTEM" />
+		<dependency> 
+			<child name="SD_CARD" />
+		</dependency>
+	</child>
 
-        <child subsystem="pc">
-            <component name="pose_estimation" />
-			<route>
-				<service name="ROM"><child name="PC" /></service>
-			</route>
-		</child>
+	<child name="I2C" subsystem="zynq"><function name="I2C" /></child>
+	<child name="GPIO" subsystem="zynq"><function name="GPIO" /></child>
+	<child name="VDMA" subsystem="zynq"><function name="VDMA" />
+		<dependency>
+			<function name="TIMER" />
+		</dependency>
+	</child>
+	<child name="PL_IRQ" subsystem="zynq"><function name="PL_IRQ" />
+		<dependency>
+			<function name="TIMER" />
+		</dependency>
+	</child>
+	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
+	
+	<child subsystem="pc" >
+        <component name="pose_estimation" />
+        <dependency>
+            <child name="POSE" />
+        </dependency>
+	</child>
 
-        <child name="NIC2" subsystem="pc"><function name="Network" /></child>
+	<child name="TRIGGER" subsystem="pc"><function name="TRIGGER" /></child>
+
 </system>
 </xml>

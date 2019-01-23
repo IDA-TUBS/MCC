@@ -16,8 +16,8 @@ parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
         help='XML Schema Definition (xsd)')
 parser.add_argument('--platform', type=str, default=None,
         help='XML file with platform specification (<platform>)')
-#parser.add_argument('--repos', type=str, default=list, nargs='*',
-#        help='XML files with contract repository (<repository>)')
+parser.add_argument('--repos', type=str, default=list(), nargs='*',
+        help='XML files with contract repository (<repository>)')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
 parser.add_argument('--config_xsd', type=str, default='genode_xsd/config.xsd',
@@ -52,7 +52,16 @@ if __name__ == '__main__':
         repo = cfgparser.Repository(args.base, args.schema)
         repos.append(repo)
 
+    for repofile in args.repos:
+        try:
+            repo = cfgparser.Repository(repofile, args.schema)
+            repos.append(repo)
+        except:
+            continue
+
     for repofile in args.files:
+        if repofile in args.repos:
+            continue
         try:
             repo = cfgparser.Repository(repofile, args.schema)
             repos.append(repo)
