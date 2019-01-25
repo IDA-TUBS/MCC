@@ -12,6 +12,7 @@ Implements model-specific data structures which are used by our cross-layer mode
 from mcc.parser import *
 from mcc.framework import *
 from mcc.backtracking import *
+from mcc.dot import DotFactory
 
 class ServiceConstraints:
     def __init__(self, name=None, function=None, to_ref=None, from_ref=None):
@@ -516,23 +517,6 @@ class SystemModel(BacktrackRegistry):
         self.repo = repo
         self.dotpath = dotpath
 
-        self.dot_styles = { 
-                self.by_name['func_arch'] : 
-                { 'node' : ['shape=rectangle', 'colorscheme=set39', 'fillcolor=5', 'style=filled'],
-                  'edge' : 'arrowhead=normal, style=dotted, colorscheme=set39, color=3',
-                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
-                self.by_name['comp_arch'] :
-                { 'node' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
-                  'edge' : 'arrowhead=normal',
-                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' },
-                self.platform : self.platform.pf_dot_styles
-                }
-
-        self.dot_styles[self.by_name['comm_arch']]      = self.dot_styles[self.by_name['func_arch']]
-        self.dot_styles[self.by_name['comp_inst']]      = self.dot_styles[self.by_name['comp_arch']]
-        self.dot_styles[self.by_name['comp_arch-pre1']] = self.dot_styles[self.by_name['comp_arch']]
-        self.dot_styles[self.by_name['comp_arch-pre2']] = self.dot_styles[self.by_name['comp_arch']]
-
     def find_parents(self, child, cur_layer, in_layer=None, parent_type=None):
         """ Find nodes in upper layer `in_layer` or of type `parent_type` that have a correspondence
             connection to `child`.
@@ -609,7 +593,7 @@ class SystemModel(BacktrackRegistry):
 
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:
-            self.write_dot_layer(layer.name, self.dotpath+layer.name+suffix+".dot")
+            DotFactory(self, self.platform).write_layer(layer.name, self.dotpath+layer.name+suffix+".dot")
 
     def _insert_base(self, base):
         fa = self.by_name['func_arch']
@@ -661,122 +645,3 @@ class SystemModel(BacktrackRegistry):
             pf_comp = self.platform.find_by_name(child.subsystem())
             fa._set_param_candidates('mapping', child, set([pf_comp]))
 
-    def _write_dot_node(self, layer, dotfile, node, prefix="  "):
-        label = "label=\"%s\"," % node.label()
-        style = ','.join(self.dot_styles[layer]['node'])
-
-        dotfile.write("%s%s [%s%s];\n" % (prefix, layer.graph.node_attributes(node)['id'], label, style))
-
-    def _write_dot_edge(self, layer, dotfile, edge, prefix="  "):
-        style = self.dot_styles[layer]['edge']
-        name = layer._get_param_value('service', edge)
-
-        if name is not None:
-            label = "label=\"%s\"," % name
-        else:
-            label = ""
-
-        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
-                                                layer.graph.node_attributes(edge.source)['id'],
-                                                layer.graph.node_attributes(edge.target)['id'],
-                                                label,
-                                                style))
-
-
-    def write_dot_layer(self, layername, filename):
-        layer = self.by_name[layername]
-
-        with open(filename, 'w+') as dotfile:
-            dotfile.write("digraph {\n")
-            dotfile.write("  compound=true;\n")
-
-
-            # write subsystem nodes
-            i = 1
-            n = 1
-            clusternodes = dict()
-            pfg = self.platform.platform_graph
-            for sub in pfg.nodes():
-                # generate and store node id
-                pfg.node_attributes(sub)['id'] = "cluster%d" % i
-                i += 1
-
-                label = ""
-                if sub.name() is not None:
-                    label = "label=\"%s\";" % sub.name()
-
-                style = self.dot_styles[self.platform]['node']
-                dotfile.write("  subgraph %s {\n    %s\n" % (pfg.node_attributes(sub)['id'], label))
-                for s in style:
-                    dotfile.write("    %s;\n" % s)
-
-                # add components of this subsystem
-                for comp in layer.graph.nodes():
-                    # only process children in this subsystem
-                    if layer._get_param_value('mapping', comp) is None \
-                       or sub.name() != layer._get_param_value('mapping', comp).name():
-                        continue
-
-                    layer.graph.node_attributes(comp)['id'] = "c%d" % n
-                    n += 1
-
-                    # remember first node as cluster node
-                    if sub not in clusternodes:
-                        clusternodes[sub] = layer.graph.node_attributes(comp)['id']
-
-                    self._write_dot_node(layer, dotfile, comp, prefix="    ")
-
-                # add internal dependencies
-                for edge in layer.graph.edges():
-                    sub1 = layer._get_param_value('mapping', edge.source)
-                    sub2 = layer._get_param_value('mapping', edge.target)
-                    if sub1 == sub and sub2 == sub:
-                        self._write_dot_edge(layer, dotfile, edge, prefix="    ")
-
-                dotfile.write("  }\n")
-
-            # add components with no subsystem
-            for comp in layer.graph.nodes():
-                # only process children in this subsystem
-                if layer._get_param_value('mapping', comp) is not None:
-                    continue
-
-                layer.graph.node_attributes(comp)['id'] = "c%d" % n
-                n += 1
-
-                # remember first node as cluster node
-                if None not in clusternodes:
-                    clusternodes[None] = layer.graph.node_attributes(comp)['id']
-
-                self._write_dot_node(layer, dotfile, comp, prefix="    ")
-
-            # add internal dependencies
-            for edge in layer.graph.edges():
-                sub1 = layer._get_param_value('mapping', edge.source)
-                sub2 = layer._get_param_value('mapping', edge.target)
-                if sub1 == None and sub2 == None:
-                    self._write_dot_edge(layer, dotfile, edge, prefix="    ")
-
-            # write subsystem edges
-            for e in pfg.edges():
-                # skip if one of the subsystems is empty
-                if e.source not in clusternodes or e.target not in clusternodes:
-                    continue
-                if pfg.edge_attributes(e)['undirected']:
-                    style = ','.join(self.dot_styles[self.platform]['edge']['undirected'])
-                else:
-                    style = ','.joint(self.dot_styles[self.platform]['edge']['directed'])
-                dotfile.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e.source],
-                                                      clusternodes[e.target],
-                                                      pfg.node_attributes(e.source)['id'],
-                                                      pfg.node_attributes(e.target)['id'],
-                                                      style))
-
-            # add child dependencies between subsystems
-            for edge in layer.graph.edges():
-                sub1 = layer._get_param_value('mapping', edge.source)
-                sub2 = layer._get_param_value('mapping', edge.target)
-                if sub1 != sub2:
-                    self._write_dot_edge(layer, dotfile, edge)
-
-            dotfile.write("}\n")
