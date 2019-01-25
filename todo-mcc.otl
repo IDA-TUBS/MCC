@@ -1,0 +1,49 @@
+MCC
+base functionality
+	[X] allow multiple repositories
+	[X] allow multiple system specifications
+	[X] use MUXer by default for every singleton if available
+	[X] make component instantiation from comparch-pre2
+		[X] check singleton
+		[X] check client cardinality
+	[X] Basemodel
+		[X] in SimpleMcc, use BaseModelQuery to model existing functions/components
+		[X] use comp_inst instead of comp_arch
+	[X] configurator
+		[X] remote ROM config
+		[X] to_label propagation (from <provides>) and routing
+	[_] backtracking
+		[X] merge
+		[X] rename dep_graph
+		[X] rename match
+		[_] rewrite backtracking
+			[_] move backtracking logic to BacktrackingGraph
+			[_] rollback shall delete nodes
+			[_] decision graph shall store dependencies as edges
+integration
+	[_] sculpt packages
+refactoring
+	[_] differentiate between AnalysisEngine and DecisionEngine
+extension
+	[_] (CCC C1) hardware scheduling
+	[_] (diss) task layer
+	[_] (CCC) reliability dummy engine
+	[_] (optional) Mapping
+		[_] implement MappingHelperEngine
+testing / refinement
+	[X] compare hw_accelerations sw/hw
+	[_] c1 showcases
+		; goal: only query object_recognition/pose_est on pc and camera on zynq => the rest should be magic
+		normal mode: object recognition
+			; processing chain: debay->rect->object_recognition
+			; object_recognition on pc
+		normal mode: pose estimation
+			; processing chain: 2xdebay->2xrect->stereo->pc->pose_est
+			; only pose_est on pc
+		accel mode: object recognition
+			; debay->rect in hw_accelerator
+		accel mode: pose estimation
+			; 2xdebay->2xrect in hw_accelerator
+			; stereo->pc->pose_est on pc
+	[_] obstacle evasion use case
+	[_] traffic specification
