@@ -8,6 +8,10 @@ from gi.repository import Gtk
 from xdot.ui.window import DotWidget
 from xdot.ui.elements import Graph
 
+from mcc.dot import DotFactory
+from mcc.framework import Registry
+from mcc.importexport import PickleImporter
+
 class Page(Gtk.HPaned):
 
     def __init__(self, filename, window):
@@ -16,7 +20,9 @@ class Page(Gtk.HPaned):
         Gtk.HPaned.__init__(self)
         self.set_wide_handle(True)
 
-        self._open_xml(filename)
+        self.filename = filename
+
+        self._open_pickle(filename)
 
         self.graph = Graph()
 
@@ -25,7 +31,7 @@ class Page(Gtk.HPaned):
 
         self.sidepane = Gtk.VBox()
         combo = Gtk.ComboBoxText()
-        for choice in self.dot_files.keys():
+        for choice in self.dotfactory.model.by_name.keys():
             combo.append(choice, choice)
         combo.connect('changed', self.show_dot)
 
@@ -35,29 +41,30 @@ class Page(Gtk.HPaned):
 
         combo.set_active(0)
 
-    def _open_xml(self, filename):
-        self.dot_files = { 'func_arch' : None,
-                           'comm_arch' : None,
-                           'comp_arch-pre1' : None,
-                           'comp_arch-pre2' : None,
-                           'comp_arch' : None,
-                           'comp_inst' : None }
+    def _open_pickle(self, filename):
+        model = Registry()
 
-        for f in self.dot_files:
-            self.dot_files[f] = filename.replace('model.xml', '%s.dot' % f)
+        # import model
+        importer = PickleImporter(model)
+        importer.read(filename)
+
+        self.dotfactory = DotFactory(model)
 
     def show_dot(self, box):
         name = box.get_active_id()
-        filename = self.dot_files[name]
         try:
-            fp = open(filename, 'rb')
-            if self.dotwidget.set_dotcode(fp.read(), filename):
+            if self.dotwidget.set_dotcode(self.dotfactory.get_layer(name).encode('utf-8')):
                 self.dotwidget.zoom_to_fit()
-            fp.close()
 
         except IOError as ex:
             self.error_dialog(str(ex))
 
+    def reload(self):
+        self._open_pickle(filename)
+
+        # TODO update combo box?
+
+        self.show_dot()
 
     def pane_active(self):
         return self.get_child2() is not None

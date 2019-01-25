@@ -231,7 +231,7 @@ class Window(Gtk.ApplicationWindow):
         self.add_action(action)
 
     def on_reload(self, action, param):
-        self.current_widget().on_reload(action)
+        self.current_page().reload()
 
     def on_zoom_in(self, action, param):
         self.current_widget().on_zoom_in(action)
@@ -294,7 +294,7 @@ class Window(Gtk.ApplicationWindow):
 
     def on_open(self, action):
         chooser = Gtk.FileChooserDialog(parent=self,
-                                        title="Open XML File",
+                                        title="Open Model",
                                         action=Gtk.FileChooserAction.OPEN,
                                         buttons=(Gtk.STOCK_CANCEL,
                                                  Gtk.ResponseType.CANCEL,
@@ -303,8 +303,8 @@ class Window(Gtk.ApplicationWindow):
         chooser.set_default_response(Gtk.ResponseType.OK)
         chooser.set_current_folder(self.last_open_dir)
         filter = Gtk.FileFilter()
-        filter.set_name("XML files")
-        filter.add_pattern("*.xml")
+        filter.set_name("Pickle files")
+        filter.add_pattern("*.pickle")
         chooser.add_filter(filter)
         filter = Gtk.FileFilter()
         filter.set_name("All files")
