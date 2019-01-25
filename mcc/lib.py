@@ -420,6 +420,8 @@ class SimpleMcc(MccBase):
             print(e)
             model_extractor = ModelExtractor(model.by_name)
             model_extractor.write_xml(outpath+'model-error.xml')
+            export = PickleExporter(model)
+            export.write(outpath+'model-error.pickle')
             raise e
 
         model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
@@ -427,6 +429,9 @@ class SimpleMcc(MccBase):
 
         model_extractor = ModelExtractor(model.by_name)
         model_extractor.write_xml(outpath+'model.xml')
+
+        export = PickleExporter(model)
+        export.write(outpath+'model.pickle')
 
         # FIXME decision graph extractor does not work
         decision_extractor = DecisionGraphExtractor(model.decision_graph())

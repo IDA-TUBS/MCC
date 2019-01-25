@@ -53,6 +53,17 @@ class AggregateRepository:
 
 class Repository(XMLParser):
 
+    class ElementWrapper:
+        def __init__(self, xml_node):
+            self.xml_node = xml_node
+
+        def xml(self):
+            return self.xml_node
+
+        def __getstate__(self):
+            return '<%s>' % self.xml_node.tag
+
+
     class ServiceIdentifier:
         def __init__(self, xml_node, ref=None):
             self.name = xml_node.get('name')
@@ -131,6 +142,13 @@ class Repository(XMLParser):
 
             return '%s%s%s%s' % (f, n, l, r)
 
+        def __getstate__(self):
+            return (self.function(),
+                    self.name(),
+                    self.label(),
+                    self.ref(),
+                    self.max_clients())
+
     class Component:
         def __init__(self, xml_node, repo):
             self.repo = repo
@@ -145,6 +163,9 @@ class Repository(XMLParser):
             return self.xml_node
 
         def binary_name(self):
+            if self.xml_node.tag == 'composite':
+                return None
+
             return self.repo.get_binary_name(self.label())
 
         def singleton(self):
@@ -236,7 +257,7 @@ class Repository(XMLParser):
         def unique_label(self):
             label  = self.label()
             binary = self.binary_name()
-            if label != binary:
+            if binary is not None and label != binary:
                 return "%s-%s" % (label, binary)
             else:
                 return label
@@ -267,6 +288,10 @@ class Repository(XMLParser):
 
         def __repr__(self):
             return self.label()
+
+        def __getstate__(self):
+            return ( self.label(),
+                     self.unique_label() )
 
     class ComponentPattern():
         def __init__(self, component, xml_node):
@@ -354,7 +379,7 @@ class Repository(XMLParser):
                 params = dict()
                 config = c.find('./config')
                 if config is not None:
-                    params['pattern-config'] = config
+                    params['pattern-config'] = Repository.ElementWrapper(config)
                 flattened.add(GraphObj(components[0], params))
 
             # second, add connections
@@ -376,6 +401,9 @@ class Repository(XMLParser):
                             flattened.add(GraphObj(Edge(child_lookup[c], name_lookup[name]), params))
 
             return flattened
+
+        def __getstate__(self):
+            return self.label()
 
     class NodeNotFoundError(Exception):
         pass

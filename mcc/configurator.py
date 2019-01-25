@@ -267,7 +267,7 @@ class GenodeConfigurator:
 
             self.name      = inst.identifier
             self.component = inst.component
-            self.config    = inst.config
+            self.config    = inst.config.xml() if inst.config is not None else None
             self.parent    = parent
             self.routes    = list()
 

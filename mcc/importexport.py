@@ -20,8 +20,14 @@ import pickle
 import mcc.noparser
 
 class Exporter:
-    def __init__(self, registry, acl):
+    def __init__(self, registry, acl=None):
         self.registry = registry
+
+        if acl is None:
+            acl = dict()
+            for layer in self.registry.by_order:
+                acl[layer] = { 'reads' : None }
+
         self.acl      = acl
 
     def write(self, filename):
@@ -74,4 +80,7 @@ class PickleImporter(Importer):
         with open(filename, "rb") as picklefile:
             import_obj = GraphUnpickler(picklefile).load()
             for name in import_obj:
+                if name not in self.registry.by_name:
+                    self.registry.add_layer(Layer(name))
+
                 self.registry.by_name[name].graph = import_obj[name].graph
