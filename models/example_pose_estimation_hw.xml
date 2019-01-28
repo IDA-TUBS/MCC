@@ -14,8 +14,8 @@
 		</dependency>
 	</child>
 
-	<child name="POSE_HW" subsystem="zynq">
-		<function name="POSE_ESTIMATION_HW" />
+	<child name="STEREO_PREPROC" subsystem="zynq">
+		<function name="STEREO_PREPROC" />
 		<dependency>
             <child name="CAM" />
             <child name="VDMA" />
@@ -54,12 +54,21 @@
 		</dependency>
 	</child>
 	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
+
+	<child subsystem="pc">
+		<!-- TODO replace this with <function name="POINTCLOUD"/> once backtracking works //-->
+		<component name="POINTCLOUD"/>
+		<dependency>
+			<function name="STEREO_PREPROC_LEFT" />
+			<function name="STEREO_PREPROC_RIGHT" />
+		</dependency>
+	</child>
 	
 	<child subsystem="pc" >
-        <component name="pose_estimation" />
-        <dependency>
-            <child name="POSE_HW" />
-        </dependency>
+		<component name="pose_estimation" />
+		<dependency>
+			<function name="POINTCLOUD" />
+		</dependency>
 	</child>
 
 	<child name="TRIGGER" subsystem="pc"><function name="TRIGGER" /></child>

@@ -1,7 +1,7 @@
 <xml>
 
 <!-- system //-->
-<system name="pose_estimation_sw"> 
+<system name="object_recognition_hw"> 
 	<child name="CAM" subsystem="zynq">
 		<function name="CAMERA" />
 		<dependency>
@@ -14,11 +14,15 @@
 		</dependency>
 	</child>
 
-	<child name="POINTCLOUD_SW" subsystem="zynq">
-		<!-- TODO replace this with <function name="POINTCLOUD"/> once backtracking works //-->
-		<component name="POINTCLOUD_SW" />
+	<child name="OBJECT_PREPRO" subsystem="zynq">
+		<function name="OBJECT_PREPRO_HW" />
 		<dependency>
 			<child name="CAM" />
+			<child name="VDMA" />
+			<child name="PL_IRQ" />
+			<child name="GPIO" />
+			<child name="Dpr" />
+			<function name="TIMER" />
 		</dependency>
 	</child>
 
@@ -34,11 +38,28 @@
 			<function name="TIMER" />
 		</dependency>
 	</child>
+
+	<child name="Dpr" subsystem="zynq">
+		<function name="Dpr_or" />
+		<dependency>
+			<child name="FILE_SYSTEM" />
+			<function name="TIMER" />
+		</dependency>
+	</child>
+
+	<child name="FILE_SYSTEM" subsystem="zynq">
+		<function name="FILE_SYSTEM" />
+		<dependency> 
+			<child name="SD_CARD" />
+		</dependency>
+	</child>
+
+	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
 	
 	<child subsystem="pc" >
-		<component name="pose_estimation" />
+		<component name="object_recog" />
 		<dependency>
-			<function name="POINTCLOUD"/>
+			<child name="OBJECT_PREPRO" />
 		</dependency>
 	</child>
 

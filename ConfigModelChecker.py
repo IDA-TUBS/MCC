@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 
+import sys
 import logging
 import argparse
 from mcc import parser as cfgparser
 from mcc import model
 from mcc import lib
 from mcc.configurator import GenodeConfigurator
+try:
+    from lxml import etree as ET
+except ImportError:
+    from xml.etree import ElementTree as ET
 
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('files', metavar='xml_file', type=str, nargs='+',
@@ -56,6 +61,9 @@ if __name__ == '__main__':
         try:
             repo = cfgparser.Repository(repofile, args.schema)
             repos.append(repo)
+        except ET.XMLSyntaxError as e:
+            print('%s - FAIL : \n\t%s' % (repofile, e))
+            sys.exit()
         except:
             continue
 
@@ -65,6 +73,9 @@ if __name__ == '__main__':
         try:
             repo = cfgparser.Repository(repofile, args.schema)
             repos.append(repo)
+        except ET.XMLSyntaxError as e:
+            print('%s - FAIL : \n\t%s' % (repofile, e))
+            sys.exit()
         except:
             continue
 

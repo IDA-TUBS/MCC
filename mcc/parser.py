@@ -171,6 +171,9 @@ class Repository(XMLParser):
         def singleton(self):
             return self.xml_node.get('singleton')
 
+        def dedicated(self):
+            return not self.xml_node.get('shareable')
+
         def requires_quantum(self, name):
             quantum = self.xml_node.find('./requires/%s' % name)
             if quantum is not None:
@@ -218,18 +221,18 @@ class Repository(XMLParser):
 
             return services
 
-        def function(self):
+        def _function(self):
             if self.xml_node.find('function') is not None:
                 return self.xml_node.find('function').get('name')
 
             return None
 
         def functions(self):
-            func = self.function()
-            if func is None:
-                return {}
+            funcs = set()
+            for f in self.xml_node.findall('function'):
+                funcs.add(f.get('name'))
 
-            return {func}
+            return funcs
 
         def type(self):
             classes = self.repo._get_component_classes(self.xml_node)
@@ -353,7 +356,7 @@ class Repository(XMLParser):
                 logging.error("Service '%s' is not required by component pattern for '%s'." % (service, self.component.label()))
                 logging.error("  (Function %s, to_ref %s)" % (function, to_ref))
             elif len(result) > 1:
-                logging.error("Service '%s' is required by multiple components." % (service))
+                logging.error("Service '%s' (ref=%s) is required by multiple components." % (service, to_ref))
             else:
                 return list(result)[0], ref
 

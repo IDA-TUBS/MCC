@@ -8,6 +8,7 @@ Implements model-specific data structures which are used by our cross-layer mode
     - Johannes Schlatow
 
 """
+import copy
 
 from mcc.parser import *
 from mcc.framework import *
@@ -207,7 +208,7 @@ class BaseChild:
     def functions(self):
         functions = set()
         for inst in self._instances:
-            functions.add(inst.component.function())
+            functions.update(inst.component.functions())
 
         return functions
 
@@ -239,14 +240,14 @@ class BaseChild:
     def provides_services(self, name=None, ref=None, function=None):
         services = set()
         for inst in self._instances:
-            if function is None or function == inst.component.function():
+            if function is None or function in inst.component.functions():
                 services.update(inst.provides_services(name, ref))
 
         return list(services)
 
     def providing_component(self, service, function=None, to_ref=None):
         for inst in self._instances:
-            if function is not None and inst.component.function() != function:
+            if function is not None and function not in inst.component.functions():
                 continue
 
             for s in inst.provides_services(service, to_ref):
@@ -570,13 +571,18 @@ class SystemModel(BacktrackRegistry):
                     local_match = None
                     remote_match = None
                     pf_component = list(fa._get_param_candidates('mapping', c))[0]
-                    for provider in fa.graph.nodes():
-                        if provider is not c:
-                            if depfunc in provider.functions():
-                                if list(fa._get_param_candidates('mapping', provider))[0].in_native_domain(pf_component):
-                                    local_match = provider
+                    for node in fa.graph.nodes():
+                        if node is not c:
+                            funcs = copy.copy(node.functions())
+                            if hasattr(node, 'query'):
+                                for provider in self.repo.find_components_by_type(node.query(), node.type()):
+                                    funcs.update(provider.functions())
+
+                            if depfunc in funcs:
+                                if list(fa._get_param_candidates('mapping', node))[0].in_native_domain(pf_component):
+                                    local_match = node
                                 else:
-                                    remote_match = provider
+                                    remote_match = node
 
                     provider = None
                     if local_match is not None:

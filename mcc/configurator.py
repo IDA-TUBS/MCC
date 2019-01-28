@@ -135,14 +135,14 @@ class DynamicConfigGenerator():
             # find ROM service without label and correct child
             found = False
             for r in self.start_node.routes:
-                if r.service == 'ROM' and r.from_label.empty():
+                if not found and r.service == 'ROM' and r.from_label.empty():
                     # only if routed to correct child
                     for e in layer.graph.out_edges(obj):
-                        if e.target.identifier == r.server:
+                        if not found and e.target.identifier == r.server:
                             r.from_label.label = remote_uid
                             found = True
 
-            assert found, 'Remote ROM label rewrite failed'
+            assert found, 'Remote ROM label rewrite failed %s, %s' % (remotename, remote_uid)
 
     def adapt_routes(self):
         self.supported[self.name]['route']()
@@ -203,6 +203,9 @@ class GenodeConfigurator:
                 self.to_label = GenodeConfigurator.SessionLabel(label=to_label)
             else:
                 self.to_label = to_label
+
+        def __repr__(self):
+            return "Route(server=%s,service=%s)" % (self.server, self.service)
 
         def any_child(self):
             return self.server is None

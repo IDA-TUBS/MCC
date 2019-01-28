@@ -6,15 +6,14 @@
 	<binary name="i2c_drv" />
 	<binary name="vdma_drv" />
 	<binary name="pl_irq_drv" />
-	<binary name="nic_drv" />
-	<binary name="nic_bridge" />
-	<binary name="remote_rom_client" />
-	<binary name="remote_rom_server" />
 	<binary name="sd_card_drv" />
 	<binary name="fatfs_fs" />
 	<binary name="fs_rom" />
 	<binary name="bitstream_loader" />
-	<binary name="hw_accelerator" />
+	<binary name="hw_accelerator">
+		<component name="hw_object_recog"/>
+		<component name="hw_pose_estim"/>
+	</binary>
 	<binary name="camera" />
 	<binary name="debay">
 		<component name="debay_left" />
@@ -105,50 +104,6 @@
 		</defaults>
 	</component>
 
-	<component name="nic_drv" singleton="true">
-		<function name="Network" />
-		<provides>
-			<service name="Nic" max_clients="1">
-				<in-traffic size="10M" interval_ms="1000" />
-			</service>
-		</provides>
-		<requires>
-			<ram quantum="16" />
-			<caps quantum="300" />
-		</requires>
-	</component>
-
-	<component name="remote_rom_client">
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="Nic" />
-			<ram quantum="32" />
-			<caps quantum="300" />
-		</requires>
-		<defaults dynamic='true'>
-			<config>
-				<remote_rom binary="false" name="trigger_remote" src="192.168.0.110" dst="192.168.0.111">
-				</remote_rom>
-			</config>
-		</defaults>
-	</component>
-
-	<component name="remote_rom_server">
-		<requires>
-			<service name="Nic" />
-			<service name="ROM" />
-			<ram quantum="32" />
-			<caps quantum="300" />
-		</requires>
-		<defaults dynamic='true'>
-			<config>
-				<remote_rom binary="true" localname="img_pointcloud" name="image_remote_pointcloud" src="192.168.0.110" dst="192.168.0.111"> </remote_rom>
-			</config>
-		</defaults>
-	</component>
-
 	<component name="sd_card_drv">
 		<function name="SD_CARD"/>
 		<provides>
@@ -214,7 +169,27 @@
 		</defaults>
 	</component>
 
-	<component name="hw_accelerator">
+	<component name="bitstream_loader" singleton="true">
+		<function name="Dpr_or" />
+		<provides>
+			<service name="Dpr" max_clients="1"/>
+		</provides>
+		<requires>
+			<service name="Timer" function="TIMER"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
+			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+		<defaults>
+			<config verbose="yes">
+				<file name="config_debayer_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="1" region="0"/>
+				<file name="config_rectify_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="2" region="1"/>
+			</config>
+		</defaults>
+	</component>
+
+	<component name="hw_pose_estim">
 		<function name="ACCEL" />
 		<provides>
 			<service name="ROM" />
@@ -224,9 +199,27 @@
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
 			<service name="GPIO" function="GPIO" />
-			<service name="Dpr" function="Dpr" />
+			<service name="Dpr" />
 			<service name="ROM" ref="cam_left" label="img_left" />
 			<service name="ROM" ref="cam_right" label="img_right" />
+			<service name="Timer" function="TIMER" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+	</component>
+
+	<component name="hw_object_recog">
+		<function name="ACCEL" />
+		<provides>
+			<service name="ROM" />
+			<service name="ACCEL" />
+		</provides>
+		<requires>
+			<service name="VDMA" function="VDMA" />
+			<service name="PL_IRQ" function="PL_IRQ" />
+			<service name="GPIO" function="GPIO" />
+			<service name="Dpr" />
+			<service name="ROM" ref="cam_left" label="img_left" />
 			<service name="Timer" function="TIMER" />
 			<ram quantum="32" />
 			<caps quantum="300" />
@@ -297,35 +290,6 @@
 		</defaults>
 	</component>
 
-	<component name="debay_hw">
-		<function name="DEBAY" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" ref="in"/>
-			<ram quantum="8" />
-			<caps quantum="300" />
-			<!--regions>
-				<region id="0" />
-				<region id="1" />
-			</regions-->
-		</requires>
-		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
-			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
-			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
-		</hw_characteristics-->
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="60" bcet="50"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-	</component>
-
 	<component name="rect_left">
 		<function name="RECT" />
 		<provides>
@@ -366,42 +330,16 @@
 		</defaults>
 	</component>
 
-	<component name="rect_hw">
-		<function name="RECT" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" ref="in" />
-			<ram quantum="16" />
-			<caps quantum="400" />
-			<!--regions><region id="0" /></regions-->
-		</requires>
-		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
-			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
-			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
-		</hw_characteristics-->
-		<timing>
-			<on-signal from_ref="in">
-				<task wcet="60" bcet="50"/>
-			</on-signal>
-		</timing>
-		<defaults>
-			<config rom="left" />
-		</defaults>
-	</component>
-
 	<component name="stereo_match">
-		<function name="STEREO_MATCH" />
 		<provides>
 			<service name="ROM" />
 		</provides>
 		<requires>
-			<service name="ROM" ref="left" />
-			<service name="ROM" ref="right" />
+			<service name="ROM" ref="left" label="rect_left" />
+			<service name="ROM" ref="right" label="rect_right" />
 			<ram quantum="64" />
 			<caps quantum="500" />
+			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="left">
@@ -418,32 +356,7 @@
 		</timing>
 	</component>
 
-	<component name="stereo_match_hw">
-		<function name="STEREO_MATCH" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" ref="left" />
-			<service name="ROM" ref="right" />
-			<ram quantum="64" />
-			<caps quantum="500" />
-			<!--regions><region id="0" /></regions-->
-		</requires>
-		<!--hw_characteristics>
-			<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
-			<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
-			<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
-		</hw_characteristics-->
-		<timing>
-			<on-signal from_ref="left">
-				<task wcet="60" bcet="50"/>
-			</on-signal>
-		</timing>
-	</component>
-
 	<component name="disp_to_pc">
-		<function name="DISP_TO_PC" />
 		<provides>
 			<service name="ROM" label="pointcloud" />
 		</provides>
@@ -452,6 +365,7 @@
 			<service name="ROM" ref="rect_left" />
 			<ram quantum="256" />
 			<caps quantum="500" />
+			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="disp">
@@ -460,38 +374,12 @@
 		</timing>
 	</component>
 
-	<component name="disp_to_pc_hw">
-		<function name="DISP_TO_PC" />
-		<provides>
-			<service name="ROM" />
-		</provides>
-		<requires>
-			<service name="ROM" ref="disp" />
-			<service name="ROM" ref="rect_left" />
-			<ram quantum="256" />
-			<caps quantum="500" />
-			<!--regions>
-				<region id="0" />
-				<region id="1" />
-			</regions-->
-			<!--hw_characteristics>
-				<type name="CMEM" quantum="123456" vulnerability="0.10" cross_section="123" />
-				<type name="BRAM" quantum="123456" vulnerability="0.5" cross_section="123" />
-				<type name="LUT" quantum="123456" vulnerability="0.2" cross_section="123" />
-			</hw_characteristics-->
-		</requires>
-		<timing>
-			<on-signal from_ref="disp">
-				<task wcet="60" bcet="40"/>
-			</on-signal>
-		</timing>
-	</component>
-
 	<component name="pose_estimation">
 		<requires>
-			<service name="ROM" ref="in" />
+			<service name="ROM" ref="in" function="POINTCLOUD" />
 			<ram quantum="256" />
 			<caps quantum="500" />
+			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
@@ -517,6 +405,7 @@
 			<service name="ROM" ref="in" />
 			<ram quantum="32" />
 			<caps quantum="300" />
+			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
@@ -526,8 +415,40 @@
 	</component>
 
 	<!-- composites //-->
-	<composite name="OBJECT_PREPRO">
-		<function name="OBJECT_PREPRO" />
+	<composite name="POINTCLOUD">
+		<function name="POINTCLOUD" />
+		<provides>
+			<service name="ROM" ref="out">
+				<out-traffic size="3600K" interval_ms="1000" />
+			</service>
+		</provides>
+		<requires>
+			<service name="ROM" function="STEREO_PREPROC_LEFT" ref="rect_left1" />
+			<service name="ROM" function="STEREO_PREPROC_LEFT" ref="rect_left2" />
+			<service name="ROM" function="STEREO_PREPROC_RIGHT" ref="rect_right" />
+		</requires>
+
+		<pattern>
+			<component name="stereo_match">
+				<route>
+					<service name="ROM" ref="left"><external ref="rect_left1" /></service>
+					<service name="ROM" ref="right"><external ref="rect_right" /></service>
+				</route>
+			</component>
+			<component name="disp_to_pc">
+				<route>
+					<service name="ROM" ref="rect_left"><external ref="rect_left2" /></service>
+					<service name="ROM" ref="disp"><child name="stereo_match"/></service>
+				</route>
+				<expose ref="out">
+					<service name="ROM" />
+				</expose>
+			</component>
+		</pattern>
+	</composite>
+
+	<composite name="OBJECT_PREPRO_SW">
+		<function name="OBJECT_PREPRO_SW" />
 		<provides>
 			<service name="ROM" ref="out">
 				<out-traffic size="3600K" interval_ms="1000" />
@@ -551,6 +472,42 @@
 				<expose ref="out">
 					<service name="ROM"/>
 				</expose>
+			</component>
+		</pattern>
+	</composite>
+
+	<composite name="OBJECT_PREPRO_HW">
+		<function name="OBJECT_PREPRO_HW" />
+		<provides>
+			<service name="ROM" ref="out">
+				<out-traffic size="3600K" interval_ms="1000" />
+			</service>
+		</provides>
+		<requires>
+			<service name="ROM" function="CAMERA" ref="cam_left" />
+			<service name="VDMA" function="VDMA" ref="vdma"/>
+			<service name="PL_IRQ" function="PL_IRQ" ref="irq"/>
+			<service name="GPIO" function="GPIO" ref="gpio"/>
+			<service name="Dpr" function="Dpr_or" ref="dpr"/>
+			<service name="Timer" function="TIMER" ref="timer" />
+		</requires>
+
+		<pattern>
+			<component name="hw_object_recog">
+				<route>
+					<service name="ROM" ref="cam_left" ><external ref="cam_left"/></service>
+					<service name="VDMA" ><external ref="vdma"/></service>
+					<service name="PL_IRQ" ><external ref="irq"/></service>
+					<service name="GPIO" ><external ref="gpio"/></service>
+					<service name="Dpr" ><external ref="dpr"/></service>
+					<service name="Timer" ><external ref="timer"/></service>
+				</route>
+				<expose ref="out">
+					<service name="ROM"/>
+				</expose>
+				<config>
+					<!-- TODO //-->
+				</config>
 			</component>
 		</pattern>
 	</composite>
@@ -579,8 +536,10 @@
 		</pattern>
 	</composite>
 
-	<composite name="POSE_ESTIMATION_HW">
-		<function name="POSE_ESTIMATION_HW" />
+	<composite name="STEREO_PREPROC_HW">
+		<function name="STEREO_PREPROC" />
+		<function name="STEREO_PREPROC_LEFT" />
+		<function name="STEREO_PREPROC_RIGHT" />
 		<provides>
 			<service name="ROM" ref="out">
 				<out-traffic size="3600K" interval_ms="1000" />
@@ -641,7 +600,7 @@
 		</taskgraph-->
 
 		<pattern>
-			<component name="hw_accelerator">
+			<component name="hw_pose_estim">
 				<route>
 					<service name="ROM" ref="cam_left" ><external ref="cam_left"/></service>
 					<service name="ROM" ref="cam_right" ><external ref="cam_right"/></service>
@@ -695,8 +654,9 @@
 		</pattern>
 	</composite>
 
-	<composite name="POSE_ESTIMATION_SW">
-		<function name="POSE_ESTIMATION_SW" />
+	<!-- TODO we may split this into a POINTCLOUD and STEREO_PREPROC_SW composite //-->
+	<composite name="POINTCLOUD_SW">
+		<function name="POINTCLOUD" />
 		<provides>
 			<service name="ROM" ref="out">
 				<out-traffic size="3600K" interval_ms="1000" />
@@ -739,35 +699,6 @@
 				<expose ref="out">
 					<service name="ROM" />
 				</expose>
-			</component>
-		</pattern>
-	</composite>
-
-	<composite name="ROM_PROXY">
-		<proxy carrier="Nic" />
-		<provides>
-			<service name="ROM" max_clients="1"/>
-		</provides>
-		<requires>
-			<service name="ROM" />
-			<service name="Nic" function="Network" ref="from"/>
-			<service name="Nic" function="Network" ref="to"/>
-		</requires>
-
-		<pattern>
-			<component name="remote_rom_client">
-				<route>
-					<service name="Nic"><external ref="to" /></service>
-				</route>
-				<expose>
-					<service name="ROM" />
-				</expose>
-			</component>
-			<component name="remote_rom_server">
-				<route>
-					<service name="ROM"><external /></service>
-					<service name="Nic"><external ref="from" /></service>
-				</route>
 			</component>
 		</pattern>
 	</composite>

@@ -55,7 +55,7 @@
        <xs:choice minOccurs="0" maxOccurs="1">
          <xs:element name="proxy"    type="ProxyType" />
          <xs:element name="filter"   type="FilterType" />
-         <xs:element name="function" type="NameType" /> 
+         <xs:element name="function" type="NameType" maxOccurs="unbounded" />
          <xs:element name="mux"      type="MuxType" />
          <xs:element name="protocol" type="ProtocolType" maxOccurs="unbounded" />
        </xs:choice>
@@ -66,6 +66,7 @@
      </xs:sequence>
      <xs:attribute name="name"      type="xs:string" use="required"/>
      <xs:attribute name="singleton" type="xs:boolean"/>
+     <xs:attribute name="shareable" type="xs:boolean"/>
      <xs:attribute name="version"   type="xs:string"/>
    </xs:complexType>
 
@@ -262,7 +263,7 @@
          <xs:element name="proxy"    type="ProxyType" />
          <xs:element name="filter"   type="FilterType" />
          <xs:element name="mux"      type="MuxType" />
-         <xs:element name="function" type="NameType" />
+         <xs:element name="function" type="NameType" maxOccurs="unbounded" />
          <xs:element name="protocol" type="ProtocolType" maxOccurs="unbounded" />
        </xs:choice>
        <xs:element name="provides" minOccurs="0">

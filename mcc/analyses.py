@@ -828,8 +828,13 @@ class InstantiationEngine(AnalysisEngine):
 
         ded    = self.factory.dedicated_instance(pfc.name(), obj,
                         self.layer.get_param_value(self, 'pattern-config', obj))
-        shared = self.factory.shared_instance   (pfc.name(), obj,
-                        self.layer.get_param_value(self, 'pattern-config', obj))
+
+        if not obj.dedicated():
+            shared = self.factory.shared_instance   (pfc.name(), obj,
+                            self.layer.get_param_value(self, 'pattern-config', obj))
+        else:
+            # TODO if out edges have the same targets and constraints, we could still create a shared instance
+            return {ded}
 
         return {ded, shared}
 

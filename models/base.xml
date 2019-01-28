@@ -5,8 +5,32 @@
 	<binary name="nic_drv" />
 	<binary name="nic_bridge" />
 	<binary name="timer" />
+	<binary name="remote_rom_client" />
+	<binary name="remote_rom_server" />
 
 	<!-- components //-->
+
+	<component name="remote_rom_client">
+		<provides>
+			<service name="ROM" />
+		</provides>
+		<requires>
+			<service name="Nic" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+		<defaults dynamic='true' />
+	</component>
+
+	<component name="remote_rom_server">
+		<requires>
+			<service name="Nic" />
+			<service name="ROM" />
+			<ram quantum="32" />
+			<caps quantum="300" />
+		</requires>
+		<defaults dynamic='true' />
+	</component>
 
 	<component name="core" singleton="true">
 		<provides>
@@ -38,7 +62,7 @@
 		</requires>
 	</component>
 
-	<component name="nic_bridge">
+	<component name="nic_bridge" shareable="true">
 		<mux service="Nic" />
 		<provides>
 			<service name="Nic" />
@@ -49,6 +73,36 @@
 			<caps quantum="300" />
 		</requires>
 	</component>
+
+	<composite name="ROM_PROXY">
+		<proxy carrier="Nic" />
+		<provides>
+			<service name="ROM" max_clients="1"/>
+		</provides>
+		<requires>
+			<service name="ROM" />
+			<service name="Nic" function="Network" ref="from"/>
+			<service name="Nic" function="Network" ref="to"/>
+		</requires>
+
+		<pattern>
+			<component name="remote_rom_client">
+				<route>
+					<service name="Nic"><external ref="to" /></service>
+				</route>
+				<expose>
+					<service name="ROM" />
+				</expose>
+			</component>
+			<component name="remote_rom_server">
+				<route>
+					<service name="ROM"><external /></service>
+					<service name="Nic"><external ref="from" /></service>
+				</route>
+			</component>
+		</pattern>
+	</composite>
+
 </repository>
 
 <platform>
@@ -101,6 +155,7 @@
 
 		<subsystem name="pc">
 			<provides>
+			    <spec name="pc" />
 			    <ram quantum="1024"/>
 			    <caps quantum="10000"/>
 			</provides>
