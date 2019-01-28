@@ -53,7 +53,11 @@ class DotFactory:
         label = "label=\"%s\"," % node.label()
         style = ','.join(self.dot_styles[layer.name]['node'])
 
-        dotfile.write("%s%s [%s%s];\n" % (prefix, layer.graph.node_attributes(node)['id'], label, style))
+        dotfile.write("%s%s [URL=\"%s\",%s%s];\n" % (prefix,
+                                                     layer.graph.node_attributes(node)['id'],
+                                                     layer.graph.node_attributes(node)['id'],
+                                                     label,
+                                                     style))
 
     def _output_edge(self, layer, dotfile, edge, prefix="  "):
         style = self.dot_styles[layer.name]['edge']

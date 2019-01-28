@@ -28,27 +28,28 @@ class Page(Gtk.HPaned):
 
         self.dotwidget = DotWidget()
         self.dotwidget.connect("error", lambda e, m: self.error_dialog(m))
+        self.dotwidget.connect("clicked", self.on_url_clicked)
 
         self.sidepane = Gtk.VBox()
-        combo = Gtk.ComboBoxText()
+        self.combo = Gtk.ComboBoxText()
         for choice in self.dotfactory.model.by_name.keys():
-            combo.append(choice, choice)
-        combo.connect('changed', self.show_dot)
+            self.combo.append(choice, choice)
+        self.combo.connect('changed', self.show_dot)
 
-        self.sidepane.pack_start(combo, True, False, 0)
+        self.sidepane.pack_start(self.combo, True, False, 0)
 
         self.pack1(self.dotwidget, True, False)
 
-        combo.set_active(0)
+        self.combo.set_active(0)
 
     def _open_pickle(self, filename):
-        model = Registry()
+        self.model = Registry()
 
         # import model
-        importer = PickleImporter(model)
+        importer = PickleImporter(self.model)
         importer.read(filename)
 
-        self.dotfactory = DotFactory(model)
+        self.dotfactory = DotFactory(self.model)
 
     def show_dot(self, box):
         name = box.get_active_id()
@@ -60,11 +61,11 @@ class Page(Gtk.HPaned):
             self.error_dialog(str(ex))
 
     def reload(self):
-        self._open_pickle(filename)
+        self._open_pickle(self.filename)
 
         # TODO update combo box?
 
-        self.show_dot()
+        self.show_dot(self.combo)
 
     def pane_active(self):
         return self.get_child2() is not None
@@ -100,3 +101,28 @@ class Page(Gtk.HPaned):
         dlg.set_title(self.window.get_title())
         dlg.run()
         dlg.destroy()
+
+    def on_url_clicked(self, widget, url, event):
+        # TODO put this into some class (ModelSearch)?
+        current_layer = self.model.by_name[self.combo.get_active_id()]
+        # find node
+        info = "%s not found in graph" % url
+        name = ""
+        for node in current_layer.graph.nodes():
+            if current_layer.graph.node_attributes(node)['id'] == url:
+                # TODO filter out params that store inter-layer relations
+                info = current_layer.graph.node_attributes(node)['params']
+                name = "%s info" % node.label()
+
+                for edge in current_layer.graph.out_edges(node):
+                    info = "%s\n%s" % (info, current_layer.graph.edge_attributes(edge)['params'])
+
+        # TODO render this beautifully in the side pane
+        dialog = Gtk.MessageDialog(
+            parent=self.window,
+            buttons=Gtk.ButtonsType.OK,
+            message_format=info)
+        dialog.connect('response', lambda dialog, response: dialog.destroy())
+        dialog.set_title(name)
+        dialog.run()
+        return True
