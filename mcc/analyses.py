@@ -623,7 +623,7 @@ class SpecEngine(AnalysisEngine):
         if self.layer.name == 'func_arch' or self.layer.name == 'comm_arch':
             comp = self.layer.get_param_value(self, 'component', obj)
             if comp is None:
-                print(self.layer.get_param_candidates(self, 'component', obj))
+                print("No component assigned from candidates: %s" % self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
             comp = obj
@@ -673,7 +673,7 @@ class RteEngine(AnalysisEngine):
         if self.layer.name == 'func_arch' or self.layer.name == 'comm_arch':
             comp = self.layer.get_param_value(self, 'component', obj)
             if comp is None:
-                print(self.layer.get_param_candidates(self, 'component', obj))
+                print("No component assigned from candidates: %s" % self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
             comp = obj

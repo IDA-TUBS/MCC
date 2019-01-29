@@ -210,6 +210,8 @@ class BacktrackRegistry(Registry):
         while not self._backtrack_execute():
             pass
 
+        print("Backtracking succeeded in try %s" % self.backtracking_try)
+
         self._output_layer(self.steps[-1].target_layer)
 
     def _backtrack_execute(self):
@@ -218,10 +220,13 @@ class BacktrackRegistry(Registry):
         self.backtracking_try += 1
 
         last_step = 0
+        last_operation = 0
         if self.backtracking_try > 1:
             last_step = self.dec_graph.last_step_index
+            last_operation = self.dec_graph.last_operation_index
 
-        logging.info('Backtracking Try {}, Last Step {}'.format(self.backtracking_try, last_step))
+        logging.info('Backtracking Try {}, Last Step {}, Last Operation {}'.format(self.backtracking_try, last_step,
+            last_operation))
         for step in self.steps[last_step:]:
 
             previous_step = self._previous_step(step)
@@ -235,7 +240,7 @@ class BacktrackRegistry(Registry):
                 step.execute(self.dec_graph)
 
             except ConstraintNotSatisfied as cns:
-                logging.info('{} failed:'.format(cns.obj))
+                logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
 
                 current = self.dec_graph.current
 
@@ -247,12 +252,16 @@ class BacktrackRegistry(Registry):
                         raise Exception('No config could be found')
 
                     self._mark_subtree_as_bad(head.layer, head.param, head.obj)
+                    # TODO store backtracking information (store head as bad)
+                    print("\nMark bad: %s" % (head))
 
                 self._revert_subtree(head, current)
-                head = list(self.dec_graph.in_edges(head))[0].source
+#                head = list(self.dec_graph.in_edges(head))[0].source
+                print(head)
 
                 self.dec_graph.set_operation_index(head.operation_index)
                 self.dec_graph.set_step_index(head.step_index)
+                self.dec_graph.set_step(self.steps[head.step_index])
 
                 # reset the pointer at the dependency tree that points to the
                 # leaf in the current path

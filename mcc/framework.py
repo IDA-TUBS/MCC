@@ -1095,7 +1095,7 @@ class Assign(Operation):
             if dec_graph.current is not None:
                 if dec_graph.current.operation == self:
                     skip_n_elements = dec_graph.current.attribute_index
-                    skip_n_elements -= 1
+                    skip_n_elements -= 0
 
                     for i in range(skip_n_elements):
                         next(it)
@@ -1105,15 +1105,16 @@ class Assign(Operation):
                     # candidate
 
                     used_candidates = set()
-                    for edge in self.dec_graph.out_edges(self.dec_graph.current):
-                        used_candidates.add(edge.target.value)
+                    for edge in dec_graph.out_edges(dec_graph.current):
+                        used_candidates.add(edge.source.value)
 
                     candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
                     candidates -= used_candidates
 
                     result = self.analysis_engines[0].assign(obj, candidates)
                     assert(result in candidates)
-                    dec_graph.add_assign_node(self.source_layer, self.param, obj, result, index)
+                    dec_graph.add_assign_node(self.source_layer, self.param, obj, result, skip_n_elements)
+                    self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
         for (index, obj) in enumerate(it):
             assert(self.check_source_type(obj))
