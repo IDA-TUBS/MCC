@@ -127,7 +127,7 @@ class MccBase:
         model.add_step(NodeStep(Check(DependencyEngine(fc), name='dependencies')))
 
         # select pattern (dummy step, nothing happening here)
-        pe = PatternEngine(fc)
+        pe = PatternEngine(fc, ca)
         model.add_step(MapAssignNodeStep(pe, 'pattern'))
 
         # sanity check and transform
@@ -173,7 +173,7 @@ class MccBase:
         select.add_operation(Assign(pse))
 
         # select pattern (if composite)
-        pe = PatternEngine(slayer, source_param='protocolstack')
+        pe = PatternEngine(slayer, dlayer, source_param='protocolstack')
         select.add_operation(Map(pe))
         select.add_operation(Assign(pe))
         model.add_step(select)
@@ -213,7 +213,7 @@ class MccBase:
         dlayer = model.by_name[dlayer]
 
         # select muxers and transform
-        me = MuxerEngine(slayer, self.repo)
+        me = MuxerEngine(slayer, dlayer, self.repo)
         select = NodeStep(Map(me))
         select.add_operation(Assign(me))
         select.add_operation(Transform(me, dlayer))
@@ -415,26 +415,28 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            model.execute()
+            decision_graph = DecisionGraph()
+            model.execute(decision_graph)
+
+#            decision_graph.write_dot(outpath+'dec_graph.dot')
+
         except Exception as e:
             print(e)
             model_extractor = ModelExtractor(model.by_name)
             model_extractor.write_xml(outpath+'model-error.xml')
             export = PickleExporter(model)
             export.write(outpath+'model-error.pickle')
+#            decision_graph.write_dot(outpath+'dec_graph-error.dot')
             raise e
 
-        model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
-        model.decision_graph().write_dot(outpath+'dec_graph.dot')
+        if hasattr(model, 'write_analysis_engine_dependency_graph'):
+            model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
+            model.decision_graph().write_dot(outpath+'dec_graph.dot')
 
         model_extractor = ModelExtractor(model.by_name)
         model_extractor.write_xml(outpath+'model.xml')
 
         export = PickleExporter(model)
         export.write(outpath+'model.pickle')
-
-        # FIXME decision graph extractor does not work
-        decision_extractor = DecisionGraphExtractor(model.decision_graph())
-#        decision_extractor.write_xml(outpath+'dec_graph.xml')
 
         return (query_model, model)

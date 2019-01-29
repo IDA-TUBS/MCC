@@ -152,7 +152,8 @@ class ServiceEngine(AnalysisEngine):
             self.target_service = target_service
 
     def __init__(self, layer, target_layer):
-        acl = { layer : { 'reads' : set(['service', 'pattern', 'component', target_layer.name]) } }
+        acl = { layer        : { 'reads'  : set(['service', 'pattern', 'component', target_layer.name]) },
+                target_layer : { 'writes' : set(['source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='connections', acl=acl)
         self.target_layer = target_layer
 
@@ -370,10 +371,13 @@ class MuxerEngine(AnalysisEngine):
         def target_service(self):
             return self.service
 
-    def __init__(self, layer, repo):
+    def __init__(self, layer, target_layer, repo):
         acl = { layer : { 'reads' : set(['target-service',
                                          'source-service',
-                                         'mapping'])} }
+                                         'mapping'])},
+                target_layer : { 'writes' : set(['mapping',
+                                                 'source-service',
+                                                 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='muxer', acl=acl)
         self.repo = repo
 
@@ -526,8 +530,9 @@ class ComponentEngine(AnalysisEngine):
         return self.layer.get_param_value(self, self.param, obj) is not None
 
 class PatternEngine(AnalysisEngine):
-    def __init__(self, layer, source_param='component'):
-        acl = { layer : { 'reads' : set([source_param]) } }
+    def __init__(self, layer, target_layer, source_param='component'):
+        acl = { layer        : { 'reads'  : set([source_param]) },
+                target_layer : { 'writes' : set(['pattern-config', 'source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
         self.source_param = source_param
 
@@ -685,7 +690,8 @@ class RteEngine(AnalysisEngine):
 
 class ReachabilityEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, platform_model):
-        acl = { layer : { 'reads' : set(['mapping', 'service', target_layer.name]) }}
+        acl = { layer        : { 'reads'  : set(['mapping', 'service', target_layer.name]) },
+                target_layer : { 'writes' : set(['service', 'remotename'])}}
         AnalysisEngine.__init__(self, layer, param='proxy', acl=acl)
         self.platform_model = platform_model
         self.target_layer = target_layer
@@ -809,7 +815,8 @@ class BacktrackingTestEngine(AnalysisEngine):
 
 class InstantiationEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, factory):
-        acl = { layer : { 'reads' : {'mapping', 'source-service', 'target-service', 'pattern-config'} }}
+        acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config'} },
+                target_layer : { 'writes' : { 'mapping', 'source-service', 'target-service' }}}
         AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
         self.factory      = factory
         self.target_layer = target_layer

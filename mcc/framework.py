@@ -12,6 +12,123 @@ Implements generic MCC framework, i.e. cross-layer model, model operations, and 
 import logging
 from mcc.graph import *
 
+class DecisionGraph(Graph):
+    """ Stores dependencies between decisions.
+    """
+
+    class Node:
+        def __init__(self, layer, obj, param):
+            self.layer = layer
+            self.obj   = obj
+            self.param = param
+
+        def __repr__(self):
+            return self.__str__()
+
+        def __str__(self):
+            return '%s:%s:%s' % (self.layer, self.obj, self.param)
+
+    def __init__(self):
+        super().__init__()
+
+        self.read    = set()
+        self.written = set()
+
+        self.node_store = dict()
+
+        # add root node
+        self.root = self.Node(None, None, None)
+        super().add_node(self.root, {self.Node})
+
+    def initialize_tracking(self, layers):
+        for layer in layers:
+            layer.dependency_tracker = self
+
+    def start_tracking(self):
+        self.read    = set()
+        self.written = set()
+
+    def stop_tracking(self, operation):
+        self.add_dependencies(operation, self.read-self.written, self.written)
+        self.read    = set()
+        self.written = set()
+
+    def track_read(self, layer, obj, param):
+        self.read.add(self.find_dependency(layer, obj, param))
+
+    def track_written(self, layer, obj, param):
+        self.written.add(self.add_node(layer, obj, param))
+
+    def find_dependency(self, layer, obj, param):
+        node = self.find_node(layer, obj, param)
+        if node is None:
+            return self.root
+
+        return node
+
+    def find_node(self, layer, obj, param):
+        if layer not in self.node_store:
+            return None
+
+        if obj not in self.node_store[layer]:
+            return None
+
+        if param not in self.node_store[layer][obj]:
+            return None
+
+        return self.node_store[layer][obj][param]
+
+    def add_node(self, layer, obj, param):
+        found = self.find_node(layer, obj, param)
+        if found is None:
+            found = super().add_node(self.Node(layer, obj, param), {self.Node})
+            self.node_attributes(found)['operations'] = set()
+
+            if layer not in self.node_store:
+                self.node_store[layer] = dict()
+            if obj not in self.node_store[layer]:
+                self.node_store[layer][obj] = dict()
+
+            self.node_store[layer][obj][param] = found
+
+        return found
+
+    def add_dependencies(self, operation, read, written):
+        if len(read) == 0 and len(written) > 0:
+            read.add(self.root)
+
+        for n in written:
+            self.node_attributes(n)['operations'].add(operation)
+
+            for dep in read:
+                self.create_edge(dep, n)
+
+    def write_dot(self, filename):
+
+        # TODO for readability, we could omit the root node
+        # TODO for readability, we should write subgraphs
+
+        with open(filename, 'w') as file:
+            file.write('digraph {\n')
+
+            nodes = [node for node in self.graph.nodes()]
+
+            for node in nodes:
+                if node is None:
+                    print('Node is none')
+
+                node_str = '"{0}" [label="{1}", shape=hexagon]'.format(nodes.index(node), (node))
+
+                file.write(node_str)
+
+            for (source, target) in self.graph.edges():
+                edge = '{} -> {}\n'.format(nodes.index(source), nodes.index(target))
+                file.write(edge)
+
+                pass
+            file.write('}\n')
+
+
 class Registry:
     """ Implements/manages a cross-layer model.
 
@@ -231,9 +348,12 @@ class Registry:
             print('[%s]' % type(ae).__name__)
             print(ae.acl_string())
 
-    def execute(self):
+    def execute(self, decision_graph=None):
         """ Executes the registered steps sequentially.
         """
+
+        if decision_graph is not None:
+            decision_graph.initialize_tracking(self.by_order)
 
         print()
         for step in self.steps:
@@ -245,12 +365,18 @@ class Registry:
                     self._output_layer(previous_step.target_layer)
 
             try:
-                step.execute()
+                step.execute(self)
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
                 raise(ex)
 
         self._output_layer(self.steps[-1].target_layer)
+
+    def complete_operation(self, operation):
+        return
+
+    def skip_operation(self, operation):
+        return False
 
     def _output_layer(self, layer, suffix):
         """ Must be implemented by derived classes.
@@ -273,8 +399,16 @@ class Layer:
         self.graph       = Graph()
         self.name        = name
         self._nodetypes  = nodetypes
-        self.used_params = set()
-        self.tracking    = False
+        self.dependency_tracker = None
+        self.tracked_operation  = None
+
+    def __getstate__(self):
+        return (self.graph, self.name, self._nodetypes)
+
+    def __setstate__(self, state):
+        self.graph, self.name, self._nodetypes = state
+        self.dependency_tracker = None
+        self.tracked_operation  = None
 
     def add_node(self, obj):
         return self.graph.add_node(obj, self.node_types())
@@ -300,18 +434,23 @@ class Layer:
         """
         self.graph = Graph()
 
-    def start_tracking(self):
-        self.tracking = True
+    def start_tracking(self, op):
+        if self.dependency_tracker is not None:
+            assert(self.tracked_operation is None)
+            self.tracked_operation = op
+            self.dependency_tracker.start_tracking()
 
     def stop_tracking(self):
-        self.tracking = False
-        self.used_params = set()
+        if self.dependency_tracker is not None:
+            assert(self.tracked_operation is not None)
+            self.dependency_tracker.stop_tracking(self.tracked_operation)
+            self.tracked_operation = None
 
-    def _set_params(self, obj, params):
+    def set_params(self, ae, obj, params):
         for name, value in params.items():
-            self._set_param_value(name, obj, value)
+            self.set_param_value(ae, name, obj, value)
 
-    def insert_obj(self, obj, nodes_only=False):
+    def insert_obj(self, ae, obj, nodes_only=False):
         """ Inserts one or multiple objects into the layer.
 
         Args:
@@ -335,7 +474,7 @@ class Layer:
             # first add all nodes and remember edges
             edges = set()
             for o in obj:
-                tmp = self.insert_obj(o, nodes_only=True)
+                tmp = self.insert_obj(ae, o, nodes_only=True)
                 if len(tmp) == 0:
                     edges.add(o)
                 else:
@@ -343,17 +482,17 @@ class Layer:
 
             # now we add the remaining edges
             for o in edges:
-                inserted.update(self.insert_obj(o, nodes_only=False))
+                inserted.update(self.insert_obj(ae, o, nodes_only=False))
             assert(len(obj) == len(inserted))
         elif isinstance(obj, GraphObj):
             if obj.is_edge():
                 if not nodes_only:
                     o = self.add_edge(obj.obj)
-                    self._set_params(o, obj.params())
+                    self.set_params(ae, o, obj.params())
                     inserted.add(o)
             else:
                 o = self.add_node(obj.obj)
-                self._set_params(o, obj.params())
+                self.set_params(ae, o, obj.params())
                 inserted.add(o)
         else:
             inserted.add(self.add_node(obj))
@@ -387,18 +526,28 @@ class Layer:
             set of candidate values for the given param and object. Empty set if parameter is not present.
         """
         assert(ae.check_acl(self, param, 'reads'))
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_read(self, obj, param)
+
         return self._get_param_candidates(param, obj)
 
     def _get_param_candidates(self, param, obj):
         params = self._get_params(obj)
 
-        if self.tracking and param is not None:
-            self.used_params.add(param)
-
         if param in params:
             return params[param]['candidates']
         else:
             return set()
+
+    def get_param_failed(self, param, obj):
+        params = self._get_params(obj)
+
+        if param in params:
+            if 'failed' in params[param]:
+                return params[param]['failed']
+
+        return set()
 
     def _clear_param_values(self, param):
         for node in self.graph.nodes():
@@ -431,6 +580,10 @@ class Layer:
         """
         assert(ae.check_acl(self, param, 'writes'))
         assert(isinstance(candidates, set))
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_written(self, obj, param)
+
         self._set_param_candidates(param, obj, candidates)
 
     def _set_param_candidates(self, param, obj, candidates):
@@ -456,6 +609,10 @@ class Layer:
             Values for the given param and object. None if parameter is not present.
         """
         assert(ae.check_acl(self, param, 'reads'))
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_read(self, obj, param)
+
         return self._get_param_value(param, obj)
 
     def _get_param_value(self, param, obj):
@@ -479,6 +636,10 @@ class Layer:
             :param value: Value to be set.
         """
         assert(ae.check_acl(self, param, 'writes'))
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_written(self, obj, param)
+
         self._set_param_value(param, obj, value)
 
     def _set_param_value(self, param, obj, value):
@@ -941,7 +1102,7 @@ class Operation:
 
         return True
 
-    def execute(self, iterable, dec_graph=None):
+    def execute(self, iterable):
         raise NotImplementedError()
 
     def __repr__(self):
@@ -964,24 +1125,25 @@ class Map(Operation):
         """
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable, dec_graph=None):
+    def execute(self, iterable):
         logging.info("Executing %s" % self)
 
         # check if we need to skip elements
-        for (index, obj) in enumerate(iterable):
+        for obj in iterable:
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            param_value = self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj)
+            param_value = self.source_layer._get_param_value(self.param, obj)
             if param_value is not None:
                 continue
 
             # check if we can resue old results
-            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            candidates = self.source_layer._get_param_candidates(self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
-            self.source_layer.start_tracking()
+            self.source_layer.start_tracking(self)
+
             for ae in self.analysis_engines:
 
                 if candidates is None:
@@ -992,17 +1154,9 @@ class Map(Operation):
                     if new_candidates is not None:
                         candidates &= new_candidates
 
-            # update candidates for this parameter in layer object
-            assert(candidates is not None)
-            if dec_graph is not None:
-                dec_graph.add_map_node(self.source_layer, self.param, obj, candidates, index)
-
-                # FIXME we shouldn't need DependNodes if we directly add edges to the corresponding AssignNodes
-                # edge = Edge(dep_node, map_node)
-                # dec_graph.add_edge(edge)
+            self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
             self.source_layer.stop_tracking()
-            self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
         return True
 
@@ -1086,44 +1240,22 @@ class Assign(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dec_graph=None):
+    def execute(self, iterable):
         logging.info("Executing %s" % self)
 
         it = iter(iterable)
-        # TODO ideally, we can move the backtracking logic to the DependencyGraph in backtracking.py 
-        if dec_graph is not None:
-            if dec_graph.current is not None:
-                if dec_graph.current.operation == self:
-                    skip_n_elements = dec_graph.current.attribute_index
-                    skip_n_elements -= 0
 
-                    for i in range(skip_n_elements):
-                        next(it)
-
-                    obj = next(it)
-                    # obj is the operation that needs to choose a different
-                    # candidate
-
-                    used_candidates = set()
-                    for edge in dec_graph.out_edges(dec_graph.current):
-                        used_candidates.add(edge.source.value)
-
-                    candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-                    candidates -= used_candidates
-
-                    result = self.analysis_engines[0].assign(obj, candidates)
-                    assert(result in candidates)
-                    dec_graph.add_assign_node(self.source_layer, self.param, obj, result, skip_n_elements)
-                    self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
-
-        for (index, obj) in enumerate(it):
+        for obj in iterable:
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
             if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
                 continue
 
-            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            self.source_layer.start_tracking(self)
+
+            candidates  = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            candidates -= self.source_layer.get_param_failed(self.param, obj)
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
@@ -1134,10 +1266,9 @@ class Assign(Operation):
             result = self.analysis_engines[0].assign(obj, candidates)
             assert(result in candidates)
 
-            if dec_graph is not None:
-                dec_graph.add_assign_node(self.source_layer, self.param, obj, result, index)
-
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
+
+            self.source_layer.stop_tracking()
 
         return True
 
@@ -1199,6 +1330,18 @@ class Transform(Operation):
         self.target_layer = target_layer
         self.source_layer = ae.layer
 
+        if 'writes' not in ae.acl[self.source_layer]:
+            ae.acl[self.source_layer]['writes'] = set()
+
+        if self.target_layer not in ae.acl:
+            ae.acl[self.target_layer] = { 'writes' : set() }
+
+        if 'writes' not in ae.acl[self.target_layer]:
+            ae.acl[self.target_layer]['writes'] = set()
+
+        ae.acl[self.source_layer]['writes'].add(self.target_layer.name)
+        ae.acl[self.target_layer]['writes'].add(self.source_layer.name)
+
     def _check_ae_compatible(self, ae):
         Operation._check_ae_compatible(self, ae)
 
@@ -1225,15 +1368,17 @@ class Transform(Operation):
         # only one analysis engine can be registered
         assert(False)
 
-    def execute(self, iterable, dec_graph=None):
+    def execute(self, iterable):
         logging.info("Executing %s" % self)
 
         for (index ,obj) in enumerate(iterable):
+            self.source_layer.start_tracking(self)
+
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             assert new_objs, "transform() did not return any object"
 
             # remark: also returns already existing objects
-            inserted = self.target_layer.insert_obj(new_objs)
+            inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
             assert len(inserted) > 0
 
             for o in inserted:
@@ -1241,11 +1386,7 @@ class Transform(Operation):
                     assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
                             self.target_layer.node_types())
 
-            if dec_graph is not None:
-                dec_graph.add_transform_node(self.source_layer, self.target_layer,
-                        obj, inserted, index)
-
-            self.source_layer._set_param_value(self.target_layer.name, obj, inserted)
+            self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
             for o in inserted:
                 src = self.target_layer._get_param_value(self.source_layer.name, o)
                 if src is None:
@@ -1254,7 +1395,9 @@ class Transform(Operation):
                     src.add(obj)
                 else:
                     src = { src, obj }
-                self.target_layer._set_param_value(self.source_layer.name, o, src)
+                self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
+
+            self.source_layer.stop_tracking()
 
         return True
 
@@ -1264,7 +1407,7 @@ class Check(Operation):
     def __init__(self, ae, name=''):
         Operation.__init__(self, ae, name)
 
-    def execute(self, iterable, dec_graph=None):
+    def execute(self, iterable):
         logging.info("Executing %s" % self)
 
         for ae in self.analysis_engines:
@@ -1322,7 +1465,7 @@ class Step:
     def __repr__(self):
         return type(self).__name__ + ': \n    ' + '\n    '.join([str(op) for op in self.operations])
 
-    def execute(self, dec_graph=None):
+    def execute(self):
         """ Must be implemented by derived classes.
 
         Raises:
@@ -1333,24 +1476,20 @@ class Step:
 class NodeStep(Step):
     """ Implements model transformation step on nodes.
     """
-    def execute(self, dec_graph=None):
+    def execute(self, registry):
         """ For every operation, calls :func:`Operation.execute()` for every node in the layer.
         """
-        last_index = 0
-        if dec_graph is not None:
-            if dec_graph.last_step == self:
-                last_index = dec_graph.last_operation_index
 
-        for op in self.operations[last_index:]:
+        for op in self.operations:
+            if registry.skip_operation(op):
+                continue
+
             try:
-                if dec_graph is not None:
-                    dec_graph.set_operation_index(self.operations.index(op))
-                    dec_graph.set_operation(op)
-                    dec_graph.set_step(self)
-
-                if not op.execute(self.source_layer.graph.nodes(), dec_graph):
+                if not op.execute(self.source_layer.graph.nodes()):
                     raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                     return False
+
+                registry.complete_operation(op)
             except ConstraintNotSatisfied as cns:
                 raise cns
 
@@ -1359,22 +1498,20 @@ class NodeStep(Step):
 class EdgeStep(Step):
     """ Implements model transformation step on edges.
     """
-    def execute(self, dec_graph=None):
+    def execute(self, registry):
         """ For every operation, calls :func:`Operation.execute()` for every edge in the layer.
         """
-        last_index = 0
-        if dec_graph is not None:
-            current = dec_graph.current
-            if dec_graph.last_step == self:
-                last_index = dec_graph.last_operation_index
 
-        for op in self.operations[last_index:]:
+        for op in self.operations:
+            if registry.skip_operation(op):
+                continue
+
             try:
-                dec_graph.set_operation_index(self.operations.index(op))
-
-                if not op.execute(self.source_layer.graph.edges(), dec_graph):
+                if not op.execute(self.source_layer.graph.edges()):
                     raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                     return False
+
+                registry.complete_operation(op)
             except ConstraintNotSatisfied as cns:
                 raise cns
 

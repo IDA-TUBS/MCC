@@ -502,7 +502,7 @@ class FuncArchQuery(QueryModel):
             dotfile.write('}\n')
 
 
-class SystemModel(BacktrackRegistry):
+class SystemModel(Registry):
     """ Our cross-layer model.
     """
     def __init__(self, repo, platform, dotpath=None):

@@ -60,7 +60,7 @@ class TransformNode(Node):
         def __str__(self):
             return 'source_layer {}\n, Target_layer {}\n, obj {}\n, inserted {}\n'.format(self.source_layer, self.target_layer, self.obj, self.inserted)
 
-class DecisionGraph(Graph):
+class DecisionGraph_(Graph):
     """ Dependency Graph saves Operations executed by the BacktrackingRegistry
         and is used to revert to a previous state.
     """
