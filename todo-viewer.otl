@@ -1,4 +1,4 @@
-[_] 0% Features
+[_] 7% Features
 	: ordered by priority (highest priority on top)
 	[_] display node/edge parameters on click
 		: option 1: we can use TreeView or a ListBox widget
@@ -19,11 +19,14 @@
 	[_] if a parameter is an object, it would be nice to find and highlight it in the DOT graph
 	[_] search expressions (e.g. find nodes/edges that have a particular parameter)
 	[_] visualise backtracking info
-		[_] store additional information in the model so that we know where a branch happened
+		[X] store additional information in the model so that we know where a branch happened
+			: This is found in the field 'failed' for each param. If
+			: backtracking happened, the field is present and contains the
+			: candidates for which the search failed
 		[_] highlight the nodes/edges where parameter candidates have been rejected by backtracking
 	[_] visualise backtracking progress
 		[_] export a model that comprises all backtracking stages
 		[_] GUI: add a progress bar that allows 'scrolling' through the different model stages back and forth
-[_] 0% Testing
-	[_] check if reload button works properly
+[_] 50% Testing
+	[X] check if reload button works properly
 	[_] t.b.c.

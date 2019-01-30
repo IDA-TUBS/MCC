@@ -415,8 +415,8 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            decision_graph = DecisionGraph()
-            model.execute(decision_graph)
+            model.execute()
+            decision_graph = model.decision_graph
 
 #            decision_graph.write_dot(outpath+'dec_graph.dot')
 
@@ -431,7 +431,6 @@ class SimpleMcc(MccBase):
 
         if hasattr(model, 'write_analysis_engine_dependency_graph'):
             model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
-            model.decision_graph().write_dot(outpath+'dec_graph.dot')
 
         model_extractor = ModelExtractor(model.by_name)
         model_extractor.write_xml(outpath+'model.xml')

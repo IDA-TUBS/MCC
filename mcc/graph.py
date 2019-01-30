@@ -88,6 +88,28 @@ class Graph:
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge
 
+    def predecessors(self, node):
+        result = set()
+        for (s, t) in self.graph.in_edges(node, keys=False):
+            result.add(s)
+
+        return result
+
+    def successors(self, node, recursive=False):
+        result = set()
+        for (s, t) in self.graph.out_edges(node, keys=False):
+            result.add(t)
+
+        if recursive:
+            tmp = set()
+            for n in result:
+                tmp.update(self.successors(n, recursive=True))
+
+            result.update(tmp)
+
+        return result
+
+
     def in_edges(self, node):
         edges = set()
         for (s, t, e) in self.graph.in_edges(node, keys=True):

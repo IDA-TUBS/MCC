@@ -40,6 +40,14 @@ class DecisionGraph(Graph):
         self.root = self.Node(None, None, None)
         super().add_node(self.root, {self.Node})
 
+    def candidates_exhausted(self, node):
+        # are there any candidates left
+        candidates  = node.layer._get_param_candidates(node.param, node.obj)
+        failed      = node.layer.get_param_failed(node.param, node.obj)
+        value       = {node.layer._get_param_value(node.param, node.obj)}
+
+        return len(candidates-failed-value) == 0
+
     def initialize_tracking(self, layers):
         for layer in layers:
             layer.dependency_tracker = self
@@ -78,6 +86,22 @@ class DecisionGraph(Graph):
 
         return self.node_store[layer][obj][param]
 
+    def search(self, layer, obj):
+        if layer not in self.node_store:
+            return None
+
+        if obj not in self.node_store[layer]:
+            return None
+
+        nodes = set()
+        for node in self.node_store[layer][obj].values():
+            nodes.add(node)
+
+        return nodes
+
+    def operations(self, node):
+        return self.node_attributes(node)['operations']
+
     def add_node(self, layer, obj, param):
         found = self.find_node(layer, obj, param)
         if found is None:
@@ -102,6 +126,10 @@ class DecisionGraph(Graph):
 
             for dep in read:
                 self.create_edge(dep, n)
+
+    def remove(self, node):
+        self.remove_node(node)
+        del self.node_store[node.layer][node.obj][node.param]
 
     def write_dot(self, filename):
 
@@ -416,6 +444,12 @@ class Layer:
     def add_edge(self, obj):
         return self.graph.add_edge(obj)
 
+    def remove_node(self, obj):
+        return self.graph.remove_node(obj)
+
+    def remove_edge(self, obj):
+        return self.graph.remove_edge(obj.source, obj.target, obj)
+
     def create_edge(self, s, t):
         return self.graph.create_edge(s, t)
 
@@ -549,21 +583,26 @@ class Layer:
 
         return set()
 
-    def _clear_param_values(self, param):
-        for node in self.graph.nodes():
-            if param in self._get_params(node):
-                self._set_param_value(param, node, None)
-        for edge in self.graph.edges():
-            if param in self._get_params(edge):
-                self._set_param_value(param, edge, None)
+    def add_param_failed(self, param, obj, value):
+        params = self._get_params(obj)
 
-    def _clear_param_candidates(self, param):
-        for node in self.graph.nodes():
-            if param in self._get_params(node):
-                self._set_param_candidate(param, node, set())
-        for edge in self.graph.edges():
-            if param in self._get_params(edge):
-                self._set_param_candidate(param, edge, set())
+        assert param in params, "param %s not available on %s for %s" % (param,self,obj)
+
+        if 'failed' not in params[param]:
+            params[param]['failed'] = set()
+
+        params[param]['failed'].add(value)
+
+    def _clear_param_value(self, param, obj):
+        self._set_param_value(param, obj, None)
+
+    def _clear_param_candidates(self, param, obj):
+        params = self._get_params(obj)
+        if param in params:
+            params[param]['candidates'] = set()
+
+            if 'failed' in params[param]:
+                params[param]['failed'] = set()
 
     def set_param_candidates(self, ae, param, obj, candidates):
         """ Set candidate values for the given parameter and object.
@@ -1254,8 +1293,8 @@ class Assign(Operation):
 
             self.source_layer.start_tracking(self)
 
-            candidates  = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-            candidates -= self.source_layer.get_param_failed(self.param, obj)
+            raw_cand   = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+            candidates = raw_cand - self.source_layer.get_param_failed(self.param, obj)
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)

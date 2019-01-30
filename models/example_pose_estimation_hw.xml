@@ -56,8 +56,7 @@
 	<child name="SD_CARD" subsystem="zynq"><function name="SD_CARD" /></child>
 
 	<child subsystem="pc">
-		<!-- TODO replace this with <function name="POINTCLOUD"/> once backtracking works //-->
-		<component name="POINTCLOUD"/>
+		<function name="POINTCLOUD"/>
 		<dependency>
 			<function name="STEREO_PREPROC_LEFT" />
 			<function name="STEREO_PREPROC_RIGHT" />

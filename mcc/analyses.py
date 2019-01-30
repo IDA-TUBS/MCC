@@ -13,7 +13,6 @@ from mcc.framework import *
 from mcc.graph import *
 from mcc import model
 from mcc import parser
-from mcc.backtracking import AssignNode
 
 class QuantumEngine(AnalysisEngine):
     def __init__(self, layer, name):
@@ -796,16 +795,8 @@ class BacktrackingTestEngine(AnalysisEngine):
     def check(self, obj, first):
 
         # check if for every assign node alle the candidates have been used
-        current = self.dec_graph.current
-        path = self.dec_graph.shortest_path(self.dec_graph.root, current)
-        for node in path:
-            if not isinstance(node, AssignNode):
-                continue
-            used_cands = self.dec_graph.get_used_candidates(node)
-            all_cands  = node.layer._get_params(node.obj)[node.param]['candidates']
-
-            cands = all_cands - used_cands
-            if len(cands) == 0:
+        for node in self.dec_graph.nodes():
+            if not self.dec_graph.candidates_exhausted(node):
                 return False
 
         return True

@@ -6,6 +6,7 @@ Implements backtracking-related data structures.
 
 :Authors:
     - Dustin Frey
+    - Johannes Schlatow
 
 """
 
@@ -13,184 +14,6 @@ import networkx as nx
 from mcc.framework import *
 from mcc.graph import *
 
-class Node():
-    """Represents a Node in the Dependency Graph"""
-    def __init__(self):
-        self.valid           = True
-        self.step_index      = 0
-        self.operation_index = 0
-        self.attribute_index = 0
-        self.operation       = None
-
-
-class MapNode(Node):
-    """Represents a Map Operation in the Dependency Graph"""
-    def __init__(self, layer, param, obj, candidates):
-        super().__init__()
-        self.layer      = layer
-        self.param      = param
-        self.obj        = obj
-        self.candidates = candidates
-
-    def __str__(self):
-        return 'MapNode: layer={}\n, param={}\n, obj={}\n, candidates={}\n'.format(self.layer, self.param, self.obj, self.candidates)
-
-class AssignNode(Node):
-    """Represents an Assign Operation in the Dependency Graph"""
-    def __init__(self, layer, param, obj, value):
-        super().__init__()
-        self.layer = layer
-        self.param = param
-        self.obj   = obj
-        self.value = value
-
-    def __str__(self):
-        return 'AssignNode: Layer= {}\n, param={}\n, obj={}\n, value={}\n'.format(self.layer, self.param, self.obj, self.value)
-
-
-class TransformNode(Node):
-    """Represents a Transform Operation in the Dependency Graph"""
-    def __init__(self, source_layer, target_layer, obj, inserted):
-        super().__init__()
-        self.source_layer = source_layer
-        self.target_layer = target_layer
-        self.obj          = obj
-        self.inserted     = inserted
-
-        def __str__(self):
-            return 'source_layer {}\n, Target_layer {}\n, obj {}\n, inserted {}\n'.format(self.source_layer, self.target_layer, self.obj, self.inserted)
-
-class DecisionGraph_(Graph):
-    """ Dependency Graph saves Operations executed by the BacktrackingRegistry
-        and is used to revert to a previous state.
-    """
-    def __init__(self):
-        # the current node in the path
-        super().__init__()
-        self.current         = None
-        self.root            = None
-
-        self.last_operation_index = 0
-        self.last_operation       = None
-        self.last_step_index      = 0
-        self.last_step            = None
-
-    def add_node(self, obj):
-        assert(isinstance(obj, MapNode) or isinstance(obj, AssignNode) or isinstance(obj, TransformNode))
-
-        if self.root is None:
-            self.root = obj
-
-        self.current = obj
-        super().add_node(obj, {type(obj)})
-
-    def set_operation(self, operation):
-        self.last_operation = operation
-
-    def set_operation_index(self, operation_index):
-        self.last_operation_index = operation_index
-
-    def set_step_index(self, step_index):
-        self.last_step_index = step_index
-
-    def set_step(self, step):
-        self.last_step = step
-
-    def valid_nodes(self):
-        nodes = []
-        for node in self.nodes():
-            if node.valid:
-                nodes.append(node)
-        return nodes
-
-    def get_used_candidates(self, anode):
-        aprev = None
-        for edge in self.in_edges(anode):
-            if edge.source.valid:
-                aprev = edge.source
-                break
-
-        used_candidates = set()
-
-        for edge in self.out_edges(aprev):
-            if not isinstance(edge.target, AssignNode):
-                continue
-            used_candidates.add(edge.target.value)
-
-        return used_candidates
-
-    def shortest_path(self, source, target):
-        return nx.shortest_path(self.graph, source, target)
-
-    def append_node(self, node):
-        assert(isinstance(node, MapNode) or isinstance(node, AssignNode) or isinstance(node, TransformNode))
-
-        current              = self.current
-        node.step_index      = self.last_step_index
-        node.operation_index = self.last_operation_index
-        node.operation       = self.last_operation
-
-        self.add_node(node)
-
-        # skip creating an edge on first node
-        if current is None:
-            return
-
-        edge = Edge(current, node)
-        self.add_edge(edge)
-
-    def mark_subtree_as_bad(self, node):
-        for (s, t, e) in self.graph.out_edges(node, keys=True):
-            t.valid = False
-            self.mark_subtree_as_bad(t)
-
-    def add_transform_node(self, source_layer, target_layer, obj, inserted, attr_index):
-        node = TransformNode(source_layer, target_layer, obj, inserted)
-        node.attribute_index = attr_index
-        self.append_node(node)
-
-    def add_map_node(self, source_layer, param, obj, candidates, attr_index):
-        node = MapNode(source_layer, param, obj, candidates)
-        node.attribute_index = attr_index
-        self.append_node(node)
-
-    def add_assign_node(self, source_layer, param, obj, value, attr_index):
-        node = AssignNode(source_layer, param, obj, value)
-        node.attribute_index = attr_index
-        self.append_node(node)
-
-    def write_dot(self, filename):
-
-        with open(filename, 'w') as file:
-            file.write('digraph {\n')
-
-            nodes = [node for node in self.graph.nodes()]
-
-            for node in nodes:
-                if node is None:
-                    print('Node is none')
-                node_str = ''
-                not_valid = ']\n'
-
-                if not node.valid:
-                    not_valid = ', colorscheme=set39,fillcolor=5, style=filled]\n'
-                if isinstance(node, MapNode):
-                    node_str = '"{0}" [label="{1}", shape=hexagon'.format(nodes.index(node), (node))
-                elif isinstance(node, AssignNode):
-                    node_str = '"{0}" [label="{1}", shape=circle'.format(nodes.index(node), (node))
-                elif isinstance(node, TransformNode):
-                    node_str = '"{0}" [label="{1}", shape=egg'.format(nodes.index(node), (node))
-
-                node_str += not_valid
-
-                file.write(node_str)
-
-            for (source, target) in self.graph.edges():
-                edge = '{} -> {}\n'.format(nodes.index(source), nodes.index(target))
-                file.write(edge)
-
-                pass
-            file.write('}\n')
 
 class BacktrackRegistry(Registry):
     """ Implements/manages a cross-layer model.
@@ -203,9 +26,25 @@ class BacktrackRegistry(Registry):
         self.dec_graph = DecisionGraph()
         self.backtracking_try = 0
 
+        # stores state (completed) of operations
+        self.operations = dict()
+
+    def complete_operation(self, operation):
+        self.operations[operation] = True
+
+    def skip_operation(self, operation):
+        if operation not in self.operations:
+            return False
+
+        # skip operation if marked True
+        return self.operations[operation]
+
     def execute(self):
         """ Executes the registered steps sequentially.
         """
+
+        self.decision_graph = DecisionGraph()
+        self.decision_graph.initialize_tracking(self.by_order)
 
         while not self._backtrack_execute():
             pass
@@ -219,15 +58,8 @@ class BacktrackRegistry(Registry):
 
         self.backtracking_try += 1
 
-        last_step = 0
-        last_operation = 0
-        if self.backtracking_try > 1:
-            last_step = self.dec_graph.last_step_index
-            last_operation = self.dec_graph.last_operation_index
-
-        logging.info('Backtracking Try {}, Last Step {}, Last Operation {}'.format(self.backtracking_try, last_step,
-            last_operation))
-        for step in self.steps[last_step:]:
+        logging.info('Backtracking Try %s' % self.backtracking_try)
+        for step in self.steps:
 
             previous_step = self._previous_step(step)
             if not Registry._same_layers(previous_step, step):
@@ -236,36 +68,25 @@ class BacktrackRegistry(Registry):
                     self._output_layer(previous_step.target_layer)
 
             try:
-                self.dec_graph.set_step_index(self.steps.index(step))
-                step.execute(self.dec_graph)
+                step.execute(self)
 
             except ConstraintNotSatisfied as cns:
                 logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
 
-                current = self.dec_graph.current
+                # find branch point
+                culprit = self.find_culprit(cns)
+                if culprit is None:
+                    raise Exception('No config could be found')
 
-                head = self._mark_subtree_as_bad(cns.layer, cns.param, cns.obj)
-                if head is None or self._candidates_exhausted(head):
-                    current = self.dec_graph.current
-                    head = self._get_last_valid_assign(current)
-                    if head is None:
-                        raise Exception('No config could be found')
+                print("\nRolling back to: %s" % (culprit))
 
-                    self._mark_subtree_as_bad(head.layer, head.param, head.obj)
-                    # TODO store backtracking information (store head as bad)
-                    print("\nMark bad: %s" % (head))
+                # mark value as bad if there are other candidates
+                bad = culprit.layer._get_param_value(culprit.param, culprit.obj)
+                culprit.layer.add_param_failed(culprit.param, culprit.obj, bad)
 
-                self._revert_subtree(head, current)
-#                head = list(self.dec_graph.in_edges(head))[0].source
-                print(head)
+                # cut-off subtree
+                self.invalidate_subtree(culprit)
 
-                self.dec_graph.set_operation_index(head.operation_index)
-                self.dec_graph.set_step_index(head.step_index)
-                self.dec_graph.set_step(self.steps[head.step_index])
-
-                # reset the pointer at the dependency tree that points to the
-                # leaf in the current path
-                self.dec_graph.current = head
                 return False
 
             except Exception as ex:
@@ -275,61 +96,91 @@ class BacktrackRegistry(Registry):
                 raise(ex)
         return True
 
-    def _get_last_valid_assign(self, start):
+    def find_culprit(self, cns):
+        # find culprit in decision graph
 
-        for edge in self.dec_graph.in_edges(start):
-            if not edge.source.valid:
-                continue
+        if cns.param is None:
+            culprits = self.decision_graph.search(layer=cns.layer,
+                                                  obj  =cns.obj)
+        else:
+            culprit = self.decision_graph.find_node(layer=cns.layer,
+                                                    obj  =cns.obj,
+                                                    param=cns.param)
+            assert culprit is not None
+            culprits = { culprits }
 
-            # if non assign operation just go higher
-            if not isinstance(start, AssignNode):
-                return self._get_last_valid_assign(edge.source)
+        if len(culprits) == 0:
+            # use leaves to find branching point
+            for n in self.decision_graph.nodes():
+                if len(self.decision_graph.out_edges(n)) == 0:
+                    culprits.add(n)
 
-            if self._candidates_exhausted(start):
-                return self._get_last_valid_assign(edge.source)
+        return self._find_brancheable(culprits)
 
-            return start
+    def _find_brancheable(self, nodes):
+        for n in nodes:
+            if not self.decision_graph.candidates_exhausted(n):
+                return n
 
-        return None
+        # no candidates left => find previous decisions with candidates left
+        #  i.e. breadth-first search in reverse direction
+        visisted = nodes
+        queue    = list(nodes)
+        while len(queue):
+            cur = queue.pop()
+            for n in self.decision_graph.predecessors(cur) - visited:
+                visited.add(n)
+                queue.append(n)
 
-    def _candidates_exhausted(self, anode):
-        params = anode.layer._get_params(anode.obj)
-        candidates = params[anode.param]['candidates']
-        used_candidates = self.dec_graph.get_used_candidates(anode)
-
-        if candidates == used_candidates:
-            return True
-
-        return False
-
-    def _revert_subtree(self, start, end):
-        # iterate over the path, and revert the changes
-        for node in self.dec_graph.shortest_path(start, end):
-            assert(not node.valid)
-            if isinstance(node, AssignNode):
-                node.layer._set_param_value(node.param, node.obj, None)
-            elif isinstance(node, MapNode):
-                node.layer._set_param_candidates(node.param, node.obj, set())
-            elif isinstance(node, Transform):
-                node.source_layer._set_param_value(node.target_layer.name, node.obj, set())
-                for o in node.inserted:
-                    node.target_layer._set_param_value(node.source_layer.name, o, None)
-
-    def _mark_subtree_as_bad(self, layer, param, culprit):
-        # look for the last assign node that assings the culprit
-        for node in self.dec_graph.valid_nodes()[::-1]:
-            if not isinstance(node, AssignNode):
-                continue
-
-            if node.obj == culprit and node.layer == layer and node.param == param:
-                node.valid = False
-                self.dec_graph.mark_subtree_as_bad(node)
-                return node
+                if not self.decision_graph.candidates_exhausted(n):
+                    return n
 
         return None
 
-    def decision_graph(self):
-        return self.dec_graph
+    def invalidate_subtree(self, start):
+        # invalidate operations associated with start node
+        for op in self.decision_graph.operations(start):
+            if isinstance(op, Assign):
+                start.layer._clear_param_value(start.param, start.obj)
+                self.operations[op] = False
+            elif isinstance(op, Map):
+                continue
+            elif isinstance(op, Transform):
+                # we the start node is not a transform operation
+                raise NotImplementedError
+
+        for n in self.decision_graph.successors(start, recursive=True):
+            # invalidate layer depending on what operations were involved
+            for op in self.decision_graph.operations(n):
+                if isinstance(op, Assign):
+                    n.layer._clear_param_value(n.param, n.obj)
+                elif isinstance(op, Map):
+                    n.layer._clear_param_candidates(n.param, n.obj)
+                elif isinstance(op, Transform):
+                    # cache source object(s)
+                    src_nodes = n.layer._get_param_value(op.source_layer.name, n.obj)
+                    if not isinstance(src_nodes, set()):
+                        src_nodes = {src_nodes}
+
+                    # remove nodes/edges from layer
+                    if isinstance(n.obj, Edge):
+                        n.layer.remove_edge(n.obj)
+                    else:
+                        n.layer.remove_node(n.obj)
+
+                    # clear source->target layer mapping
+                    for src in src_nodes:
+                        op.source_layer._clear_param_value(n.layer, src)
+
+                    break # no need to continue on deleted objects
+                else:
+                    raise NotImplementedError
+
+                # invalidate operations
+                self.operations[op] = False
+
+            # remove node from decision graph
+            self.decision_graph.remove(n)
 
     def write_analysis_engine_dependency_graph(self, outfile='AeDepGraph.dot'):
         analysis_engines = set()

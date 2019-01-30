@@ -15,8 +15,7 @@
 	</child>
 
 	<child name="POINTCLOUD_SW" subsystem="zynq">
-		<!-- TODO replace this with <function name="POINTCLOUD"/> once backtracking works //-->
-		<component name="POINTCLOUD_SW" />
+		<function name="POINTCLOUD" />
 		<dependency>
 			<child name="CAM" />
 		</dependency>

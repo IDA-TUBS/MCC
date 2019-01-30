@@ -12,14 +12,14 @@ base functionality
 	[X] configurator
 		[X] remote ROM config
 		[X] to_label propagation (from <provides>) and routing
-	[_] backtracking
+	[X] backtracking
 		[X] merge
 		[X] rename dep_graph
 		[X] rename match
-		[_] rewrite backtracking
-			[_] move backtracking logic to BacktrackingGraph
-			[_] rollback shall delete nodes
-			[_] decision graph shall store dependencies as edges
+		[X] rewrite backtracking
+			[X] move backtracking logic to BacktrackingGraph
+			[X] rollback shall delete nodes
+			[X] decision graph shall store dependencies as edges
 integration
 	[_] sculpt packages
 refactoring
@@ -45,5 +45,7 @@ testing / refinement
 		accel mode: pose estimation
 			; 2xdebay->2xrect in hw_accelerator
 			; stereo->pc->pose_est on pc
+		[X] model
+		[_] testing
 	[_] obstacle evasion use case
 	[_] traffic specification
