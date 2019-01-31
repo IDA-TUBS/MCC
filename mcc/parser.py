@@ -419,7 +419,7 @@ class Repository(XMLParser):
             if self._root.tag != "repository":
                 self._root = self._root.find("repository")
                 if self._root == None:
-                    raise Exception("Cannot find <repository> node.")
+                    raise self.NodeNotFoundError("Cannot find <repository> node.")
 
     def _find_function_by_name(self, name):
         function_providers = list()
@@ -941,7 +941,7 @@ class SystemParser:
     class NodeNotFoundError(Exception):
         pass
 
-    def __init__(self, xml_file, xsd_file):
+    def __init__(self, xml_file, xsd_file=None):
         XMLParser.__init__(self, xml_file, xsd_file)
 
         if self._file is not None:
@@ -949,7 +949,7 @@ class SystemParser:
             if self._root.tag != "system":
                 self._root = self._root.find("system")
                 if self._root == None:
-                    raise Exception("Cannot find <system> node.")
+                    raise self.NodeNotFoundError("Cannot find <system> node.")
 
     def name(self):
         res = self._root.get('name')
@@ -1059,7 +1059,7 @@ class PlatformParser:
     class NodeNotFoundError(Exception):
         pass
 
-    def __init__(self, xml_file, xsd_file):
+    def __init__(self, xml_file, xsd_file=None):
         XMLParser.__init__(self, xml_file, xsd_file)
 
         if self._file is not None:
@@ -1067,7 +1067,7 @@ class PlatformParser:
             if self._root.tag != "platform":
                 self._root = self._root.find("platform")
                 if self._root == None:
-                    raise NodeNotFoundError("Cannot find <platform> node.")
+                    raise self.NodeNotFoundError("Cannot find <platform> node.")
 
         self._check()
 

@@ -10,7 +10,6 @@ Implements backtracking-related data structures.
 
 """
 
-import networkx as nx
 from mcc.framework import *
 from mcc.graph import *
 

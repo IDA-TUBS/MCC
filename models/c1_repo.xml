@@ -169,26 +169,6 @@
 		</defaults>
 	</component>
 
-	<component name="bitstream_loader" singleton="true">
-		<function name="Dpr_or" />
-		<provides>
-			<service name="Dpr" max_clients="1"/>
-		</provides>
-		<requires>
-			<service name="Timer" function="TIMER"/>
-			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
-			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
-			<ram quantum="1" />
-			<caps quantum="300" />
-		</requires>
-		<defaults>
-			<config verbose="yes">
-				<file name="config_debayer_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="1" region="0"/>
-				<file name="config_rectify_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="2" region="1"/>
-			</config>
-		</defaults>
-	</component>
-
 	<component name="hw_pose_estim">
 		<function name="ACCEL" />
 		<provides>

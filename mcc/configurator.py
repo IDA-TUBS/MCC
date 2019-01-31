@@ -444,7 +444,10 @@ class GenodeConfigurator:
             self._write_footer(root)
 
             tree = ET.ElementTree(root)
-            tree.write(self.filename, pretty_print=True)
+            if hasattr(ET, "XMLSchema"): # check if lxml was loaded
+                tree.write(self.filename, pretty_print=True)
+            else:
+                tree.write(self.filename)
 
             self._check_schema(root)
 

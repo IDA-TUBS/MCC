@@ -13,8 +13,6 @@ from mcc.framework import *
 from mcc.analyses import *
 from mcc.importexport import *
 
-from mcc.model_extractor import *
-
 class BaseModelQuery:
     """ Stores existing component architecture and corresponding inputs.
     """
@@ -325,7 +323,7 @@ class SimpleMcc(MccBase):
         bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
-    def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None):
+    def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False, dot_ae=False, dot_layer=False):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -342,15 +340,10 @@ class SimpleMcc(MccBase):
         # check function/composite/component references, compatibility and routes in system and subsystems
 
         # 2) we create a new system model
-        model = SystemModel(self.repo, pf_model, dotpath=outpath)
+        model = SystemModel(self.repo, pf_model, dotpath=outpath if dot_layer else None)
 
         # 3) create query model
         query_model = FuncArchQuery(system)
-
-        # output query model
-        if outpath is not None:
-            query_model.write_dot(outpath+"query_graph.dot")
-            pf_model.write_dot(outpath+"platform.dot")
 
         # 4a) create system model from query model and base
         model.from_query(query_model, base)
@@ -400,7 +393,7 @@ class SimpleMcc(MccBase):
             self.insert_random_backtracking_engine(model, 0.05)
 
         model.print_steps()
-        if outpath is not None:
+        if outpath is not None and dot_mcc:
             model.write_dot(outpath+'mcc.dot')
 
         if with_da:
@@ -418,22 +411,14 @@ class SimpleMcc(MccBase):
             model.execute()
             decision_graph = model.decision_graph
 
-#            decision_graph.write_dot(outpath+'dec_graph.dot')
-
         except Exception as e:
             print(e)
-            model_extractor = ModelExtractor(model.by_name)
-            model_extractor.write_xml(outpath+'model-error.xml')
             export = PickleExporter(model)
             export.write(outpath+'model-error.pickle')
-#            decision_graph.write_dot(outpath+'dec_graph-error.dot')
             raise e
 
-        if hasattr(model, 'write_analysis_engine_dependency_graph'):
+        if outpath is not None and dot_ae:
             model.write_analysis_engine_dependency_graph(outpath+'ae_dep_graph.dot')
-
-        model_extractor = ModelExtractor(model.by_name)
-        model_extractor.write_xml(outpath+'model.xml')
 
         export = PickleExporter(model)
         export.write(outpath+'model.pickle')
