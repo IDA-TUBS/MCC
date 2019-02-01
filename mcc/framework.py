@@ -64,6 +64,9 @@ class DecisionGraph(Graph):
         self.read    = set()
         self.written = set()
 
+    def check_tracking(self):
+        assert len(self.written) == 0, "check operation has written params: %s" % self.written
+
     def track_read(self, layer, obj, param):
         self.read.add(self.find_dependency(layer, obj, param))
 
@@ -477,11 +480,15 @@ class Layer:
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
-    def stop_tracking(self):
+    def stop_tracking(self, abort=False):
         if self.dependency_tracker is not None:
-            assert(self.tracked_operation is not None)
-            self.dependency_tracker.stop_tracking(self.tracked_operation)
-            self.tracked_operation = None
+            if abort:
+                self.dependency_tracker.check_tracking()
+                self.tracked_operation = None
+            else:
+                assert(self.tracked_operation is not None)
+                self.dependency_tracker.stop_tracking(self.tracked_operation)
+                self.tracked_operation = None
 
     def set_params(self, ae, obj, params):
         for name, value in params.items():
@@ -547,6 +554,19 @@ class Layer:
             attributes['params'] = dict()
 
         return attributes['params']
+
+    def _mark_all_params_read(self, param, nodes=True, edges=True):
+        if not self.dependency_tracker:
+            return
+
+        if nodes:
+            for n in self.graph.nodes():
+                if param in self._get_params(n):
+                    self.dependency_tracker.track_read(self, n, param)
+        if edges:
+            for e in self.graph.edges():
+                if param in self._get_params(e):
+                    self.dependency_tracker.track_read(self, e, param)
 
     def get_param_candidates(self, ae, param, obj):
         """ Get candidate values for the given parameter and object.
@@ -1216,9 +1236,14 @@ class BatchMap(Map):
         assert(False)
 
     def execute(self, iterable):
-        # FIXME implement backtracking support
-
         ae = self.analysis_engines[0]
+
+        self.source_layer.start_tracking(self)
+
+        # conservatively mark all nodes and edges accessed for the params in ACL
+        for layer in ae.acl:
+            for param in ae.acl[layer]['reads']:
+                self.layer._mark_all_params_read(param)
 
         # prepare
         for obj in iterable:
@@ -1254,6 +1279,8 @@ class BatchMap(Map):
             # update candidates for this parameter in layer object
             assert(candidates is not None)
             self.source_layer.set_param_candidates(ae, self.param, obj, candidates)
+
+        self.source_layer.stop_tracking()
 
         return True
 
@@ -1320,9 +1347,14 @@ class BatchAssign(Assign):
         Assign.__init__(self, ae, name)
 
     def execute(self, iterable):
-        # FIXME implement backtracking support
-
         ae = self.analysis_engines[0]
+
+        self.source_layer.start_tracking(self)
+
+        # conservatively mark all nodes and edges accessed for the params in ACL
+        for layer in ae.acl:
+            for param in ae.acl[layer]['reads']:
+                self.layer._mark_all_params_read(param)
 
         # prepare
         for obj in iterable:
@@ -1335,6 +1367,9 @@ class BatchAssign(Assign):
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s'." % self.param)
+                # FIXME we need better feedback from the external analysis engine
+                #     idea: let ExternalAnalysisEngine raise exception containing culprits
+                raise ConstraintNotSatisfied(ae.layer, self.param, obj)
 
             ae.prepare_assign(obj, candidates)
 
@@ -1347,6 +1382,8 @@ class BatchAssign(Assign):
             assert(result in candidates)
 
             self.source_layer.set_param_value(ae, self.param, obj, result)
+
+        self.stop_tracking()
 
         return True
 
@@ -1457,8 +1494,12 @@ class Check(Operation):
             for obj in iterable:
                 assert(self.check_source_type(obj))
 
+                self.source_layer.start_tracking(self)
+
                 if not ae.check(obj, first):
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
+
+                self.source_layer.stop_tracking(abort=True)
 
                 first = False
 

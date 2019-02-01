@@ -1,0 +1,23 @@
+<!-- 
+  This file is an example for information being passed in direction
+  C1 demonstrator ==> MCC
+/-->
+
+<xml>
+<mcc_control name="doris">
+	<operationmode name="exploration"/>
+	<camera pos="left" failure="false"/>
+	<camera pos="middle" failure="false"/>
+	<camera pos="right" failure="false"/>
+	<flux value="150"/>
+	<hw_acceleration value="false"/>
+</mcc_control>
+<mcc_control name="boris">
+	<operationmode name="exploration"/>
+	<camera pos="left" failure="false"/>
+	<camera pos="middle" failure="false"/>
+	<camera pos="right" failure="false"/>
+	<flux value="150"/>
+	<hw_acceleration value="true"/>
+</mcc_control>
+</xml>

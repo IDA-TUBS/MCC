@@ -20,16 +20,31 @@ base functionality
 			[X] move backtracking logic to BacktrackingGraph
 			[X] rollback shall delete nodes
 			[X] decision graph shall store dependencies as edges
+		[_] let ExternalAnalysisEngines return culprits
 integration
-	[_] sculpt packages
+	[X] sculpt packages
+	[_] showcases
+		[X] read control XML
+		[X] support management of multiple devices?
+		[_] add DummyReliabilityAnalysisEngine
+		[_] produce status report
+			[_] MCC status
+			[_] operation mode (from query)
+			[_] analysis engine results
+				[_] network load
+				[_] CPU load
+				[_] reliability
+				[_] t.b.c.
 refactoring
-	[_] differentiate between AnalysisEngine and DecisionEngine
+	[X] differentiate between AnalysisEngine and DecisionEngine
+		: dismissed, but asserting that Check does not manipulate any param
 extension
 	[_] (CCC C1) hardware scheduling
 	[_] (diss) task layer
 	[_] (CCC) reliability dummy engine
 	[_] (optional) Mapping
 		[_] implement MappingHelperEngine
+			: same resource, different resource, don't care
 testing / refinement
 	[X] compare hw_accelerations sw/hw
 	[_] c1 showcases
@@ -46,6 +61,9 @@ testing / refinement
 			; 2xdebay->2xrect in hw_accelerator
 			; stereo->pc->pose_est on pc
 		[X] model
+		[_] (optional) discard unnecessary requirements in query to allow same query for sw/hw case
+		[_] (optional) pull functions from repository
 		[_] testing
 	[_] obstacle evasion use case
 	[_] traffic specification
+	[_] test backtracking with external analysis engine
