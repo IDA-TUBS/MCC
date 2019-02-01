@@ -106,7 +106,7 @@ class BacktrackRegistry(Registry):
                                                     obj  =cns.obj,
                                                     param=cns.param)
             assert culprit is not None
-            culprits = { culprits }
+            culprits = { culprit }
 
         if len(culprits) == 0:
             # use leaves to find branching point
