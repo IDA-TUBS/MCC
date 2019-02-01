@@ -95,6 +95,7 @@ class DependencyAnalysisEngine(ExternalAnalysisEngine):
         self.version += 1
 
     def _query_map(self, obj, candidates):
+        logging.info("Sending MAP query to external analysis engine")
         if candidates is None or len(candidates) == 0:
             self.query_file.write('  <map node="%s" />\n' % self.layer.graph.node_attributes(obj)['eid'])
         else:
@@ -105,6 +106,7 @@ class DependencyAnalysisEngine(ExternalAnalysisEngine):
 
 
     def _query_assign(self, obj, candidates):
+        logging.info("Sending ASSIGN query to external analysis engine")
         if candidates is None or len(candidates) == 0:
             self.query_file.write('  <assign node="%s" />\n' % self.layer.graph.node_attributes(obj)['eid'])
         else:
@@ -122,6 +124,7 @@ class DependencyAnalysisEngine(ExternalAnalysisEngine):
             resultparser = ResultParser(self.result_filename)
             self.stepresults = resultparser.find_valid_step(layer=self.layer.name, param=self.param,
                     version=self.last_query_version, steptype="nodestep")
+            print("Waiting for valid version")
 
         return True
 

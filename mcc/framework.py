@@ -893,7 +893,7 @@ class ExternalAnalysisEngine(AnalysisEngine):
         import os
         import time
         if not os.path.exists(filename):
-            print("Waiting for file %s", filename)
+            print("Waiting for file %s" % filename)
         while not os.path.exists(filename):
             time.sleep(1)
 
