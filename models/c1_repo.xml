@@ -9,7 +9,10 @@
 	<binary name="sd_card_drv" />
 	<binary name="fatfs_fs" />
 	<binary name="fs_rom" />
-	<binary name="bitstream_loader" />
+	<binary name="bitstream_loader">
+		<component name="bitstream_loader_pe"/>
+		<component name="bitstream_loader_or"/>
+	</binary>
 	<binary name="hw_accelerator">
 		<component name="hw_object_recog"/>
 		<component name="hw_pose_estim"/>
@@ -141,7 +144,7 @@
 		</requires>
 	</component>
 
-	<component name="bitstream_loader" singleton="true">
+	<component name="bitstream_loader_pe" singleton="true">
 		<function name="Dpr" />
 		<provides>
 			<service name="Dpr" max_clients="1"/>
@@ -165,6 +168,26 @@
 				<file name="config_stereo_matching_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="3" region="1"/>
 				<file name="config_disp2pc_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="4" region="0"/>
 				<file name="config_disp2pc_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="4" region="1"/>
+			</config>
+		</defaults>
+	</component>
+
+	<component name="bitstream_loader_or" singleton="true">
+		<function name="Dpr_or" />
+		<provides>
+			<service name="Dpr" max_clients="1"/>
+		</provides>
+		<requires>
+			<service name="Timer" function="TIMER"/>
+			<service name="ROM" function="FILE_SYSTEM" ref="debayer_region_0" />
+			<service name="ROM" function="FILE_SYSTEM" ref="rectify_region_1"/>
+			<ram quantum="1" />
+			<caps quantum="300" />
+		</requires>
+		<defaults>
+			<config verbose="yes">
+				<file name="config_debayer_pblock_reconf_region_0_partial_pcap.bin" size="533732" module="1" region="0"/>
+				<file name="config_rectify_pblock_reconf_region_1_partial_pcap.bin" size="2039292" module="2" region="1"/>
 			</config>
 		</defaults>
 	</component>
