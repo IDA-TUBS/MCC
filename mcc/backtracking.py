@@ -123,7 +123,7 @@ class BacktrackRegistry(Registry):
 
         # no candidates left => find previous decisions with candidates left
         #  i.e. breadth-first search in reverse direction
-        visisted = nodes
+        visited  = nodes
         queue    = list(nodes)
         while len(queue):
             cur = queue.pop()

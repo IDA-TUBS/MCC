@@ -41,6 +41,9 @@ class DecisionGraph(Graph):
         super().add_node(self.root, {self.Node})
 
     def candidates_exhausted(self, node):
+        if node == self.root:
+            return True
+
         # are there any candidates left
         candidates  = node.layer._get_param_candidates(node.param, node.obj)
         failed      = node.layer.get_param_failed(node.param, node.obj)
