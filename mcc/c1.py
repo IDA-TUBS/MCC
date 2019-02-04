@@ -18,6 +18,30 @@ from mcc.configurator import GenodeConfigurator
 
 from xml.etree import ElementTree as ET
 
+class StatusGenerator:
+    class DeviceStatus:
+        def __init__(self, name):
+            self._name = name
+            return
+
+        def generate_xml(self, root):
+            root = ET.SubElement(root, 'mcc_status', name=self._name)
+            # TODO fill with status information
+
+    def __init__(self, names):
+
+        self._devices = dict()
+        for name in names:
+            self._devices[name] = self.DeviceStatus(name)
+
+    def write_to_file(self, filename):
+        root = ET.Element('xml')
+        for device in self._devices.values():
+            device.generate_xml(root)
+
+        tree = ET.ElementTree(root)
+        tree.write(filename)
+
 class ControlParser:
     class DeviceControl:
         def __init__(self, xml_node, basepath):
@@ -28,7 +52,7 @@ class ControlParser:
 
             # device name -> mode -> accel
             self._mode_map = { 'doris' : {
-                                   'exploration' : { 
+                                   'exploration' : {
                                        'normal' : 'c1_object_recognition.xml',
                                        'accel'  : 'c1_object_recognition_hw.xml' }},
                                'boris' : {
@@ -92,6 +116,8 @@ class Mcc:
             else:
                 logging.error("Unable to find device %s in %s" % (name, self._filename))
 
+        self._devstate = StatusGenerator(self._devices.keys())
+
     def execute(self):
         results = dict()
         failed  = False
@@ -101,6 +127,8 @@ class Mcc:
             pffile   = device.platform_filename()
             pf       = cfgparser.PlatformParser(pffile)
             pf_model = SimplePlatformModel(pf)
+
+            env      = EnvironmentModel(device)
 
             # try to create repositories from given files
             repos = list()
@@ -115,7 +143,7 @@ class Mcc:
             basesys   = cfgparser.SystemParser(pffile)
             query, basemodel = mcc.search_config(pf_model, basesys,
                                    outpath=self._outpath+name+'-'+basesys.name()+'-',
-                                   with_da=False)
+                                   with_da=False, envmodel=env)
 
             # store basemodel in BaseModelQuery
             base.insert(name=basesys.name(),
@@ -127,7 +155,7 @@ class Mcc:
             try:
                 query, model = mcc.search_config(pf_model, sys, base,
                                           outpath=self._outpath+name+'-',
-                                          with_da=False)
+                                          with_da=False, envmodel=env)
 
                 results[name] = (pf_model, model)
 
@@ -146,3 +174,7 @@ class Mcc:
             # generate <config> from model
             configurator = GenodeConfigurator(self._outpath+name+'-', pf_model)
             configurator.create_configs(model, layer_name='comp_inst')
+
+        # write status reports
+        for name in self._devices.keys():
+            self._devstate.write_to_file(self._outpath+'status.xml')

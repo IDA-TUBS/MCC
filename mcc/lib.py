@@ -323,7 +323,8 @@ class SimpleMcc(MccBase):
         bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
-    def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False, dot_ae=False, dot_layer=False):
+    def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
+            dot_ae=False, dot_layer=False, envmodel=None):
         """ Searches a system configuration for the given query.
 
         Args:
