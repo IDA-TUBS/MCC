@@ -476,7 +476,6 @@ class Layer:
 
     def start_tracking(self, op):
         if self.dependency_tracker is not None:
-            assert(self.tracked_operation is None)
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
