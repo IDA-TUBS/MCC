@@ -36,7 +36,15 @@ class Page(Gtk.HPaned):
             self.combo.append(choice, choice)
         self.combo.connect('changed', self.show_dot)
 
-        self.sidepane.pack_start(self.combo, True, False, 0)
+        self.paramview = Gtk.TreeView.new_with_model(Gtk.TreeStore(str, int))
+        col = Gtk.TreeViewColumn("No Node selected", Gtk.CellRendererText(),
+                                 text=0, weight=1)
+        self.paramview.append_column(col)
+        scroll = Gtk.ScrolledWindow()
+        scroll.add_with_viewport(self.paramview)
+
+        self.sidepane.pack_start(self.combo, False, False, 0)
+        self.sidepane.pack_end(scroll, True, True, 0)
 
         self.pack1(self.dotwidget, True, False)
 
@@ -102,27 +110,59 @@ class Page(Gtk.HPaned):
         dlg.run()
         dlg.destroy()
 
+    def _gen_hashable_value(self, value):
+        #TODO make the objects hashable directly? Currently, we might lose
+        #information about the number of elements if the string representation
+        #of an object is ambiguous.
+        if type(value) in {set, frozenset}:
+            return frozenset(map(self._gen_hashable_value, value))
+        return repr(value)
+
+    def _add_paramtree(self, parent, params):
+        # TODO filter out params that store inter-layer relations
+        for name, content in params.items():
+            node = self._add_treenode(parent, name)
+
+            value = self._gen_hashable_value(content['value'])
+            candidates = self._gen_hashable_value(content['candidates'])
+
+            #Make sure that the selected value is in the possibly empty set of
+            #candidates.
+            for candidate in candidates | {value}:
+                selected = candidate == value
+
+                if frozenset != type(candidate):
+                    self._add_treenode(node, candidate, selected)
+                    continue
+                setnode = self._add_treenode(node, 'List', selected)
+                for element in candidate:
+                    self._add_treenode(setnode, element, selected)
+
+    def _add_treenode(self, parent, text, is_bold=False):
+        weight = 800 if is_bold else 400
+        return self.paramview.get_model().append(parent, [text, weight])
+
     def on_url_clicked(self, widget, url, event):
+        self.paramview.get_model().clear()
+
         # TODO put this into some class (ModelSearch)?
         current_layer = self.model.by_name[self.combo.get_active_id()]
         # find node
-        info = "%s not found in graph" % url
-        name = ""
+        title = "%s not found in graph" % url
         for node in current_layer.graph.nodes():
             if current_layer.graph.node_attributes(node)['id'] == url:
-                # TODO filter out params that store inter-layer relations
-                info = current_layer.graph.node_attributes(node)['params']
-                name = "%s info" % node.label()
+                #TODO underscores aren't properly rendered
+                title = 'Parameters for %s' % node.label()
+
+                nodetree = self._add_treenode(None, "Node Parameters")
+                params = current_layer.graph.node_attributes(node)['params']
+                self._add_paramtree(nodetree, params)
 
                 for edge in current_layer.graph.out_edges(node):
-                    info = "%s\n%s" % (info, current_layer.graph.edge_attributes(edge)['params'])
+                    edgetree = self._add_treenode(None, "Edge Parameters")
+                    params = current_layer.graph.edge_attributes(edge)['params']
+                    self._add_paramtree(edgetree, params)
 
-        # TODO render this beautifully in the side pane
-        dialog = Gtk.MessageDialog(
-            parent=self.window,
-            buttons=Gtk.ButtonsType.OK,
-            message_format=info)
-        dialog.connect('response', lambda dialog, response: dialog.destroy())
-        dialog.set_title(name)
-        dialog.run()
+        self.paramview.expand_all()
+        self.paramview.get_column(0).set_title(title)
         return True
