@@ -37,6 +37,10 @@ class Application(Gtk.Application):
 
         self.add_main_option("test", ord("t"), GLib.OptionFlags.NONE,
                              GLib.OptionArg.NONE, "Command line test", None)
+        #TODO let GTK open files?
+        self.add_main_option("pickle", ord("p"), GLib.OptionFlags.NONE,
+                             GLib.OptionArg.STRING_ARRAY,
+                             "Open pickle file(s)", None)
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
@@ -71,6 +75,10 @@ class Application(Gtk.Application):
             print("Test argument recieved: %s" % options["test"])
 
         self.activate()
+
+        for path in options['pickle']:
+            self.window.open_file(path)
+
         return 0
 
     def on_open(self, action, param):
