@@ -76,8 +76,9 @@ class Application(Gtk.Application):
 
         self.activate()
 
-        for path in options['pickle']:
-            self.window.open_file(path)
+        if 'pickle' in options:
+            for path in options['pickle']:
+                self.window.open_file(path)
 
         return 0
 
