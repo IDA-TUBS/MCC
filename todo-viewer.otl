@@ -1,12 +1,12 @@
-[_] 7% Features
+[_] 35% Features
 	: ordered by priority (highest priority on top)
-	[_] display node/edge parameters on click
+	[X] display node/edge parameters on click
 		: option 1: we can use TreeView or a ListBox widget
 		: option 2: we customise the view based on GtkExpander (similar to the
 		:           left pane in glade)
-		[_] the parameters are typically strings or list of strings
+		[X] the parameters are typically strings or list of strings
 			: parameters may also be objects that have a __repr__ method
-		[_] would be nice to show the list of param candidates and highlight the selected value (e.g. bold font)
+		[X] would be nice to show the list of param candidates and highlight the selected value (e.g. bold font)
 	[_] generate multi-layer DOT code
 		: show the list of layers that are present in the model
 		: by selecting the layers, we can choose what layers shall be rendered
@@ -16,7 +16,7 @@
 	[_] hide nodes (with optional re-layout)
 		: first, grey-out nodes on click
 		: second, re-layout and hide the greyed-out nodes and incident edges
-	[_] if a parameter is an object, it would be nice to find and highlight it in the DOT graph
+	[X] if a parameter is an object, it would be nice to find and highlight it in the DOT graph
 	[_] search expressions (e.g. find nodes/edges that have a particular parameter)
 	[_] visualise backtracking info
 		[X] store additional information in the model so that we know where a branch happened
