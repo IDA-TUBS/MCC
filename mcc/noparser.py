@@ -19,6 +19,9 @@ class PlatformParser:
         def __setstate__(self, state):
             self._name = state
 
+        def __repr__(self):
+            return self._name
+
 class Repository:
     class ElementWrapper:
         def xml(self):
@@ -26,6 +29,9 @@ class Repository:
 
         def __setstate__(self, state):
             self._xml = state
+
+        def __repr__(self):
+            return self._xml
 
     class Service:
         def max_clients(self):
@@ -46,6 +52,14 @@ class Repository:
         def __setstate__(self, state):
             self._function, self._name, self._label, self._ref, self._max_clients =  state
 
+        def __repr__(self):
+            f = '' if self.function() is None else '%s ' % self.function()
+            n = '' if self.name() is None else 'via %s' % self.name()
+            l = '' if self.label() is None else '.%s' % self.label()
+            r = '' if self.ref() is None else ' as %s' % self.ref()
+
+            return '%s%s%s%s' % (f, n, l, r)
+
     class Component:
         def label(self):
             return self._label
@@ -56,12 +70,18 @@ class Repository:
         def __setstate__(self, state):
             self._label, self._unique_label = state
 
+        def __repr__(self):
+            return self.label()
+
     class ComponentPattern:
         def label(self):
             return self._label
 
         def __setstate__(self, state):
             self._label = state
+
+        def __repr__(self):
+            return self.label()
 
 
 class ChildQuery:

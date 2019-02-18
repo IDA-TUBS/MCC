@@ -68,11 +68,12 @@ class DotFactory:
         else:
             label = ""
 
-        dotfile.write("%s%s -> %s [%s%s];\n" % (prefix,
-                                                layer.graph.node_attributes(edge.source)['id'],
-                                                layer.graph.node_attributes(edge.target)['id'],
-                                                label,
-                                                style))
+        dotfile.write("%s%s -> %s [URL=%s,%s%s];\n" % (prefix,
+                                                       layer.graph.node_attributes(edge.source)['id'],
+                                                       layer.graph.node_attributes(edge.target)['id'],
+                                                       layer.graph.edge_attributes(edge)['id'],
+                                                       label,
+                                                       style))
 
     def _output_layer(self, layername, output):
         layer = self.model.by_name[layername]
@@ -90,6 +91,13 @@ class DotFactory:
         # write subsystem nodes
         i = 1
         n = 1
+
+        eid = 1
+        for edge in layer.graph.edges():
+            if 'id' not in layer.graph.edge_attributes(edge):
+                layer.graph.edge_attributes(edge)['id'] = 'e%d' % eid
+                eid += 1
+
         clusternodes = dict()
         clusters = dict()
         for sub in subsystems:

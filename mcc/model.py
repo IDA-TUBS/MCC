@@ -215,6 +215,9 @@ class BaseChild:
     def components(self):
         return self._instances
 
+    def __repr__(self):
+        return "Base on %s" % self.subsystem()
+
     #######################
     # Component interface #
     #######################
@@ -283,6 +286,9 @@ class Proxy:
 
     def type(self):
         return 'proxy'
+
+    def __repr__(self):
+        return 'Proxy %s via %s' % (self.service.name, self.carrier)
 
 class QueryModel(object):
     """ Base class for a query model which is given to the MCC.

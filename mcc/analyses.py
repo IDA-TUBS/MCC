@@ -150,6 +150,9 @@ class ServiceEngine(AnalysisEngine):
             self.source_service = source_service
             self.target_service = target_service
 
+        def __repr__(self):
+            return '%s to %s' % (self.source_service, self.target_service)
+
     def __init__(self, layer, target_layer):
         acl = { layer        : { 'reads'  : set(['service', 'pattern', 'component', target_layer.name]) },
                 target_layer : { 'writes' : set(['source-service', 'target-service'])}}
