@@ -63,6 +63,29 @@ class ParamView():
         self.view.expand_all()
         self.view.get_column(0).set_title(title)
 
+class LayerView():
+    def __init__(self):
+        self.view = Gtk.TreeView.new_with_model(Gtk.ListStore(str))
+        col = Gtk.TreeViewColumn("Layers", Gtk.CellRendererText(), text=0)
+        self.view.append_column(col)
+        self.view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
+
+    def set_layers(self, layers):
+        model = self.view.get_model()
+        for layer in layers:
+            model.append([layer])
+        self.view.get_selection().select_iter(model.get_iter_first())
+
+    def treeview(self):
+        return self.view
+
+    def selected_layers(self):
+        model, paths = self.view.get_selection().get_selected_rows()
+        layers = []
+        for path in paths:
+            layers += [model.get_value(model.get_iter(path), 0)]
+        return layers
+
 class Page(Gtk.HPaned):
 
     def __init__(self, filename, window):
@@ -76,16 +99,14 @@ class Page(Gtk.HPaned):
         self._open_pickle(filename)
 
         self.graph = Graph()
-
-        self.dotwidget = DotWidget()
-        self.dotwidget.connect("error", lambda e, m: self.error_dialog(m))
-        self.dotwidget.connect("clicked", self.on_url_clicked)
+        self._reset_dotwidget()
 
         self.sidepane = Gtk.VBox()
-        self.combo = Gtk.ComboBoxText()
-        for choice in self.dotfactory.model.by_name.keys():
-            self.combo.append(choice, choice)
-        self.combo.connect('changed', self.show_dot)
+
+        self.layerview = LayerView()
+        select = self.layerview.treeview().get_selection()
+        select.connect('changed', self.show_dot)
+        self.layerview.set_layers(self.dotfactory.model.by_name.keys())
 
         self.paramview = ParamView()
 
@@ -95,12 +116,18 @@ class Page(Gtk.HPaned):
         select = self.paramview.treeview().get_selection()
         select.connect('changed', self.on_tree_selection_changed)
 
-        self.sidepane.pack_start(self.combo, False, False, 0)
+        self.sidepane.pack_start(self.layerview.treeview(), False, False, 0)
         self.sidepane.pack_end(scroll, True, True, 0)
 
-        self.pack1(self.dotwidget, True, False)
+    def _reset_dotwidget(self):
+        if self.get_child1() is not None: #there is no dotwidget on first call
+            self.get_child1().destroy()
 
-        self.combo.set_active(0)
+        self.dotwidget = DotWidget()
+        self.dotwidget.connect("error", lambda e, m: self.error_dialog(m))
+        self.dotwidget.connect("clicked", self.on_url_clicked)
+
+        self.pack1(self.dotwidget, True, False)
 
     def _open_pickle(self, filename):
         self.model = Registry()
@@ -111,10 +138,15 @@ class Page(Gtk.HPaned):
 
         self.dotfactory = DotFactory(self.model)
 
-    def show_dot(self, box):
-        name = box.get_active_id()
+    def show_dot(self, _selection):
+        layers = self.layerview.selected_layers()
+        if not len(layers):
+            self._reset_dotwidget()
+            self.show_all()
+            return
         try:
-            if self.dotwidget.set_dotcode(self.dotfactory.get_layer(name).encode('utf-8')):
+            dot = self.dotfactory.get_layer(layers[0]).encode('utf-8')
+            if self.dotwidget.set_dotcode(dot):
                 self.dotwidget.zoom_to_fit()
 
         except IOError as ex:
@@ -123,9 +155,9 @@ class Page(Gtk.HPaned):
     def reload(self):
         self._open_pickle(self.filename)
 
-        # TODO update combo box?
+        # TODO update layer view?
 
-        self.show_dot(self.combo)
+        self.show_dot(None)
 
     def pane_active(self):
         return self.get_child2() is not None
@@ -143,6 +175,17 @@ class Page(Gtk.HPaned):
             p.remove(c)
 
         self.show_all()
+
+        #If the sidepane is open and the user switches to a page which he
+        #hasn't switched to before, the layer list is printed without any
+        #list entries. Besides that, occasionally, the list is also printed
+        #emptily if the sidepane was *not* active during the page switch.
+        #The tree model data, however, are not empty. If the sidepane is closed
+        #and opened again, everything is rendered properly again. So there
+        #might be a problem with signals. More concretely, the "preferred size"
+        #of the TreeView might be incorrect for some reasons.
+        #Workaround: call the following function:
+        self.layerview.treeview().get_preferred_size()
 
     def find_text(self, entry_text):
         found_items = []
@@ -246,7 +289,7 @@ class Page(Gtk.HPaned):
         return self.model._next_layer(current)
 
     def _current_layer(self):
-        return self.model.by_name[self.combo.get_active_id()]
+        return self.model.by_name[self.layerview.selected_layers()[0]]
 
     def on_tree_selection_changed(self, selection):
         model, treeiter = selection.get_selected()
