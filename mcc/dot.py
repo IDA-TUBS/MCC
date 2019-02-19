@@ -49,6 +49,19 @@ class DotFactory:
         self.copy_style('comp_arch', 'comp_arch-pre1')
         self.copy_style('comp_arch', 'comp_arch-pre2')
 
+
+        # generate ids for all objects
+        nid = 1
+        eid = 1
+        for layer in self.model.by_order:
+            for node in layer.graph.nodes():
+                layer.graph.node_attributes(node)['id'] = 'c%d' % nid
+                nid += 1
+
+            for edge in layer.graph.edges():
+                layer.graph.edge_attributes(edge)['id'] = 'e%d' % eid
+                eid += 1
+
     def copy_style(self, from_name, to_name):
         self.dot_styles[to_name] = self.dot_styles[from_name]
 
@@ -104,13 +117,6 @@ class DotFactory:
 
         # write subsystem nodes
         i = 1
-        n = 1
-
-        eid = 1
-        for edge in layer.graph.edges():
-            if 'id' not in layer.graph.edge_attributes(edge):
-                layer.graph.edge_attributes(edge)['id'] = 'e%d' % eid
-                eid += 1
 
         clusternodes = dict()
         clusters = dict()
@@ -135,9 +141,6 @@ class DotFactory:
                    or sub.name() != layer._get_param_value('mapping', comp).name():
                     continue
 
-                layer.graph.node_attributes(comp)['id'] = "c%d" % n
-                n += 1
-
                 # remember first node as cluster node
                 if sub not in clusternodes:
                     clusternodes[sub] = layer.graph.node_attributes(comp)['id']
@@ -158,9 +161,6 @@ class DotFactory:
             # only process children in this subsystem
             if layer._get_param_value('mapping', comp) is not None:
                 continue
-
-            layer.graph.node_attributes(comp)['id'] = "c%d" % n
-            n += 1
 
             # remember first node as cluster node
             if None not in clusternodes:
@@ -185,7 +185,7 @@ class DotFactory:
                 if pfg.edge_attributes(e)['undirected']:
                     style = ','.join(self.dot_styles['platform']['edge']['undirected'])
                 else:
-                    style = ','.joint(self.dot_styles['platform']['edge']['directed'])
+                    style = ','.join(self.dot_styles['platform']['edge']['directed'])
                 output.write("  %s -> %s [ltail=%s, lhead=%s, %s];\n" % (clusternodes[e.source],
                                                       clusternodes[e.target],
                                                       clusters[e.source],
@@ -202,30 +202,6 @@ class DotFactory:
         output.write("}\n")
 
     def _output_multiple_layers(self, layernames, output):
-        # assert that layers direct neighbours
-        expect_next = self.model.by_name[layernames[0]]
-        for l in layernames:
-            layer = self.model.by_name[l]
-            if layer is not expect_next:
-                raise NotImplementedError()
-
-            expect_next = self.model._next_layer(layer)
-
-        # first, generate ids for all objects
-        nid = 1
-        eid = 1
-        for layername in layernames:
-            layer = self.model.by_name[layername]
-            for node in layer.graph.nodes():
-                if 'id' not in layer.graph.node_attributes(node):
-                    layer.graph.node_attributes(node)['id'] = 'c%d' % nid
-                    nid += 1
-
-            for edge in layer.graph.edges():
-                if 'id' not in layer.graph.edge_attributes(edge):
-                    layer.graph.edge_attributes(edge)['id'] = 'e%d' % eid
-                    eid += 1
-
         output.write("digraph {\n")
         output.write("  compound=true;\n")
 
@@ -253,16 +229,6 @@ class DotFactory:
 
             output.write("  }\n")
 
-#        # third, connect layers
-#        for layername in layernames[:-1]:
-#            layer = self.model.by_name[layername]
-#            nextl = self.model._next_layer(layer)
-#            for node in layer.graph.nodes():
-#                child_objects = layer._get_param_value(nextl.name, node)
-#                for child in child_objects:
-#                    if not isinstance(child, Edge):
-#                        self._output_map_edge(layer, nextl, output, node, child)
-
         output.write("  }\n")
 
     def write_layer(self, layer, filename):
@@ -280,5 +246,5 @@ class DotFactory:
 
     def get_layers(self, layers):
         output = io.StringIO()
-        self._output_multiple_layer(layers, output)
+        self._output_multiple_layers(layers, output)
         return output.getvalue()
