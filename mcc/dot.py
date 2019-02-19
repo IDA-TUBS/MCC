@@ -13,6 +13,7 @@ import logging
 import io
 
 from mcc.framework import Registry, Layer
+from mcc.graph import Edge
 
 class DotFactory:
     def __init__(self, model, platform=None):
@@ -23,20 +24,25 @@ class DotFactory:
         self.add_style(
                 'func_arch',
                 { 'node' : ['shape=rectangle', 'colorscheme=set39', 'fillcolor=5', 'style=filled'],
-                  'edge' : 'arrowhead=normal, style=dotted, colorscheme=set39, color=3',
-                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' })
+                  'edge' : 'arrowhead=normal, style=dotted, colorscheme=set39, color=5',
+                  'map'  : 'cosntraint=false, arrowhead=none, style=dashed, color=dimgray' })
 
         self.add_style(
                 'comp_arch',
                 { 'node' : ['shape=component', 'colorscheme=set39', 'fillcolor=6', 'style=filled'],
                   'edge' : 'arrowhead=normal',
-                  'map'  : 'arrowhead=none, style=dashed, color=dimgray' })
+                  'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
 
         self.add_style(
                 'platform',
                 { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                                'edge' : {'undirected' : ['arrowhead=none', 'arrowtail=none'],
                                          'directed'   : [] } })
+
+        self.add_style(
+                'layer',
+                { 'node' : ["shape=tab", "fillcolor=gray93", "style=filled"] })
+
 
         self.copy_style('func_arch', 'comm_arch')
         self.copy_style('comp_arch', 'comp_inst')
@@ -75,7 +81,15 @@ class DotFactory:
                                                        label,
                                                        style))
 
-    def _output_layer(self, layername, output):
+    def _output_map_edge(self, layer1, layer2, dotfile, node1, node2, prefix="  "):
+        style = self.dot_styles[layer1.name]['map']
+
+        dotfile.write("%s%s -> %s [%s];\n" % (prefix,
+                                              layer1.graph.node_attributes(node1)['id'],
+                                              layer2.graph.node_attributes(node2)['id'],
+                                              style))
+
+    def _output_single_layer(self, layername, output):
         layer = self.model.by_name[layername]
 
         output.write("digraph {\n")
@@ -187,11 +201,84 @@ class DotFactory:
 
         output.write("}\n")
 
+    def _output_multiple_layers(self, layernames, output):
+        # assert that layers direct neighbours
+        expect_next = self.model.by_name[layernames[0]]
+        for l in layernames:
+            layer = self.model.by_name[l]
+            if layer is not expect_next:
+                raise NotImplementedError()
+
+            expect_next = self.model._next_layer(layer)
+
+        # first, generate ids for all objects
+        nid = 1
+        eid = 1
+        for layername in layernames:
+            layer = self.model.by_name[layername]
+            for node in layer.graph.nodes():
+                if 'id' not in layer.graph.node_attributes(node):
+                    layer.graph.node_attributes(node)['id'] = 'c%d' % nid
+                    nid += 1
+
+            for edge in layer.graph.edges():
+                if 'id' not in layer.graph.edge_attributes(edge):
+                    layer.graph.edge_attributes(edge)['id'] = 'e%d' % eid
+                    eid += 1
+
+        output.write("digraph {\n")
+        output.write("  compound=true;\n")
+
+        # second, add layer nodes (each layer within a cluster node)
+        i = 1
+        for layername in layernames:
+            layer = self.model.by_name[layername]
+
+            clusterid = "cluster%d" % i
+            i += 1
+
+            label = 'label="%s";' % layername
+            style = self.dot_styles['layer']['node']
+
+            output.write("  subgraph %s {\n    %s\n" % (clusterid, label))
+            for s in style:
+                output.write("    %s;\n" % s)
+
+            for comp in layer.graph.nodes():
+                self._output_node(layer, output, comp, prefix="    ")
+
+            # add internal dependencies
+            for edge in layer.graph.edges():
+                self._output_edge(layer, output, edge, prefix="    ")
+
+            output.write("  }\n")
+
+#        # third, connect layers
+#        for layername in layernames[:-1]:
+#            layer = self.model.by_name[layername]
+#            nextl = self.model._next_layer(layer)
+#            for node in layer.graph.nodes():
+#                child_objects = layer._get_param_value(nextl.name, node)
+#                for child in child_objects:
+#                    if not isinstance(child, Edge):
+#                        self._output_map_edge(layer, nextl, output, node, child)
+
+        output.write("  }\n")
+
     def write_layer(self, layer, filename):
         with open(filename, 'w+') as dotfile:
-            self._output_layer(layer, dotfile)
+            self._output_single_layer(layer, dotfile)
+
+    def write_layers(self, layers, filename):
+        with open(filename, 'w+') as dotfile:
+            self._output_multiple_layers(layers, dotfile)
 
     def get_layer(self, layer):
         output = io.StringIO()
-        self._output_layer(layer, output)
+        self._output_single_layer(layer, output)
+        return output.getvalue()
+
+    def get_layers(self, layers):
+        output = io.StringIO()
+        self._output_multiple_layer(layers, output)
         return output.getvalue()
