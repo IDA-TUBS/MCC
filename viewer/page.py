@@ -15,9 +15,21 @@ from mcc.importexport import PickleImporter
 from mcc import graph as mccgraph
 
 class ModelItem():
-    def __init__(self, layer, obj):
+    def __init__(self, layer, obj, link=True, param=None):
         self.layer = layer
         self.obj   = obj
+        self.param = param
+        self.expanded = False
+        self.link     = link
+
+    def is_link(self):
+        return self.link
+
+    def is_expandable(self):
+        return not self.expanded
+
+    def expand(self):
+        self.expanded = True
 
 
 class ParamView():
@@ -109,12 +121,13 @@ class Page(Gtk.HPaned):
         self.layerview.set_layers(self.dotfactory.model.by_name.keys())
 
         self.paramview = ParamView()
+        self.paramview.treeview().connect('row-activated', self.on_param_activated)
 
         scroll = Gtk.ScrolledWindow()
         scroll.add_with_viewport(self.paramview.treeview())
 
         select = self.paramview.treeview().get_selection()
-        select.connect('changed', self.on_tree_selection_changed)
+        select.connect('changed', self.on_param_selection_changed)
 
         self.sidepane.pack_start(self.layerview.treeview(), False, False, 0)
         self.sidepane.pack_end(scroll, True, True, 0)
@@ -145,7 +158,7 @@ class Page(Gtk.HPaned):
             self.show_all()
             return
         try:
-            dot = self.dotfactory.get_layer(layers[0]).encode('utf-8')
+            dot = self.dotfactory.get_layers(layers).encode('utf-8')
             if self.dotwidget.set_dotcode(dot):
                 self.dotwidget.zoom_to_fit()
 
@@ -205,24 +218,16 @@ class Page(Gtk.HPaned):
         dlg.run()
         dlg.destroy()
 
-    def _gen_hashable_value(self, value):
-        #TODO make the objects hashable directly? Currently, we might lose
-        #information about the number of elements if the string representation
-        #of an object is ambiguous.
-        if type(value) in {set, frozenset}:
-            return frozenset(map(self._gen_hashable_value, value))
-        return repr(value)
-
-    def _stylize(self, param, candidates, value):
+    def _stylize(self, layer, param, candidates, value):
         style = dict()
         name = param
         if param in self.model.by_name.keys():
             # use italic for inter-layer relations
             style['style'] = Pango.Style.ITALIC
 
-            if self.model.by_name[param] == self._parent_layer():
+            if self.model.by_name[param] == self._parent_layer(layer):
                 name = 'Parent layer (%s)' % param
-            elif self.model.by_name[param] == self._child_layer():
+            elif self.model.by_name[param] == self._child_layer(layer):
                 name = 'Child layer (%s)' % param
             else:
                 name = 'Layer (%s)' % param
@@ -239,10 +244,23 @@ class Page(Gtk.HPaned):
 
     def _link(self, layer, value):
         if value in layer.graph.nodes():
-            return ModelItem(layer, value)
+            return {ModelItem(layer, value)}
 
         if value in layer.graph.edges():
-            return ModelItem(layer, value)
+            return {ModelItem(layer, value)}
+
+        return None
+
+    def _links(self, layer, value):
+        assert type(value) in {set,frozenset}
+        links = set()
+        for element in value:
+            link = self._link(layer, element)
+            if link is not None:
+                links.update(link)
+
+        if len(links):
+            return links
 
         return None
 
@@ -254,61 +272,104 @@ class Page(Gtk.HPaned):
             setnode = self.paramview.add_treenode(parent,
                                                   'List',
                                                   style,
-                                                  extra_style)
+                                                  extra_style,
+                                                  link_item=self._links(layer, value))
             for element in value:
                 self.paramview.add_treenode(setnode, repr(element), style, extra_style,
                                             link_item=self._link(layer, element))
 
-    def _add_paramtree(self, parent, params):
-        # TODO toggle params that store inter-layer relations
-        for name, content in params.items():
+    def _add_paramtree(self, current_layer, parent, obj):
+        if isinstance(obj, mccgraph.Edge):
+            params = current_layer.graph.edge_attributes(obj)['params']
+        else:
+            params = current_layer.graph.node_attributes(obj)['params']
+
+        for param, content in params.items():
 
             value      = content['value']
             candidates = content['candidates']
 
-            layer = self._current_layer()
-            if name in self.model.by_name.keys():
-                layer = self.model.by_name[name]
+            expand = True
+            if param in self.model.by_name.keys():
+                expand = False
 
-            name, style = self._stylize(name, candidates, value)
-            node = self.paramview.add_treenode(parent, name, style, {'underline' : Pango.Underline.SINGLE})
+            expand_link = None
+            if not expand:
+                expand_link = {ModelItem(current_layer, obj, link=False, param=param)}
 
-            self._add_value(node, value, layer, style, {'weight' : 800})
+            name, style = self._stylize(current_layer, param, candidates, value)
+            node = self.paramview.add_treenode(parent,
+                                               name,
+                                               style,
+                                               {'underline' : Pango.Underline.SINGLE},
+                                               link_item=expand_link)
+            if expand:
+                self._expand_param(node, current_layer, obj, param, style=style)
 
-            for candidate in candidates:
-                if candidate == value:
-                    continue
-                self._add_value(node, candidate, layer, style)
+    def _expand_param(self, parent, layer, obj, param, style=None):
+        value      = layer._get_param_value(param, obj)
+        candidates = layer._get_param_candidates(param, obj)
 
-    def _parent_layer(self):
-        current = self._current_layer()
+        if style is None:
+            tmp, style = self._stylize(layer, param, candidates, value)
+
+        if param in self.model.by_name.keys():
+            layer  = self.model.by_name[param]
+
+        self._add_value(parent, value, layer, style, {'weight' : 800})
+
+        for candidate in candidates:
+            if candidate == value:
+                continue
+            self._add_value(parent, candidate, layer, style)
+
+    def _parent_layer(self, current):
         return self.model._prev_layer(current)
 
-    def _child_layer(self):
-        current = self._current_layer()
+    def _child_layer(self, current):
         return self.model._next_layer(current)
 
-    def _current_layer(self):
-        return self.model.by_name[self.layerview.selected_layers()[0]]
+    def _current_layers(self):
+        return [self.model.by_name[x] for x in self.layerview.selected_layers()]
 
-    def on_tree_selection_changed(self, selection):
+    def on_param_activated(self, treeview, path, column):
+        # expand subtree
+        model, treeiter = treeview.get_selection().get_selected()
+        items = model[treeiter][0]
+        if items is not None:
+            for item in items:
+                if item.is_expandable():
+                    if item.param is not None:
+                        self._expand_param(treeiter, item.layer, item.obj, item.param)
+                    else:
+                        self._add_paramtree(item.layer, treeiter, item.obj)
+                    treeview.expand_row(path, True)
+                    item.expand()
+
+            treeview.get_model().set_value(treeiter, 0, items)
+
+    def on_param_selection_changed(self, selection):
         model, treeiter = selection.get_selected()
         if treeiter is not None and model[treeiter][0] is not None:
-            item = model[treeiter][0]
-            if isinstance(item.obj, mccgraph.Edge):
-                # TODO edge object do not have an URL in upstream xdot
-                url = item.layer.graph.edge_attributes(item.obj)['id']
+            found_items = set()
+            for item in model[treeiter][0]:
+                if not item.is_link():
+                    continue
+
+                if isinstance(item.obj, mccgraph.Edge):
+                    # TODO edge object do not have an URL in upstream xdot
+                    url = item.layer.graph.edge_attributes(item.obj)['id']
+                else:
+                    url = item.layer.graph.node_attributes(item.obj)['id']
+
+                for element in self.dotwidget.graph.nodes + self.dotwidget.graph.edges:
+                    if element.url == url:
+                        found_items.add(element)
+
+            if len(found_items):
+                self.dotwidget.set_highlight(found_items, search=True)
             else:
-                url = item.layer.graph.node_attributes(item.obj)['id']
-
-            found = False
-            for element in self.dotwidget.graph.nodes + self.dotwidget.graph.edges:
-                if element.url == url:
-                    found = True
-                    self.dotwidget.set_highlight({element}, search=True)
-
-            if not found:
-                print("Cannot find selected item %s with url %s." % (item, url))
+                self.dotwidget.set_highlight(None, search=True)
 
         else:
             self.dotwidget.set_highlight(None, search=True)
@@ -316,25 +377,24 @@ class Page(Gtk.HPaned):
     def on_url_clicked(self, widget, url, event):
         self.paramview.clear()
 
-        # TODO put this into some class (ModelSearch)?
-        current_layer = self._current_layer()
         # find node
         title = "%s not found in graph" % url
-        for node in current_layer.graph.nodes():
-            if current_layer.graph.node_attributes(node)['id'] == url:
-                #TODO underscores aren't properly rendered
-                title = 'Parameters for %s' % node.label()
+        for current_layer in self._current_layers():
+            for node in current_layer.graph.nodes():
+                if current_layer.graph.node_attributes(node)['id'] == url:
+                    #TODO underscores aren't properly rendered
+                    title = 'Parameters for %s (%s)' % (node.label(), current_layer.name)
 
-                nodetree = self.paramview.add_treenode(None, "Node Parameters", dict(),
-                                                       link_item=ModelItem(current_layer, node))
-                params = current_layer.graph.node_attributes(node)['params']
-                self._add_paramtree(nodetree, params)
+                    nodetree = self.paramview.add_treenode(None, "Node Parameters",
+                                                           {'background' : 'lightgray'},
+                                                           link_item={ModelItem(current_layer, node)})
+                    self._add_paramtree(current_layer, nodetree, node)
 
-                for edge in current_layer.graph.out_edges(node):
-                    edgetree = self.paramview.add_treenode(None, "Edge Parameters", dict(),
-                                                           link_item=ModelItem(current_layer, edge))
-                    params = current_layer.graph.edge_attributes(edge)['params']
-                    self._add_paramtree(edgetree, params)
+                    for edge in current_layer.graph.out_edges(node):
+                        edgetree = self.paramview.add_treenode(None, "Edge Parameters",
+                                                               { 'background' : 'lightgray' },
+                                                               link_item={ModelItem(current_layer, edge)})
+                        self._add_paramtree(current_layer, edgetree, edge)
 
         self.paramview.refresh(title)
         return True
