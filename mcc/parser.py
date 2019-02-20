@@ -128,6 +128,32 @@ class Repository(XMLParser):
         def matches(self, rhs):
             return self.name() == rhs.name()
 
+        def out_traffic(self):
+            traffic = self.xml_node.find('out-traffic')
+            size = None
+            msec = None
+            pksz = None
+            if traffic is not None:
+                size = self._parse_size(traffic.get('size'))
+                msec = int(traffic.get('interval_ms'))
+                pksz = self._parse_size(traffic.get('package_size'))
+
+            return size, msec, pksz
+
+        def _parse_size(self, size):
+            if size is None:
+                return None
+            if size[-1] == 'K':
+                return int(size[:-1]) * 1024
+            if size[-1] == 'M':
+                return int(size[:-1]) * 1024 * 1024
+            if size[-1] == 'G':
+                return int(size[:-1]) * 1024 * 1024 * 1024
+            if size[-1] == 'B':
+                return int(size[:-1])
+
+            return int(size)
+
         def __eq__(self, rhs):
             return self.xml_node == rhs.xml_node
 
@@ -992,6 +1018,7 @@ class PlatformParser:
         def __init__(self, xml_node, parent=None):
             self._root = xml_node
             self._parent = parent
+            self._state = dict()
 
         def _domain(self):
             domain = { self }
@@ -1043,6 +1070,12 @@ class PlatformParser:
                 return int(q.get('quantum'))
             else:
                 return 0
+
+        def set_state(self, name, value):
+            self._state[name] = value
+
+        def state(self, name):
+            return self._state[name]
 
         def same_singleton_domain(self, rhs):
             return len(self._domain() & rhs._domain()) > 0

@@ -20,19 +20,67 @@ from xml.etree import ElementTree as ET
 
 class StatusGenerator:
     class DeviceStatus:
-        def __init__(self, name):
-            self._name = name
-            return
+        def __init__(self, name, device):
+            self._name   = name
+            self._device = device
+            self._cfgfound = 'false'
+            self._cfgokay  = 'false'
+            self._cfgerror = None
+
+            self._model    = None
+            self._platform = None
 
         def generate_xml(self, root):
-            root = ET.SubElement(root, 'mcc_status', name=self._name)
+            status = ET.SubElement(root, 'mcc_status', name=self._name)
+
+            cfg = ET.SubElement(status, 'configuration', found=self._cfgfound, generated=self._cfgokay)
+            cfg.text = self._cfgerror
+
+            ET.SubElement(status, 'operationmode', name=self._device.opmode())
             # TODO fill with status information
 
-    def __init__(self, names):
+            if self._platform is not None:
+                metrics = ET.SubElement(status, 'metrics')
+                for sub in self._platform.platform_graph.nodes():
+                    if sub.static():
+                        continue
+
+                    node = ET.SubElement(metrics, 'subsystem', name=sub.name())
+                    for name in ['ram', 'caps']:
+                        provided  = sub.quantum(name)
+                        remaining = sub.state('%s-remaining' % name)
+                        ET.SubElement(node, name,  provided=str(provided),  requested=str(provided-remaining))
+
+                    # outbound network traffic (currently, we do not distinguish between comms in the
+                    # platform model, thus we can only sum up the traffic per processing resource)
+                    value = sub.state('out_traffic')
+                    ET.SubElement(node, 'out_traffic', byte_s=str(value))
+
+                    # TODO cpu load
+
+    def __init__(self, devices):
 
         self._devices = dict()
-        for name in names:
-            self._devices[name] = self.DeviceStatus(name)
+        for name, device in devices.items():
+            self._devices[name] = self.DeviceStatus(name, device)
+
+    def mcc_result(self, name, found, platform=None, model=None):
+        if found:
+            self._devices[name]._cfgfound = 'true'
+            assert platform is not None
+            assert model is not None
+            self._devices[name]._model = model
+            self._devices[name]._platform = platform
+        else:
+            self._devices[name]._cfgfound = 'false'
+
+    def cfg_result(self, name, generated, error=None):
+        if generated:
+            self._devices[name]._cfgokay = 'true'
+        else:
+            self._devices[name]._cfgokay = 'false'
+
+        self._devices[name]._cfgerror = error
 
     def write_to_file(self, filename):
         root = ET.Element('xml')
@@ -72,12 +120,15 @@ class ControlParser:
 
         def query_filename(self):
             name = self._xml_node.get('name')
-            mode = self._xml_node.find('operationmode').get('name')
+            mode = self.opmode()
             hw   = 'accel' if self._xml_node.find('hw_acceleration').get('value') == 'true' else 'normal'
             return self._basepath + self._mode_map[name][mode][hw]
 
         def flux(self):
             return int(self._xml_node.find('flux').get('value'))
+
+        def opmode(self):
+            return self._xml_node.find('operationmode').get('name')
 
 
     def __init__(self, xml_file, basepath):
@@ -116,7 +167,7 @@ class Mcc:
             else:
                 logging.error("Unable to find device %s in %s" % (name, self._filename))
 
-        self._devstate = StatusGenerator(self._devices.keys())
+        self._devstate = StatusGenerator(self._devices)
 
     def execute(self):
         results = dict()
@@ -159,14 +210,20 @@ class Mcc:
 
                 results[name] = (pf_model, model)
 
+                self._devstate.mcc_result(name, found=True, platform=pf_model, model=model)
+
             except Exception as e:
                 failed = True
+                self._devstate.mcc_result(name, found=False)
                 import traceback
                 traceback.print_exc()
                 print(e)
 
         if failed:
             logging.error("Do not generate configs because of failed devices.")
+            for name in self._devices.keys():
+                self._devstate.cfg_result(name, generated=False,
+                                         error="Configs not generated because search failed for at least one device.")
             return
 
         # generate configs
@@ -174,6 +231,7 @@ class Mcc:
             # generate <config> from model
             configurator = GenodeConfigurator(self._outpath+name+'-', pf_model)
             configurator.create_configs(model, layer_name='comp_inst')
+            self._devstate.cfg_result(name, generated=True)
 
         # write status reports
         for name in self._devices.keys():

@@ -14,6 +14,91 @@ from mcc.graph import *
 from mcc import model
 from mcc import parser
 
+class NetworkEngine(AnalysisEngine):
+    def __init__(self, layer, max_byte_s=10*1024*1024):
+        acl = { layer        : {'reads' : set(['mapping','component','service','connections']) }}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+        self.max_byte_s = max_byte_s
+
+    def _find_sink(self, obj, visited):
+        # find 
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+        # trace ROM services
+        for edge in self.layer.graph.in_edges(obj):
+            if edge.source in visited:
+                continue
+
+            other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
+            if other_pfc is not None and pfc != other_pfc:
+                continue
+
+            for con in self.layer.get_param_value(self, 'connections', edge):
+                service = con.source_service
+                if service.name() == 'ROM':
+                    provided = comp.provides_services(name=con.target_service.name(),
+                                                      ref =con.target_service.ref())
+
+                    assert(len(provided) == 1)
+
+                    size, msec, pksz = provided[0].out_traffic()
+                    if size is None:
+                        sink = self._find_sink(edge.source, visited + {obj})
+                        if sink is not None:
+                            return sink
+
+        # trace Network services
+        for edge in self.layer.graph.out_edges(obj):
+            service = self.layer.get_param_value(self, 'service', edge)
+            if service.function == 'Network':
+                return edge.target
+
+        return None
+
+    def check(self, obj, first):
+        # for each subsystem, sum up outbound network traffic
+        if first:
+            self.state = dict()
+
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
+        if pfc is None: # skip unmapped components (proxies)
+            return True
+
+        if pfc not in self.state:
+            self.state[pfc] = 0
+
+        # only evaluate and trace provided ROM services that have an out-traffic node
+        comp = self.layer.get_param_value(self, 'component', obj)
+        for edge in self.layer.graph.in_edges(obj):
+            other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
+            if other_pfc is not None and pfc != other_pfc:
+                continue
+
+            for con in self.layer.get_param_value(self, 'connections', edge):
+                service = con.source_service
+                if service.name() == 'ROM':
+                    provided = comp.provides_services(name=con.target_service.name(),
+                                                      ref =con.target_service.ref())
+
+                    assert(len(provided) == 1)
+
+                    size, msec, pksz = provided[0].out_traffic()
+                    if size is None:
+                        continue
+
+                    sink = self._find_sink(edge.source, {obj})
+                    if sink is None:
+                        continue
+
+                    self.state[pfc] += size / (float(msec)/1000)
+                    break
+
+        pfc.set_state('out_traffic', int(self.state[pfc]))
+
+        assert self.state[pfc] <= self.max_byte_s, "%s > %s" % (self.state[pfc], self.max_byte_s)
+        return self.state[pfc] <= self.max_byte_s
+
+
 class QuantumEngine(AnalysisEngine):
     def __init__(self, layer, name):
         acl = { layer        : {'reads' : set(['mapping']) }}
@@ -34,6 +119,8 @@ class QuantumEngine(AnalysisEngine):
         if self.state[pfc] < 0:
             logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
                                                                  pfc.quantum(self.name)))
+
+        pfc.set_state('%s-remaining' % self.name, self.state[pfc])
 
         return self.state[pfc] >= 0
 

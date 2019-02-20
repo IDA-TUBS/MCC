@@ -28,10 +28,11 @@ integration
 		[X] support management of multiple devices?
 		[_] add DummyReliabilityAnalysisEngine
 		[_] produce status report
-			[_] MCC status
-			[_] operation mode (from query)
+			[X] MCC status
+			[X] operation mode (from query)
 			[_] analysis engine results
-				[_] network load
+				[X] RAM, CAPs
+				[X] network load
 				[_] CPU load
 				[_] reliability
 				[_] t.b.c.

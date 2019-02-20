@@ -142,6 +142,9 @@ class MccBase:
         connect.add_operation(Transform(se, ca, name='connect'))
         model.add_step(connect)
 
+        # check network bandwith
+        model.add_step_unsafe(NodeStep(Check(NetworkEngine(fc), name='network bandwith')))
+
         # copy mapping from slayer to dlayer
         model.add_step(CopyMappingStep(fc, ca))
 
