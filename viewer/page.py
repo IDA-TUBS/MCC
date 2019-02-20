@@ -158,7 +158,11 @@ class Page(Gtk.HPaned):
             self.show_all()
             return
         try:
-            dot = self.dotfactory.get_layers(layers).encode('utf-8')
+            if len(layers) > 1:
+                dot = self.dotfactory.get_layers(layers).encode('utf-8')
+            else:
+                dot = self.dotfactory.get_layer(layers[0]).encode('utf-8')
+
             if self.dotwidget.set_dotcode(dot):
                 self.dotwidget.zoom_to_fit()
 
