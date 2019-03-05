@@ -15,11 +15,11 @@ from mcc.importexport import PickleImporter
 from mcc import graph as mccgraph
 
 class ModelItem():
-    def __init__(self, layer, obj, link=True, param=None):
+    def __init__(self, layer, obj, link=True, param=None, expanded=False):
         self.layer = layer
         self.obj   = obj
         self.param = param
-        self.expanded = False
+        self.expanded = expanded
         self.link     = link
 
     def is_link(self):
@@ -391,13 +391,13 @@ class Page(Gtk.HPaned):
 
                     nodetree = self.paramview.add_treenode(None, "Node Parameters",
                                                            {'background' : 'lightgray'},
-                                                           link_item={ModelItem(current_layer, node)})
+                                                           link_item={ModelItem(current_layer, node, expanded=True)})
                     self._add_paramtree(current_layer, nodetree, node)
 
                     for edge in current_layer.graph.out_edges(node):
                         edgetree = self.paramview.add_treenode(None, "Edge Parameters",
                                                                { 'background' : 'lightgray' },
-                                                               link_item={ModelItem(current_layer, edge)})
+                                                               link_item={ModelItem(current_layer, edge, expanded=True)})
                         self._add_paramtree(current_layer, edgetree, edge)
 
         self.paramview.refresh(title)
