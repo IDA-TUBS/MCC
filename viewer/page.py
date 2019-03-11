@@ -288,6 +288,17 @@ class Page(Gtk.HPaned):
         else:
             params = current_layer.graph.node_attributes(obj)['params']
 
+        if hasattr(obj, 'viewer_properties'):
+            propnode = self.paramview.add_treenode(parent,
+                                                   'Properties',
+                                                   dict(),
+                                                   None,
+                                                   None)
+            for prop, value in obj.viewer_properties().items():
+                self.paramview.add_treenode(propnode,
+                                            '%s: %s' % (prop, value),
+                                            dict(), None, None)
+
         for param, content in params.items():
 
             value      = content['value']
