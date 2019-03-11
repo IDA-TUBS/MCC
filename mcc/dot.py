@@ -34,6 +34,12 @@ class DotFactory:
                   'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
 
         self.add_style(
+                'task_graph',
+                { 'node' : ['shape=ellipse', 'colorscheme=set39', 'fillcolor=9', 'style=filled'],
+                  'edge' : 'arrowhead=normal',
+                  'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
+
+        self.add_style(
                 'platform',
                 { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                                'edge' : {'undirected' : ['arrowhead=none', 'arrowtail=none'],

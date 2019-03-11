@@ -387,8 +387,12 @@ class Repository(XMLParser):
 
                 objects = set()
                 for time_node in timing.findall('on-time'):
-                    objects.update(self._taskgraph_objects(time_node,
+                    objects.update(self._taskgraph_objects(time_node, None,
                                                            period=time_node.get('period')))
+
+                # on-interrupt
+                for interrupt_node in timing.findall('on-interrupt'):
+                    objects.update(self._taskgraph_objects(interrupt_node, 'interrupt'))
 
                 # link to junctions
                 for task in objects:

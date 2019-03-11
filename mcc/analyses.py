@@ -13,6 +13,98 @@ from mcc.framework import *
 from mcc.graph import *
 from mcc import model
 from mcc import parser
+from mcc.taskmodel import *
+
+class TaskgraphEngine(AnalysisEngine):
+    def __init__(self, layer, target_layer):
+        """ Transforms a component graph into a task graph.
+        """
+        acl = { layer        : {'reads' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='tasks', acl=acl)
+        self.target_layer = target_layer
+
+    def map(self, obj, candidates):
+        """ Pulls taskgraph objects from repository
+        """
+        assert candidates is None
+
+        if isinstance(obj, model.Instance):
+            component = obj.component
+        else:
+            component = obj
+
+        # get time-triggered taskgraph
+        tasks = component.taskgraph_objects()
+
+        # for each incoming signal:
+        #   add corresponding taskgraph objects
+#        raise NotImplementedError()
+
+        # for each rpc call in 'tasks':
+        #   find corresponding server and pull taskgraph objects from repo
+#        raise NotImplementedError()
+
+        return set([frozenset(tasks)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+    def check(self, obj, first):
+        """ Check task graph consistency 
+        """
+        taskobjects = self.layer.get_param_value(self, self.param, obj)
+
+        # component may have no tasks, which is an indicator for a superfluous component
+        # but not necessarily an error
+        if taskobjects is None:
+            logging.warning("No tasks found for component %s" % obj)
+        elif len(taskobjects) == 0:
+            logging.warning("No tasks found for component %s" % obj)
+
+        tasks = (t for t in taskobjects if isinstance(t, Task))
+        links = (t for t in taskobjects if isinstance(t, Tasklink))
+
+        # check for unconnected tasks
+        for t in tasks:
+            # There must not be a client/server placeholder in the taskgraph
+            if t.expect_in == 'client' or t.expect_in == 'server':
+                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % obj)
+                return False
+
+            # resulting taskgraph may still contain interrupt or sender placeholders,
+            #  junction placeholders must at least have one connection though
+            if t.expect_in == 'junction':
+                connections = 0
+                for l in links:
+                    if l.target == t:
+                        connections += 1
+
+                if connections == 0:
+                    logging.error("Junction placeholder (in) present in taskgraph for component %s" % obj)
+                    return False
+                elif connections > 1 and t.expect_in != 'junction':
+                    logging.error("Multiple connections to junction taskgraph for component %s" % obj)
+                    return False
+
+            if t.expect_out == 'server':
+                logging.error("Server placeholder (out) present in taskgraph for component %s" % obj)
+                return False
+
+        return True
+
+    def transform(self, obj, target_layer):
+        # TODO create edges for placeholders 'sender' and 'receiver'
+        # TODO (optional) if we need set params, convert to GraphObj
+        return self.layer.get_param_value(self, self.param, obj)
+
+    def source_types(self):
+        return tuple({model.Instance, parser.Repository.Component})
+
+    def target_types(self):
+        return tuple({Task})
 
 class NetworkEngine(AnalysisEngine):
     def __init__(self, layer, max_byte_s=10*1024*1024):
