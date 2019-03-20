@@ -227,14 +227,6 @@
 				</xs:complexContent>
 			</xs:complexType>
        </xs:element>
-       <xs:element name="on-interrupt" minOccurs="1" maxOccurs="1">
-			<xs:complexType>
-				<xs:complexContent>
-					<xs:extension base="TaskType">
-					</xs:extension>
-				</xs:complexContent>
-			</xs:complexType>
-       </xs:element>
        <xs:element name="on-rpc" minOccurs="1" maxOccurs="1">
 			<xs:complexType>
 				<xs:complexContent>
@@ -255,7 +247,6 @@
                        <xs:restriction base="xs:string">
                           <xs:enumeration value="AND" />
                           <xs:enumeration value="OR" />
-                          <xs:enumeration value="DEMUX" />
                        </xs:restriction>
                     </xs:simpleType>
                  </xs:attribute>

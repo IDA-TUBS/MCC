@@ -512,7 +512,7 @@ class Layer:
                 inserted.add(self.graph.add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
-        elif isinstance(obj, set) or isinstance(obj, list) or isinstance(obj, frozenset):
+        elif isinstance(obj, set) or isinstance(obj, list):
 
             # first add all nodes and remember edges
             edges = set()
@@ -669,7 +669,7 @@ class Layer:
         Returns:
             Values for the given param and object. None if parameter is not present.
         """
-        assert ae.check_acl(self, param, 'reads'), "read access to %s not granted" % param
+        assert(ae.check_acl(self, param, 'reads'))
 
         if self.dependency_tracker:
             self.dependency_tracker.track_read(self, obj, param)
@@ -1453,28 +1453,27 @@ class Transform(Operation):
             self.source_layer.start_tracking(self)
 
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
-            if not new_objs:
-                logging.warning("transform() did not return any object (returned: %s)" % new_objs)
-            else:
-                # remark: also returns already existing objects
-                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
-                assert len(inserted) > 0
+            assert new_objs, "transform() did not return any object"
 
-                for o in inserted:
-                    if not isinstance(o, Edge):
-                        assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
-                                self.target_layer.node_types())
+            # remark: also returns already existing objects
+            inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
+            assert len(inserted) > 0
 
-                self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
-                for o in inserted:
-                    src = self.target_layer._get_param_value(self.source_layer.name, o)
-                    if src is None:
-                        src = obj
-                    elif isinstance(src, set) or isinstance(src, frozenset):
-                        src.add(obj)
-                    else:
-                        src = { src, obj }
-                    self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
+            for o in inserted:
+                if not isinstance(o, Edge):
+                    assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
+                            self.target_layer.node_types())
+
+            self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
+            for o in inserted:
+                src = self.target_layer._get_param_value(self.source_layer.name, o)
+                if src is None:
+                    src = obj
+                elif isinstance(src, set):
+                    src.add(obj)
+                else:
+                    src = { src, obj }
+                self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
 
             self.source_layer.stop_tracking()
 

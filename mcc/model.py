@@ -13,7 +13,6 @@ import copy
 from mcc.parser import *
 from mcc.framework import *
 from mcc.backtracking import *
-from mcc.taskmodel import Task
 from mcc.dot import DotFactory
 
 class ServiceConstraints:
@@ -520,7 +519,6 @@ class SystemModel(BacktrackRegistry):
         self.add_layer(Layer('comp_arch-pre2', nodetypes={Repository.Component,Instance}))
         self.add_layer(Layer('comp_arch', nodetypes={Repository.Component,Instance}))
         self.add_layer(Layer('comp_inst', nodetypes={Instance}))
-        self.add_layer(Layer('task_graph', nodetypes={Task}))
 
         self.platform = platform
         self.repo = repo

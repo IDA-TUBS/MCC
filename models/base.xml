@@ -41,24 +41,18 @@
 	<component name="timer" singleton="true">
 	    <function name="TIMER" />
 		<provides>
-			<service name="Timer" ref="client"/>
+			<service name="Timer" />
 		</provides>
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
 		</requires>
-		<timing>
-		    <!-- we only model the rpc here, i.e. clients must use <on-time> //-->
-		    <on-rpc from_ref="client">
-		        <task name="configure" wcet="100" bcet="50"/>
-		    </on-rpc>
-		</timing>
 	</component>
 
 	<component name="nic_drv" singleton="true">
 		<function name="Network" />
 		<provides>
-			<service name="Nic" max_clients="1" ref="client">
+			<service name="Nic" max_clients="1">
 				<in-traffic size="10M" interval_ms="1000" />
 			</service>
 		</provides>
@@ -66,40 +60,18 @@
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
-		<timing>
-		    <on-signal from_ref="client">
-		        <task name="send" wcet="100" bcet="50"/>
-		    </on-signal>
-		    <on-interrupt>
-		        <task name="recv" wcet="100" bcet="50"/>
-		        <signal />
-		    </on-interrupt>
-		</timing>
 	</component>
 
 	<component name="nic_bridge" shareable="true">
 		<mux service="Nic" />
 		<provides>
-			<service name="Nic" ref='client' />
+			<service name="Nic" />
 		</provides>
 		<requires>
-			<service name="Nic" ref='driver' />
+			<service name="Nic" />
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
-		<timing>
-		    <on-signal from_ref="driver">
-		        <task name="recv" wcet="100" bcet="50"/>
-		        <signal junction="dispatch" />
-		    </on-signal>
-		    <on-signal from_ref="client">
-		        <task name="send" wcet="100" bcet="50"/>
-		        <signal to_ref="driver" />
-		    </on-signal>
-		    <junction name="dispatch" type="DEMUX">
-		        <signal to_ref="client" />
-		    </junction>
-		</timing>
 	</component>
 
 	<composite name="ROM_PROXY">

@@ -307,21 +307,6 @@ class MccBase:
 
         model.add_step(resources)
 
-    def _timing_check(self, model, slayer, dlayer):
-        """ Build taskgraph layer and perform timing checks
-        """
-
-        slayer = model.by_name[slayer]
-        tg     = model.by_name[dlayer]
-
-        ae = TaskgraphEngine(slayer, tg)
-
-        trafo = NodeStep(Map(ae, 'build taskgraph'))
-        trafo.add_operation(Assign(ae, 'build taskgraph'))
-        trafo.add_operation(Check(ae, 'build taskgraph'))
-        trafo.add_operation(Transform(ae, tg, 'build taskgraph'))
-
-        model.add_step(trafo)
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
@@ -406,8 +391,6 @@ class SimpleMcc(MccBase):
 
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
-
-        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
