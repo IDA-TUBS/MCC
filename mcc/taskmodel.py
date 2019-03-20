@@ -23,23 +23,20 @@ class Task:
         self.activation_period = 0
         self.activation_jitter = 0
 
-    def set_placeholder_in(self, expect, **kwargs):
-        assert expect == 'sender' or \
-               expect == 'junction' or \
-               expect == 'server' or \
-               expect == 'client' or
-               expect is None
+    def set_placeholder_in(self, expect)
+        assert expect == 'junction' or
+               expect == 'receiver' or
+               expect == 'server' or
+               expect == 'client'
 
-        self.expect_in      = expect
-        self.expect_in_args = kwargs
+        self.expect_in = expect
 
-    def set_placeholder_out(self, expect, **kwargs):
-        assert expect == 'junction' or \
-               expect == 'receiver' or \
-               expect == 'server' or expect is None
+    def set_placeholder_out(self, expect)
+        assert expect == 'junction' or
+               expect == 'receiver' or
+               expect == 'server'
 
-        self.expect_out      = expect
-        self.expect_out_args = kwargs
+        self.expect_out = expect
 
 class Tasklink(Edge):
     def __init__(self, source, target, linktype='signal'):
@@ -49,9 +46,9 @@ class Tasklink(Edge):
 
 class Placeholder:
     def __init__(self, expect='server'):
-        assert expect == 'junction' or \
-               expect == 'receiver' or \
-               expect == 'server' or \
+        assert expect == 'junction' or
+               expect == 'receiver' or
+               expect == 'server' or
                expect == 'client'
 
         self.expect = expect
