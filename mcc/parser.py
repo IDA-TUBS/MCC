@@ -16,7 +16,6 @@ except ImportError:
 import logging
 
 from mcc.graph import GraphObj, Edge
-from mcc.taskmodel import *
 
 class XMLParser:
     def __init__(self, xml_file, xsd_file=None):
@@ -315,63 +314,6 @@ class Repository(XMLParser):
             assert(self.xml_node.tag != 'composite')
 
             return set([self])
-
-        def _taskgraph_objects(self, root):
-            # return tasks and tasklinks within given node
-            objects = list()
-            # FIXME iterate all subnodes
-            for node in root.findall('./task'):
-                if node.tag == 'task':
-                    newtask = Task(name=node.get('name'),
-                                   wcet=int(node.get('wcet')),
-                                   bcet=int(node.get('bcet')),
-                                   thread=self))
-                    if len(objects):
-                        if objects[-1].expect_out == 'server':
-                            newtask.set_placeholder_in == 'server'
-                            newtask.to_ref = objects[-1].to_ref
-                            newtask.method = objects[-1].method
-                        else:
-                            objects.append(Tasklink(objects[-1], newtask))
-
-                    objects.append(newtask)
-
-                elif node.tag == 'signal':
-                    if node.get('junction'):
-                        objects[-1].name = node.get('junction')
-                        objects[-1].set_placeholder_out('junction')
-                    else:
-                        objects[-1].to_ref = node.get('to_ref')
-                        objects[-1].set_placeholder_out('receiver')
-
-                elif node.tag == 'call':
-                    objects[-1].set_placeholder_out('server')
-                    objects[-1].to_ref = node.get('to_ref')
-                    objects[-1].method = node.get('method')
-
-            return set(objects)
-
-        def taskgraph_objects(self, rpc=None, method=None):
-            # find <timing>
-            timing = self.xml_node.find('./timing')
-            if timing is None:
-                return set()
-
-            raise NotImplementedError()
-
-            if rpc is not None:
-                if method is None:
-                    node = timing.find('./on-rpc[@from_ref="%s"]' % rpc)
-                else:
-                    node = timing.find('./on-rpc[@from_ref="%s",@method="%s"]' % (rpc, method))
-
-                assert node is not None
-
-                # TODO remember to connect junction placeholders
-                return self._taskgraph_objects(node)
-            else:
-
-                # TODO return on-time and on-signal objects
 
         def __repr__(self):
             return self.label()
