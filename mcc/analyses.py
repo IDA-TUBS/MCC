@@ -97,7 +97,7 @@ class TaskgraphEngine(AnalysisEngine):
 
     def transform(self, obj, target_layer):
         # TODO create edges for placeholders 'sender' and 'receiver'
-        # TODO (optional) if we need set params, convert to GraphObj
+        # TODO (optional) if we need set params (e.g. mapping), convert to GraphObj
         return self.layer.get_param_value(self, self.param, obj)
 
     def source_types(self):

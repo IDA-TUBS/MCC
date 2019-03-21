@@ -380,6 +380,7 @@ class Repository(XMLParser):
                 junction_node = timing.find('junction')
                 if junction_node is not None:
                     junction_objects = self._taskgraph_objects(junction_node,
+                                                               'junction',
                                                                junction_name=junction_node.get('name'),
                                                                junction_type=junction_node.get('type'))
                 else:

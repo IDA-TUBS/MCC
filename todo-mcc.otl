@@ -47,8 +47,7 @@ extension
 	[_] (diss) scheduling context / execution budget layer
 	[_] (CCC) reliability dummy engine
 	[_] (optional) Mapping
-		[_] implement MappingHelperEngine
-			: same resource, different resource, don't care
+		: see documents/mapping.{md,pdf}
 testing / refinement
 	[X] compare hw_accelerations sw/hw
 	[_] c1 showcases
