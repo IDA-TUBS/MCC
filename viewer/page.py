@@ -1,5 +1,5 @@
 import os
-import re
+import itertools
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -204,14 +204,44 @@ class Page(Gtk.HPaned):
         #Workaround: call the following function:
         self.layerview.treeview().get_preferred_size()
 
-    def find_text(self, entry_text):
-        found_items = []
-        dot_widget = self.dotwidget
-        regexp = re.compile(entry_text)
-        for element in dot_widget.graph.nodes + dot_widget.graph.edges:
-            if element.search_text(regexp):
-                found_items.append(element)
-        return found_items
+    def find_by_name(self, regex):
+        graph = self.dotwidget.graph
+        elements = graph.nodes + graph.edges
+        return [e for e in elements if e.search_text(regex)]
+
+    def find_by_param(self, terms):
+        def find_in_map(selector, obj):
+            for k,v in obj.items():
+                if selector(k):
+                    yield v
+        def find(elements, attr_getter):
+            for element in elements:
+                attr = attr_getter(element)
+                for term in terms:
+                    #start searching for params which do satisfy the term
+                    matches = find_in_map(term.name, attr['params'])
+                    #we have a "list" of type maps now
+                    matches = map(lambda m: find_in_map(term.type, m), matches)
+                    #now: a "list" of a "list" of values
+                    matches = itertools.chain.from_iterable(matches)
+
+                    matches = map(str, matches) #values may be non-strings
+                    if any(map(term.value, matches)):
+                        yield attr['id'], element
+                        break #continue with next element
+
+        matching_nodes = set()
+        for layer in self._current_layers():
+            graph = layer.graph
+            for url, _x in find(graph.nodes(), graph.node_attributes):
+                matching_nodes.add(url)
+            for _x, edge in find(graph.edges(), graph.edge_attributes):
+                src_url = graph.node_attributes(edge.source)['id']
+                matching_nodes.add(src_url)
+
+        for element in self.dotwidget.graph.nodes:
+            if element.url in matching_nodes:
+                yield element
 
     def error_dialog(self, message):
         dlg = Gtk.MessageDialog(parent=self.window,
