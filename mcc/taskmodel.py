@@ -18,10 +18,11 @@ class Task:
         self.bcet = bcet
         self.thread = thread
 
-        self.junctiontype = None
-
         self.activation_period = 0
         self.activation_jitter = 0
+
+        self.expect_out = None
+        self.expect_in  = None
 
     def set_placeholder_in(self, expect, **kwargs):
         assert expect == 'sender' or \
@@ -47,8 +48,8 @@ class Task:
 
     def __repr__(self):
         ttype = "Task"
-        if self.junctiontype is not None:
-            ttype = "%s-Junction" % self.junctiontype
+        if self.expect_in == 'junction':
+            ttype = "%s-Junction" % self.expect_in_args['junction_type']
 
         return "%s '%s'" % (ttype, self.name)
 
@@ -57,7 +58,7 @@ class Task:
                  'WCET' : self.wcet,
                  'BCET' : self.bcet }
 
-        if self.junctiontype is not None:
+        if self.expect_in == 'junction':
             props['Thread'] = self.thread
 
         if self.activation_period > 0:
@@ -76,13 +77,16 @@ class Task:
 
 
 class Tasklink(Edge):
-    def __init__(self, source, target, linktype='signal'):
+    def __init__(self, source, target, linktype='call'):
         assert linktype == 'signal' or linktype == 'call'
         self.linktype = linktype
-        Edge.__init__(source, target)
+        Edge.__init__(self, source, target)
 
     def __repr__(self):
         if self.linktype == 'call':
             return "%s calls %s" % (self.source, self.target)
         else:
             return "%s -> %s" % (self.source, self.target)
+
+    def edgetype(self):
+        return self.linktype

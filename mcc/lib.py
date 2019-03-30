@@ -314,14 +314,28 @@ class MccBase:
         slayer = model.by_name[slayer]
         tg     = model.by_name[dlayer]
 
-        ae = TaskgraphEngine(slayer, tg)
+        core = TasksCoreEngine(slayer)
+        rpc  = TasksRPCEngine(slayer)
+        ae   = TaskgraphEngine(slayer, tg)
+
+        coretasks = NodeStep(Map(core, 'get coretasks'))
+        coretasks.add_operation(Assign(core, 'get coretasks'))
+        model.add_step(coretasks)
+
+        rpctasks = NodeStep(Map(rpc, 'get rpctasks'))
+        rpctasks.add_operation(Assign(rpc, 'get rpctasks'))
+        model.add_step(rpctasks)
 
         trafo = NodeStep(Map(ae, 'build taskgraph'))
         trafo.add_operation(Assign(ae, 'build taskgraph'))
         trafo.add_operation(Check(ae, 'build taskgraph'))
         trafo.add_operation(Transform(ae, tg, 'build taskgraph'))
-
         model.add_step(trafo)
+
+        con = EdgeStep(Map(ae, 'connect tasks'))
+        con.add_operation(Assign(ae, 'connect tasks'))
+        con.add_operation(Transform(ae, tg, 'connect tasks'))
+        model.add_step(con)
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.

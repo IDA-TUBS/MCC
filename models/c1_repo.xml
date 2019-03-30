@@ -214,7 +214,7 @@
 	<component name="hw_object_recog">
 		<function name="ACCEL" />
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref='rom' />
 			<service name="ACCEL" />
 		</provides>
 		<requires>
@@ -227,12 +227,20 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
+		<timing>
+		    <on-signal from_ref="cam_left">
+		        <task name="process" wcet="100" bcet="50"/>
+		        <!-- TODO timing model -->
+		        <signal to_ref="rom"/>
+		    </on-signal>
+		    <!-- TODO on-time model? -->
+		</timing>
 	</component>
 
 	<component name="camera" singleton="true">
 		<function name="CAMERA" />
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref='rom'/>
 		</provides>
 		<requires>
 			<spec name="zynq" />
@@ -240,7 +248,7 @@
 			<service name="GPIO" function="GPIO" />
 			<service name="VDMA" function="VDMA" />
 			<service name="PL_IRQ" function="PL_IRQ" />
-			<service name="ROM" function="TRIGGER" label="trigger_remote" />
+			<service name="ROM" function="TRIGGER" label="trigger_remote" ref='trigger' />
 			<service name="Timer" function="TIMER"/>
 			<ram quantum="36" />
 			<caps quantum="300" />
@@ -251,6 +259,14 @@
 				<trigger_rom name="trigger_remote"/>
 			</config>
 		</defaults>
+		<timing>
+		    <on-signal from_ref="trigger">
+		        <task name="trigger" wcet="100" bcet="50"/>
+		        <!-- TODO timing model -->
+		        <signal to_ref="rom"/>
+		    </on-signal>
+		    <!-- TODO on-time model? -->
+		</timing>
 	</component>
 
 	<component name="debay_left">
