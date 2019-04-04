@@ -248,7 +248,7 @@ class Registry:
                 print(step)
                 assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
         else:
-            assert(step.target_layer == self.by_order[0])
+            assert(step.source_layer == self.by_order[0])
 
         self.steps.append(step)
 
@@ -312,7 +312,7 @@ class Registry:
                 prevop = None
                 for op in step.operations:
                     op_node_names[op] = 'op%d' % j
-                    dotfile.write('%s [label="%s(%s)",shape=trapezium,colorscheme=set39,fillcolor=6,style=filled];\n' %
+                    dotfile.write('%s [label="%s(%s)",shape=trapezium,group=op,colorscheme=set39,fillcolor=6,style=filled];\n' %
                             (op_node_names[op], type(op).__name__, op.name))
 
                     # connect to previous operation
