@@ -676,6 +676,11 @@ class Layer:
 
         return self._get_param_value(param, obj)
 
+    def track_read(self, param, obj):
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_read(self, obj, param)
+
     def _get_param_value(self, param, obj):
         params = self._get_params(obj)
 
@@ -1455,6 +1460,7 @@ class Transform(Operation):
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             if not new_objs:
                 logging.warning("transform() did not return any object (returned: %s)" % new_objs)
+                self.source_layer.stop_tracking()
             else:
                 # remark: also returns already existing objects
                 inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
@@ -1466,6 +1472,10 @@ class Transform(Operation):
                                 self.target_layer.node_types())
 
                 self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
+                self.source_layer.stop_tracking()
+
+                self.source_layer.start_tracking(self)
+                self.source_layer.track_read(self.target_layer.name, obj)
                 for o in inserted:
                     src = self.target_layer._get_param_value(self.source_layer.name, o)
                     if src is None:
@@ -1476,7 +1486,7 @@ class Transform(Operation):
                         src = { src, obj }
                     self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
 
-            self.source_layer.stop_tracking()
+                self.source_layer.stop_tracking()
 
         return True
 
@@ -1497,6 +1507,7 @@ class Check(Operation):
                 self.source_layer.start_tracking(self)
 
                 if not ae.check(obj, first):
+                    # TODO let ae return a set of obj/param/layer tuples that help finding a culprit
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
                 self.source_layer.stop_tracking(abort=True)
