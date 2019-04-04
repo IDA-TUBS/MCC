@@ -328,7 +328,7 @@ class Repository(XMLParser):
                     if len(objects):
                         if objects[-1].expect_out == 'server':
                             newtask.set_placeholder_in('server',
-                                                       **objects[-1].expect_out_args)
+                                                       callertask=objects[-1])
                         else:
                             objects.append(Tasklink(objects[-1], newtask))
                     else:
@@ -348,6 +348,9 @@ class Repository(XMLParser):
                     objects[-1].set_placeholder_out('server',
                                                     to_ref=node.get('to_ref'),
                                                     method=node.get('method'))
+
+            if objects[0].expect_in == 'client':
+                objects[-1].expect_out == 'client'
 
             return set(objects)
 
@@ -371,20 +374,20 @@ class Repository(XMLParser):
 
             elif signal is not None:
                 node = timing.find('./on-signal[@from_ref="%s"]' % signal)
-                assert node is not None, '<on-signal from_ref="%s"> not present' % signal
+                if node is not None:
+                    return self._taskgraph_objects(node, 'sender', from_ref=signal)
+
+                return set()
 
                 # TODO remember to connect junction placeholders (caller)
                 # TODO remember to connect server placeholders
-                return self._taskgraph_objects(node, 'sender', from_ref=signal)
             else:
-                junction_node = timing.find('junction')
-                if junction_node is not None:
-                    junction_objects = self._taskgraph_objects(junction_node,
-                                                               'junction',
-                                                               junction_name=junction_node.get('name'),
-                                                               junction_type=junction_node.get('type'))
-                else:
-                    junction_objects = set()
+                junction_objects = set()
+                for junction_node in timing.findall('junction'):
+                    junction_objects.update(self._taskgraph_objects(junction_node,
+                                                                    'junction',
+                                                                    junction_name=junction_node.get('name'),
+                                                                    junction_type=junction_node.get('type')))
 
                 objects = set()
                 for time_node in timing.findall('on-time'):
@@ -395,14 +398,16 @@ class Repository(XMLParser):
                 for interrupt_node in timing.findall('on-interrupt'):
                     objects.update(self._taskgraph_objects(interrupt_node, 'interrupt'))
 
-                # link to junctions
-                for task in objects:
-                    if task.expect_out == 'junction':
-                        for junction in junction_objects:
-                            if junction.expect_in == 'junction':
-                                objects.add(Tasklink(task, junction))
-                                task.set_placeholder_out(None)
-                        assert task.expect_out is None
+#                # link to junctions
+#                for task in objects:
+#                    if task.expect_out == 'junction':
+#                        for junction in junction_objects:
+#                            if junction.expect_in == 'junction':
+#                                objects.add(Tasklink(task, junction))
+#                                task.set_placeholder_out(None)
+#                        assert task.expect_out is None
+
+                objects.update(junction_objects)
 
                 # TODO remember to connect junction placeholders (caller)
                 # TODO remember to connect server placeholders

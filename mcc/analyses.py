@@ -15,13 +15,31 @@ from mcc import model
 from mcc import parser
 from mcc.taskmodel import *
 
-class TaskgraphEngine(AnalysisEngine):
-    def __init__(self, layer, target_layer):
-        """ Transforms a component graph into a task graph.
+class TasksCoreEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Gets task objects (core) from repo
         """
-        acl = { layer        : {'reads' : set(['mapping'])}}
-        AnalysisEngine.__init__(self, layer, param='tasks', acl=acl)
-        self.target_layer = target_layer
+        acl = { layer        : {'reads' : set(['source-service', 'target-service'])}}
+        AnalysisEngine.__init__(self, layer, param='coretasks', acl=acl)
+
+    def _connect_junctions(self, objects):
+        # connect junctions
+        for task in [t for t in objects if isinstance(t, Task)]:
+            if task.expect_out == 'junction':
+                for junction in objects:
+                    if isinstance(junction, Tasklink):
+                        continue
+
+                    if junction.expect_in == 'junction' and \
+                       junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
+
+                        objects.add(Tasklink(task, junction, linktype='signal'))
+                        task.set_placeholder_out(None)
+                        break
+
+                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+
+        return objects
 
     def map(self, obj, candidates):
         """ Pulls taskgraph objects from repository
@@ -34,17 +52,251 @@ class TaskgraphEngine(AnalysisEngine):
             component = obj
 
         # get time-triggered taskgraph
-        tasks = component.taskgraph_objects()
+        try:
+            objects = component.taskgraph_objects()
+        except Exception as e:
+           print("Could not get taskgraph objects for %s" % obj) 
+           raise e
 
-        # for each incoming signal:
-        #   add corresponding taskgraph objects
-#        raise NotImplementedError()
+        # for each incoming connection (see if incoming signal exists)
+        signals = set()
+        for e in self.layer.graph.in_edges(obj):
+            serv = self.layer.get_param_value(self, 'target-service', e)
+            signals.add(serv.ref())
 
-        # for each rpc call in 'tasks':
-        #   find corresponding server and pull taskgraph objects from repo
-#        raise NotImplementedError()
+        # for each outgoing connection (see if incoming signal exists)
+        for e in self.layer.graph.out_edges(obj):
+            serv = self.layer.get_param_value(self, 'source-service', e)
+            signals.add(serv.ref())
 
-        return set([frozenset(tasks)])
+        for sig in signals:
+            objects.update(component.taskgraph_objects(signal=sig))
+
+        objects = self._connect_junctions(objects)
+
+        return set([frozenset(objects)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+
+class TasksRPCEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Gets task objects (RPC) from repo
+        """
+        acl = { layer        : {'reads' : set(['coretasks', 'source-service', 'target-service'])}}
+        AnalysisEngine.__init__(self, layer, param='rpctasks', acl=acl)
+
+    def _connect_junctions(self, objects, junction_objects):
+        # connect junctions
+        for task in [t for t in objects if isinstance(t, Task)]:
+            if task.expect_out == 'junction':
+                for junction in junction_objects:
+                    if isinstance(junction, Tasklink):
+                        continue
+
+                    if junction.expect_in == 'junction' and \
+                       junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
+
+                        objects.add(Tasklink(task, junction, linktype='signal'))
+                        task.set_placeholder_out(None)
+                        break
+
+                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+
+        return objects
+
+    def _connect_rpc(self, obj, objects, call):
+        assert call in objects
+
+        # find return task
+        ret = None
+        for task in (t for t in objects if isinstance(t, Task)):
+            if task.expect_in == 'server' and task.expect_in_args['callertask'] == call:
+                ret = task
+                break
+
+        assert ret is not None, 'Could not find return task for %s' % call.expect_out_args
+
+        # find server component 
+        to_ref = call.expect_out_args['to_ref']
+        method = call.expect_out_args('method')
+        server = None
+        for e in self.layer.graph.out_edges(obj):
+            src = self.layer.get_param_value(self, 'source-service', e)
+            if src.ref() == to_ref:
+                server = e.target
+                server_ref = self.layer.get_param_value(self, 'target-service', e).ref()
+                break
+        assert(server is not None)
+
+        # get rpcobjects
+        if isinstance(server, model.Instance):
+            rpc_objects = server.component.taskgraph_objects(rpc=server_ref, method=method)
+        else:
+            rpc_objects = server.taskgraph_objects(rpc=server_ref, method=method)
+
+        assert len(rpc_objects), 'No task objects found for RPC'
+
+        # check rpcobjects for any calls
+        rpcs = set()
+        for task in (t for t in rpc_objects if isinstance(t, Task)):
+            if task.expect_out == 'server':
+                rpcs.add(task)
+
+        for rpc in rpcs:
+            rpc_objects = self._connect_rpc(server, rpc_objects, rpc)
+
+        # connect junction placeholders in rpc_objects
+        self._connect_junctions(rpc_objects, self.layer.get_param_value(self, 'coretasks', server))
+
+        # connect rpcobjects into objects
+        firsttask = None
+        lasttask  = None
+        for task in (t for t in rpc_objects if isinstance(t, Task)):
+            if task.expect_in == 'client':
+                firsttask = task
+            if task.expect_out == 'client':
+                lasttask = task
+
+        assert firsttask is not None
+        assert lasttask  is not None
+
+        objects.update(rpc_objects)
+        objects.add(Tasklink(call, firsttask))
+        objects.add(Tasklink(lasttask, ret))
+        call.set_placeholder_out(None)
+        ret.set_placeholder_in(None)
+        firsttask.set_placeholder_in(None)
+        lasttask.set_placeholder_out(None)
+
+        return objects
+
+    def map(self, obj, candidates):
+        """ Pulls taskgraph objects from repository
+        """
+        assert candidates is None
+
+        objects = self.layer.get_param_value(self, 'coretasks', obj)
+
+        rpcs = set()
+        for task in (t for t in objects if isinstance(t, Task)):
+            if task.expect_out == 'server':
+                rpcs.add(task)
+        for rpc in rpcs:
+            objects = self._connect_rpc(obj, objects, rpc)
+
+        return set([frozenset(objects)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+class TaskgraphEngine(AnalysisEngine):
+    def __init__(self, layer, target_layer):
+        """ Transforms a component graph into a task graph.
+        """
+        acl = { layer        : {'reads' : set(['mapping', 'rpctasks', 'source-service', 'target-service'])},
+                target_layer : {'writes' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='tasks', acl=acl)
+        self.target_layer = target_layer
+
+    def _graph_objects(self, obj, objects):
+        result = set()
+
+        for o in objects:
+            if isinstance(o, Task):
+                result.add(GraphObj(o, params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
+            else:
+                result.add(o)
+
+        return result
+
+    def _remove_unconnected_junctions(self, objects):
+        # remove unconnected junctions
+        tasks = set([t for t in objects if isinstance(t, Task)])
+        links = (t for t in objects if isinstance(t, Tasklink))
+        # first: aggregate seeds (junctions without any input)
+        unconnected = set()
+        for task in tasks:
+            if task.expect_in == 'junction':
+                connected = False
+                for link in links:
+                    if link.target == task:
+                        connected = True
+                if not connected:
+                    unconnected.add(task)
+        # second: iteratively add subsequent tasks to unconnected set
+        old = 0
+        while old != len(unconnected):
+            old = len(unconnected)
+            for task in tasks - unconnected:
+                connected = False
+                for link in (l for l in links if l.target == task):
+                    if link.source not in unconnected:
+                        connected = True
+
+                if not connected:
+                    unconnected.add(task)
+
+        # now remove tasklinks and tasks
+        for link in [l for l in objects if isinstance(l, Tasklink)]:
+            if link.source in unconnected or link.target in unconnected:
+                objects.remove(link)
+
+        return objects - unconnected
+
+    def map(self, obj, candidates):
+        assert candidates is None
+
+        if isinstance(obj, Edge):
+            # add Tasklinks
+            source_tasks = self.layer.get_param_value(self, 'tasks', obj.source)
+            target_tasks = self.layer.get_param_value(self, 'tasks', obj.target)
+            source_ref   = self.layer.get_param_value(self, 'source-service', obj).ref()
+            target_ref   = self.layer.get_param_value(self, 'target-service', obj).ref()
+
+            source_sender = None
+            source_receiver = None
+            # find sender or receiver in source_tasks
+            for task in (t for t in source_tasks if isinstance(t, Task)):
+                if task.expect_out == 'receiver' and \
+                   task.expect_out_args['to_ref'] == source_ref:
+                    source_sender = task
+                if task.expect_in == 'sender' and \
+                   task.expect_in_args['from_ref'] == source_ref:
+                    source_receiver = task
+
+            # find sender or receiver in target_tasks
+            target_sender = None
+            target_receiver = None
+            for task in (t for t in target_tasks if isinstance(t, Task)):
+                if task.expect_out == 'receiver' and \
+                   task.expect_out_args['to_ref'] == target_ref:
+                    target_sender = task
+                if task.expect_in == 'sender' and \
+                   task.expect_in_args['from_ref'] == target_ref:
+                    target_receiver = task
+
+            objects = set()
+            if source_sender is not None:
+                assert target_receiver is not None, "Receiver task on %s with ref %s is missing" % (obj.target, target_ref)
+                objects.add(Tasklink(source_sender, target_receiver, linktype='signal'))
+
+            if target_sender is not None:
+                assert source_receiver is not None, "Receiver task on %s with ref %s is missing" % (obj.source, source_ref)
+                objects.add(Tasklink(target_sender, source_receiver, linktype='signal'))
+
+        else:
+            objects = self.layer.get_param_value(self, 'rpctasks', obj)
+            objects = self._remove_unconnected_junctions(objects)
+
+        return set([frozenset(objects)])
 
     def assign(self, obj, candidates):
         """ Selects single candidate
@@ -66,6 +318,8 @@ class TaskgraphEngine(AnalysisEngine):
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
         links = (t for t in taskobjects if isinstance(t, Tasklink))
+
+        # TODO check that sender exists for each receiver
 
         # check for unconnected tasks
         for t in tasks:
@@ -96,12 +350,11 @@ class TaskgraphEngine(AnalysisEngine):
         return True
 
     def transform(self, obj, target_layer):
-        # TODO create edges for placeholders 'sender' and 'receiver'
-        # TODO (optional) if we need set params (e.g. mapping), convert to GraphObj
-        return self.layer.get_param_value(self, self.param, obj)
+        objects = self.layer.get_param_value(self, self.param, obj)
+        return self._graph_objects(obj, objects)
 
     def source_types(self):
-        return tuple({model.Instance, parser.Repository.Component})
+        return tuple({model.Instance, parser.Repository.Component, Edge})
 
     def target_types(self):
         return tuple({Task})
