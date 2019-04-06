@@ -368,6 +368,7 @@ class NetworkEngine(AnalysisEngine):
     def _find_sink(self, obj, visited):
         # find 
         pfc = self.layer.get_param_value(self, 'mapping', obj)
+        comp = self.layer.get_param_value(self, 'component', obj)
 
         # trace ROM services
         for edge in self.layer.graph.in_edges(obj):
@@ -377,7 +378,6 @@ class NetworkEngine(AnalysisEngine):
             other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
             if other_pfc is not None and pfc != other_pfc:
                 continue
-
             for con in self.layer.get_param_value(self, 'connections', edge):
                 service = con.source_service
                 if service.name() == 'ROM':
