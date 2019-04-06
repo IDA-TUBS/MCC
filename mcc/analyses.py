@@ -1042,8 +1042,10 @@ class SpecEngine(AnalysisEngine):
             pf_comp = self.layer.get_param_value(self, 'mapping', obj)
             assert(pf_comp is not None)
 
-            if self._match_specs(c.requires_specs(), pf_comp.specs()):
-                keep.add(c)
+            for p in c.patterns():
+                if self._match_specs(p.requires_specs(), pf_comp.specs()):
+                    keep.add(c)
+                    break
 
         return keep
 

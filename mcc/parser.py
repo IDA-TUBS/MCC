@@ -430,10 +430,16 @@ class Repository(XMLParser):
             return self.component.label()
 
         def requires_specs(self):
-            return self.component.requires_specs
+            specs = set()
+            for c in self.xml_node.findall("component"):
+                components = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                assert(len(components) == 1)
+                specs.update(components[0].requires_specs())
+
+            return specs
 
         def requires_rte(self):
-            return self.component.requires_rte
+            return self.component.requires_rte()
 
         def providing_component(self, service, function=None, to_ref=None):
             result = set()
