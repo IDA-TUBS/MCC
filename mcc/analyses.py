@@ -294,7 +294,7 @@ class TaskgraphEngine(AnalysisEngine):
 
         else:
             objects = self.layer.get_param_value(self, 'rpctasks', obj)
-            objects = self._remove_unconnected_junctions(objects)
+            objects = self._remove_unconnected_junctions(set(objects))
 
         return set([frozenset(objects)])
 
