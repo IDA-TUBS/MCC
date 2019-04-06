@@ -1250,48 +1250,66 @@ class InstantiationEngine(AnalysisEngine):
     def map(self, obj, candidates):
         """ Get and map to dedicated and shared instance object from factory
         """
-        assert not isinstance(obj, Edge)
         assert candidates is None
+        if isinstance(obj, Edge):
+            source_candidates = self.layer.get_param_candidates(self, 'instance', obj.source)
+            source_value      = self.layer.get_param_value(self, 'instance', obj.source)
+            target_candidates = self.layer.get_param_candidates(self, 'instance', obj.target)
+            target_value      = self.layer.get_param_value(self, 'instance', obj.target)
 
-        # if it's already an instance
-        if isinstance(obj, model.Instance):
-            return {obj}
+            # TODO check that source and target service are the same
+            #      best done by using the factory to create edges once and reference them here
+            #      at the moment, we only use shareable=true for SISO components
+            if source_value.shared():
+                if len(source_candidates) > 1:
+                    return {False}
 
-        pfc = self.layer.get_param_value(self, 'mapping', obj)
-
-        ded    = self.factory.dedicated_instance(pfc.name(), obj,
-                        self.layer.get_param_value(self, 'pattern-config', obj))
-
-        if not obj.dedicated():
-            shared = self.factory.shared_instance   (pfc.name(), obj,
-                            self.layer.get_param_value(self, 'pattern-config', obj))
+            return {True}
         else:
-            # TODO if out edges have the same targets and constraints, we could still create a shared instance
-            return {ded}
 
-        return {ded, shared}
+            # if it's already an instance
+            if isinstance(obj, model.Instance):
+                return {obj}
+
+            pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+            ded    = self.factory.dedicated_instance(pfc.name(), obj,
+                            self.layer.get_param_value(self, 'pattern-config', obj))
+
+            if not obj.dedicated():
+                shared = self.factory.shared_instance   (pfc.name(), obj,
+                                self.layer.get_param_value(self, 'pattern-config', obj))
+            else:
+                # TODO if out edges have the same targets and constraints, we could still create a shared instance
+                return {ded}
+
+            return {ded, shared}
 
     def assign(self, obj, candidates):
         """ Assigns shared candidate if present
         """
-        assert not isinstance(obj, Edge)
-        assert len(candidates) > 0
+        if not isinstance(obj, Edge):
+            assert len(candidates) > 0
 
-        for c in candidates:
-            if c.shared():
-                return c
+            for c in candidates:
+                if c.shared():
+                    return c
 
         return list(candidates)[0]
 
     def transform(self, obj, target_layer):
 
         if isinstance(obj, Edge):
-            source = self.layer.get_param_value(self, self.param, obj.source)
-            target = self.layer.get_param_value(self, self.param, obj.target)
+            if self.layer.get_param_value(self, self.param, obj):
+                source = self.layer.get_param_value(self, self.param, obj.source)
+                target = self.layer.get_param_value(self, self.param, obj.target)
 
-            return GraphObj(Edge(source,target),
-                params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
-                        'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+                return GraphObj(Edge(source,target),
+                    params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
+                            'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+            else:
+                # FIXME return already-inserted object to correctly set inter-layer relations
+                return set()
 
         else:
             return GraphObj(self.layer.get_param_value(self, self.param, obj),

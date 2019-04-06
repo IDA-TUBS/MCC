@@ -286,7 +286,10 @@ class MccBase:
         instantiate.add_operation(Assign(ie, 'instantiate'))
         instantiate.add_operation(Transform(ie, ci, 'instantiate'))
         model.add_step(instantiate)
-        model.add_step(EdgeStep(Transform(ie, ci, 'copy edges')))
+        connect = EdgeStep(Map(ie, 'copy edges'))
+        connect.add_operation(Assign(ie, 'copy edges'))
+        connect.add_operation(Transform(ie, ci, 'copy edges'))
+        model.add_step(connect)
 
         # check singleton (per PfComponent)
         se = SingletonEngine(ci, pf_model)
