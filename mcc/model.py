@@ -223,6 +223,12 @@ class BaseChild:
     # Component interface #
     #######################
 
+    def properties(self):
+        return set()
+
+    def prio(self):
+        return 0
+
     def requires_rte(self):
         # all components have the same RTE requirement
         return list(self._instances)[0].component.requires_rte()

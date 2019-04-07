@@ -93,7 +93,7 @@ class MccBase:
         # inherit mapping from all neighbours (excluding static platform components)
         model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
 
-    def _select_components(self, model, slayer, dlayer):
+    def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
 
         Args:
@@ -126,7 +126,12 @@ class MccBase:
 
         # select pattern (dummy step, nothing happening here)
         pe = PatternEngine(fc, ca)
-        model.add_step(MapAssignNodeStep(pe, 'pattern'))
+        epe = EnvPatternEngine(fc, envmodel)
+        patterns = Map(pe, 'pattern')
+        patterns.register_ae(epe)
+        patstep = NodeStep(patterns)
+        patstep.add_operation(Assign(pe, 'pattern'))
+        model.add_step(patstep)
 
         # sanity check and transform
         transform = NodeStep(Check(pe, name='pattern'))
@@ -340,6 +345,10 @@ class MccBase:
         con.add_operation(Transform(ae, tg, 'connect tasks'))
         model.add_step(con)
 
+        # TODO assign activation patterns
+
+        # TODO check CPU load
+
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
@@ -399,7 +408,7 @@ class SimpleMcc(MccBase):
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')
 
         # select components and transform into comp_arch
-        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1')
+        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1', envmodel=envmodel)
 
         # TODO test case for protocol stack insertion
         self._insert_protocolstacks(model, slayer='comp_arch-pre1', dlayer='comp_arch-pre2')
@@ -424,7 +433,7 @@ class SimpleMcc(MccBase):
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
 
-        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
+#        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:

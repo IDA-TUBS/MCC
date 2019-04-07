@@ -963,8 +963,24 @@ class ComponentEngine(AnalysisEngine):
         """
         return self.layer.get_param_value(self, self.param, obj) is not None
 
+class EnvPatternEngine(AnalysisEngine):
+    def __init__(self, layer, envmodel):
+        AnalysisEngine.__init__(self, layer, param='pattern')
+        self.envmodel = envmodel
+
+    def map(self, obj, candidates):
+        if self.envmodel is None:
+            return candidates
+
+        new_candidates = set()
+        for c in candidates:
+            if self.envmodel.accept_properties(c.properties()):
+                new_candidates.add(c)
+
+        return new_candidates
+
 class PatternEngine(AnalysisEngine):
-    def __init__(self, layer, target_layer, source_param='component'):
+    def __init__(self, layer, target_layer, source_param='component', envmodel=None):
         acl = { layer        : { 'reads'  : set([source_param]) },
                 target_layer : { 'writes' : set(['pattern-config', 'source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
@@ -985,7 +1001,10 @@ class PatternEngine(AnalysisEngine):
         if len(candidates) == 0:
             raise Exception("no pattern left for assignment")
 
-        return list(candidates)[0]
+        if len(candidates) == 1:
+            return list(candidates)[0]
+
+        return sorted(candidates, reverse=True, key=lambda c: c.prio())[0]
 
     def check(self, obj, first):
         """ Checks whether a pattern was assigned.

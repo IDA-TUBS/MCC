@@ -181,6 +181,12 @@ class Repository(XMLParser):
             self.repo = repo
             self.xml_node = xml_node
 
+        def properties(self):
+            return set()
+
+        def prio(self):
+            return 0
+
         def uid(self):
             # if singleton, return (binary) name
             if self.singleton():
@@ -428,6 +434,20 @@ class Repository(XMLParser):
 
         def label(self):
             return self.component.label()
+
+        def properties(self):
+            props = self.xml_node.get('properties')
+            if props is not None:
+                return props.split()
+
+            return set()
+
+        def prio(self):
+            prio = self.xml_node.get('prio')
+            if prio is not None:
+                return int(prio)
+
+            return 0
 
         def requires_specs(self):
             specs = set()
