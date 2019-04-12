@@ -1271,6 +1271,9 @@ class InstantiationEngine(AnalysisEngine):
         self.factory      = factory
         self.target_layer = target_layer
 
+    def reset(self):
+        self.factory.reset()
+
     def map(self, obj, candidates):
         """ Get and map to dedicated and shared instance object from factory
         """

@@ -455,7 +455,7 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            model.execute()
+            model.execute(outpath)
             decision_graph = model.decision_graph
 
         except Exception as e:

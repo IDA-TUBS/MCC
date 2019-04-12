@@ -122,6 +122,10 @@ class InstanceFactory:
         self.instances = dict()
         self.identifiers = dict()
 
+    def reset(self):
+        self.instances = dict()
+        self.identifiers = dict()
+
     def unique_name(self, component):
         # build unique name from component name, object id and sequence number
         if component.unique_label() not in self.identifiers:

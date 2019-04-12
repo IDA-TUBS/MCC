@@ -25,6 +25,7 @@ class BacktrackRegistry(Registry):
         super().__init__()
         self.dec_graph = DecisionGraph()
         self.backtracking_try = 0
+        self.clear_layers = False
 
         # stores state (completed) of operations
         self.operations = dict()
@@ -95,7 +96,6 @@ class BacktrackRegistry(Registry):
 
                 if outpath is not None:
                     export = PickleExporter(self)
-                    print(self.by_name['comp_inst'].graph.nodes())
                     export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
 
                 return False
@@ -173,21 +173,36 @@ class BacktrackRegistry(Registry):
                     elif isinstance(op, Map):
                         n.layer._clear_param_candidates(n.param, n.obj)
                     elif isinstance(op, Transform):
-                        trg_nodes = n.layer._get_param_value(op.target_layer.name, n.obj)
-                        if not isinstance(trg_nodes, set):
-                            trg_nodes = {trg_nodes}
+                        if self.clear_layers:
+                            for node in op.source_layer.graph.nodes():
+                                op.source_layer._clear_param_value(op.target_layer.name, node)
+                            for edge in op.source_layer.graph.edges():
+                                op.source_layer._clear_param_value(op.target_layer.name, edge)
+                            self.reset(op.target_layer)
 
+                            for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
+                                for o in self.operations.keys():
+                                    if o.target_layer == self.by_order[i]:
+                                        self.operations[o] = False
+                        else:
+                            trg_nodes = n.layer._get_param_value(op.target_layer.name, n.obj)
+                            if not isinstance(trg_nodes, set):
+                                trg_nodes = {trg_nodes}
 
-                        for trg in trg_nodes:
-                            self.delete_recursive(trg, op.target_layer)
+                            for trg in trg_nodes:
+                                self.delete_recursive(trg, op.target_layer)
 
-                        # clear source->target layer mapping
-                        n.layer._clear_param_value(op.target_layer.name, n.obj)
+                            # clear source->target layer mapping
+                            n.layer._clear_param_value(op.target_layer.name, n.obj)
                     else:
                         raise NotImplementedError
 
                 # invalidate operations
+                # FIXME some operations (e.g. Transform) are not marked as incomplete
                 self.operations[op] = False
+                for ae in op.analysis_engines:
+                    if hasattr(ae, 'reset'):
+                        ae.reset()
 
             # remove node from decision graph
             self.decision_graph.remove(n)
