@@ -12,6 +12,7 @@ Implements backtracking-related data structures.
 
 from mcc.framework import *
 from mcc.graph import *
+from mcc.importexport import *
 
 
 class BacktrackRegistry(Registry):
@@ -35,24 +36,30 @@ class BacktrackRegistry(Registry):
         if operation not in self.operations:
             return False
 
+        if isinstance(operation, Transform):
+            return False
+
+        if self.operations[operation] == True:
+            logging.info("Skipping %s" % operation)
+
         # skip operation if marked True
         return self.operations[operation]
 
-    def execute(self):
+    def execute(self, outpath=None):
         """ Executes the registered steps sequentially.
         """
 
         self.decision_graph = DecisionGraph()
         self.decision_graph.initialize_tracking(self.by_order)
 
-        while not self._backtrack_execute():
+        while not self._backtrack_execute(outpath):
             pass
 
         print("Backtracking succeeded in try %s" % self.backtracking_try)
 
         self._output_layer(self.steps[-1].target_layer)
 
-    def _backtrack_execute(self):
+    def _backtrack_execute(self, outpath):
         print()
 
         self.backtracking_try += 1
@@ -85,6 +92,11 @@ class BacktrackRegistry(Registry):
 
                 # cut-off subtree
                 self.invalidate_subtree(culprit)
+
+                if outpath is not None:
+                    export = PickleExporter(self)
+                    print(self.by_name['comp_inst'].graph.nodes())
+                    export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
 
                 return False
 
@@ -149,37 +161,57 @@ class BacktrackRegistry(Registry):
                 raise NotImplementedError
 
         for n in self.decision_graph.successors(start, recursive=True):
+            deleted = True
+            if n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges():
+                deleted = False
+
             # invalidate layer depending on what operations were involved
             for op in self.decision_graph.operations(n):
-                if isinstance(op, Assign):
-                    n.layer._clear_param_value(n.param, n.obj)
-                elif isinstance(op, Map):
-                    n.layer._clear_param_candidates(n.param, n.obj)
-                elif isinstance(op, Transform):
-                    # cache source object(s)
-                    src_nodes = n.layer._get_param_value(op.source_layer.name, n.obj)
-                    if not isinstance(src_nodes, set()):
-                        src_nodes = {src_nodes}
+                if not deleted:
+                    if isinstance(op, Assign):
+                        n.layer._clear_param_value(n.param, n.obj)
+                    elif isinstance(op, Map):
+                        n.layer._clear_param_candidates(n.param, n.obj)
+                    elif isinstance(op, Transform):
+                        trg_nodes = n.layer._get_param_value(op.target_layer.name, n.obj)
+                        if not isinstance(trg_nodes, set):
+                            trg_nodes = {trg_nodes}
 
-                    # remove nodes/edges from layer
-                    if isinstance(n.obj, Edge):
-                        n.layer.remove_edge(n.obj)
+
+                        for trg in trg_nodes:
+                            self.delete_recursive(trg, op.target_layer)
+
+                        # clear source->target layer mapping
+                        n.layer._clear_param_value(op.target_layer.name, n.obj)
                     else:
-                        n.layer.remove_node(n.obj)
-
-                    # clear source->target layer mapping
-                    for src in src_nodes:
-                        op.source_layer._clear_param_value(n.layer, src)
-
-                    break # no need to continue on deleted objects
-                else:
-                    raise NotImplementedError
+                        raise NotImplementedError
 
                 # invalidate operations
                 self.operations[op] = False
 
             # remove node from decision graph
             self.decision_graph.remove(n)
+
+    def delete_recursive(self, obj, layer):
+        if obj not in layer.graph.nodes() and obj not in layer.graph.edges():
+            return
+
+        nextlayer = self._next_layer(layer)
+        if nextlayer is not None:
+            nodes = layer._get_param_value(nextlayer.name, obj)
+            if not isinstance(nodes, set):
+                nodes = {nodes}
+
+            for trg in nodes:
+                self.delete_recursive(trg, nextlayer)
+
+        if isinstance(obj, Edge):
+            layer.remove_edge(obj)
+            logging.debug("deleted %s on %s" % (obj, layer))
+        else:
+            layer.remove_node(obj)
+            logging.debug("deleted %s on %s" % (obj, layer))
+
 
     def write_analysis_engine_dependency_graph(self, outfile='AeDepGraph.dot'):
         analysis_engines = set()

@@ -73,6 +73,12 @@ class Graph:
         self.graph.add_node(obj)
         return obj
 
+    def remove_node(self, obj):
+        return self.graph.remove_node(obj)
+
+    def remove_edge(self, obj):
+        return self.graph.remove_edge(obj.source, obj.target, obj)
+
     def create_edge(self, source, target):
         e = Edge(source, target)
         return self.add_edge(e)

@@ -1022,8 +1022,8 @@ class PatternEngine(AnalysisEngine):
         if self.layer.get_param_value(self, self.param, obj) is None:
             # no protocol stack was selected
             if isinstance(obj, Edge):
-                assert(obj.source in target_layer.graph.nodes())
-                assert(obj.target in target_layer.graph.nodes())
+                assert obj.source in target_layer.graph.nodes(), "%s is not in %s" % (obj.source, target_layer)
+                assert obj.target in target_layer.graph.nodes(), "%s is not in %s" % (obj.target, target_layer)
 
             return obj
         elif isinstance(obj, Edge):
@@ -1242,18 +1242,21 @@ class GenodeSubsystemEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
 
 class BacktrackingTestEngine(AnalysisEngine):
-    def __init__(self, layer, param, dec_graph, failure_rate=0, fail_once=False):
+    def __init__(self, layer, param, model, failure_rate=0, fail_times=1000):
         super().__init__(layer, param)
-        self.dec_graph    = dec_graph
-        self.failure_rate = 0
-        self.fail_once    = fail_once
+        self.model         = model
+        self.failure_rate  = 0
+        self.fail_times    = fail_times
 
     def check(self, obj, first):
+        if self.fail_times == 0:
+            return True
 
-        # check if for every assign node alle the candidates have been used
-        for node in self.dec_graph.nodes():
-            if not self.dec_graph.candidates_exhausted(node):
-                return False
+        # check if for every assign node all the candidates have been used
+        for node in self.model.decision_graph.nodes():
+            if not self.model.decision_graph.candidates_exhausted(node):
+                self.fail_times -= 1
+                return node
 
         return True
 

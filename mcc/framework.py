@@ -26,7 +26,7 @@ class DecisionGraph(Graph):
             return self.__str__()
 
         def __str__(self):
-            return '%s:%s:%s' % (self.layer, self.obj, self.param)
+            return '%s:(%s):%s' % (self.layer, self.obj, self.param)
 
     def __init__(self):
         super().__init__()
@@ -46,6 +46,9 @@ class DecisionGraph(Graph):
 
         # are there any candidates left
         candidates  = node.layer._get_param_candidates(node.param, node.obj)
+        if len(candidates) <= 1:
+            return True
+
         failed      = node.layer.get_param_failed(node.param, node.obj)
         value       = {node.layer._get_param_value(node.param, node.obj)}
 
@@ -149,7 +152,7 @@ class DecisionGraph(Graph):
 
             for node in nodes:
                 if node is None:
-                    print('Node is none')
+                    logging.info('Node is none')
 
                 node_str = '"{0}" [label="{1}", shape=hexagon]'.format(nodes.index(node), (node))
 
@@ -245,7 +248,7 @@ class Registry:
         if len(self.steps) > 0:
             if not Registry._same_layers(self.steps[-1], step):
                 self.print_steps()
-                print(step)
+                logging.info(step)
                 assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
         else:
             assert(step.source_layer == self.by_order[0])
@@ -454,7 +457,7 @@ class Layer:
         return self.graph.remove_node(obj)
 
     def remove_edge(self, obj):
-        return self.graph.remove_edge(obj.source, obj.target, obj)
+        return self.graph.remove_edge(obj)
 
     def create_edge(self, s, t):
         return self.graph.create_edge(s, t)
@@ -1455,6 +1458,12 @@ class Transform(Operation):
         logging.info("Executing %s" % self)
 
         for (index ,obj) in enumerate(iterable):
+
+            # skip if parameter was already selected
+            if self.source_layer._get_param_value(self.target_layer.name, obj) is not None:
+                logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
+                continue
+
             self.source_layer.start_tracking(self)
 
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
@@ -1506,8 +1515,10 @@ class Check(Operation):
 
                 self.source_layer.start_tracking(self)
 
-                if not ae.check(obj, first):
-                    # TODO let ae return a set of obj/param/layer tuples that help finding a culprit
+                result = ae.check(obj, first)
+                if isinstance(result, DecisionGraph.Node):
+                    raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
+                elif not result:
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
                 self.source_layer.stop_tracking(abort=True)

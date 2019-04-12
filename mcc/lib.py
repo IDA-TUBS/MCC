@@ -357,14 +357,14 @@ class SimpleMcc(MccBase):
         MccBase.__init__(self, repo)
         self._test_backtracking = test_backtracking
 
-    def insert_random_backtracking_engine(self, model, failure_rate=0.0):
+    def insert_random_backtracking_engine(self, model, failure_rate=0.0, fail_times=0):
         # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
         #      if we then set failure_rate to 1.0, we can traverse the entire search space
         assert(0 <= failure_rate <= 1.0)
 
-        source_layer = model.steps[len(model.steps)-1].source_layer;
+        source_layer = model.steps[-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
+        bt = BacktrackingTestEngine(source_layer, 'mapping', model, failure_rate, fail_times=fail_times)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
@@ -437,7 +437,7 @@ class SimpleMcc(MccBase):
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
-            self.insert_random_backtracking_engine(model, 0.05)
+            self.insert_random_backtracking_engine(model, 0.05, 0)
 
         model.print_steps()
         if outpath is not None and dot_mcc:
