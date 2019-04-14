@@ -44,6 +44,9 @@ extension
 		[_] MCC: export LGF
 		[_] import and evaluate task graph
 	[_] (diss) task layer
+		[_] connect nic tasks (using Proxy)
+		[_] assign activation patterns
+		[_] assign priority and budget on comp_inst
 	[_] (diss) scheduling context / execution budget layer
 	[_] (CCC) reliability dummy engine
 	[_] (optional) Mapping

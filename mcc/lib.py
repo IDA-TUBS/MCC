@@ -347,6 +347,8 @@ class MccBase:
 
         # TODO assign activation patterns
 
+        # TODO connect nic tasks (via Proxy)
+
         # TODO check CPU load
 
 class SimpleMcc(MccBase):
@@ -433,7 +435,7 @@ class SimpleMcc(MccBase):
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
 
-#        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
+        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
