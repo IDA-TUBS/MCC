@@ -69,7 +69,7 @@ class TasksCoreEngine(AnalysisEngine):
             serv = self.layer.get_param_value(self, 'source-service', e)
             signals.add(serv.ref())
 
-        for sig in signals:
+        for sig in signals - {None}:
             objects.update(component.taskgraph_objects(signal=sig))
 
         objects = self._connect_junctions(objects)
