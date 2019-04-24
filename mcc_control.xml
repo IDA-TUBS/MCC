@@ -5,7 +5,7 @@
 
 <xml>
 <mcc_control name="doris">
-	<operationmode name="exploration"/>
+	<operationmode name="pose"/>
 	<camera pos="left" failure="false"/>
 	<camera pos="middle" failure="false"/>
 	<camera pos="right" failure="false"/>

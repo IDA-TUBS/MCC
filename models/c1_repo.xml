@@ -209,6 +209,15 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
+		<timing>
+			<!-- FIXME take task graph from composite if available //-->
+			<on-signal from_ref="cam_left">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+			<on-signal from_ref="cam_right">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+		</timing>
 	</component>
 
 	<component name="hw_object_recog">
@@ -358,7 +367,6 @@
 			<service name="ROM" ref="right" label="rect_right" />
 			<ram quantum="64" />
 			<caps quantum="500" />
-			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="left">
@@ -384,10 +392,12 @@
 			<service name="ROM" ref="rect_left" />
 			<ram quantum="256" />
 			<caps quantum="500" />
-			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="disp">
+				<task wcet="100" bcet="80"/>
+			</on-signal>
+			<on-signal from_ref="rect_left">
 				<task wcet="100" bcet="80"/>
 			</on-signal>
 		</timing>
@@ -398,7 +408,6 @@
 			<service name="ROM" ref="in" function="POINTCLOUD" />
 			<ram quantum="256" />
 			<caps quantum="500" />
-			<spec name="pc"/>
 		</requires>
 		<timing>
 			<on-signal from_ref="in">

@@ -102,11 +102,17 @@ class ControlParser:
             self._mode_map = { 'doris' : {
                                    'exploration' : {
                                        'normal' : 'c1_object_recognition.xml',
-                                       'accel'  : 'c1_object_recognition_hw.xml' }},
+                                       'accel'  : 'c1_object_recognition_hw.xml' },
+                                    'pose' : {
+                                       'normal' : 'c1_pose_estimation.xml',
+                                       'accel'  : 'c1_pose_estimation_hw.xml' }},
                                'boris' : {
                                    'exploration' : {
                                        'normal' : 'c1_object_recognition.xml',
-                                       'accel'  : 'c1_object_recognition_hw.xml' }}}
+                                       'accel'  : 'c1_object_recognition_hw.xml' },
+                                    'pose' : {
+                                       'normal' : 'c1_pose_estimation.xml',
+                                       'accel'  : 'c1_pose_estimation_hw.xml' }}}
 
             self._pf_map   = { 'doris'       : 'base.xml',
                                'boris'       : 'base.xml'}
@@ -151,6 +157,9 @@ class EnvironmentModel:
     # TODO manage flux and reliability requirements
     def __init__(self, control):
         self.control = control
+
+    def accept_properties(self, arg):
+        return True
 
 class Mcc:
     def __init__(self, filename, basepath='mcc/models/', outpath='mcc/run/'):
