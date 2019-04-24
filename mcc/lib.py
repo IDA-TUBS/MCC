@@ -451,7 +451,7 @@ class SimpleMcc(MccBase):
         if self._test_backtracking:
             self.insert_random_backtracking_engine(model, 0.05, 0)
 
-        model.print_steps()
+#        model.print_steps()
         if outpath is not None and dot_mcc:
             model.write_dot(outpath+'mcc.dot')
 

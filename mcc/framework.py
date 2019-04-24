@@ -247,8 +247,8 @@ class Registry:
         # perform sanity checks (step's layers are correct, etc.)
         if len(self.steps) > 0:
             if not Registry._same_layers(self.steps[-1], step):
-                self.print_steps()
-                logging.info(step)
+#                self.print_steps()
+#                logging.info(step)
                 assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
         else:
             assert(step.source_layer == self.by_order[0])
