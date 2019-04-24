@@ -13,6 +13,351 @@ from mcc.framework import *
 from mcc.graph import *
 from mcc import model
 from mcc import parser
+from mcc.taskmodel import *
+
+class TasksCoreEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Gets task objects (core) from repo
+        """
+        acl = { layer        : {'reads' : set(['source-service', 'target-service'])}}
+        AnalysisEngine.__init__(self, layer, param='coretasks', acl=acl)
+
+    def _connect_junctions(self, objects):
+        # connect junctions
+        for task in [t for t in objects if isinstance(t, Task)]:
+            if task.expect_out == 'junction':
+                for junction in objects:
+                    if isinstance(junction, Tasklink):
+                        continue
+
+                    if junction.expect_in == 'junction' and \
+                       junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
+
+                        objects.add(Tasklink(task, junction, linktype='signal'))
+                        task.set_placeholder_out(None)
+                        break
+
+                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+
+        return objects
+
+    def map(self, obj, candidates):
+        """ Pulls taskgraph objects from repository
+        """
+        assert candidates is None
+
+        if isinstance(obj, model.Instance):
+            component = obj.component
+        else:
+            component = obj
+
+        # get time-triggered taskgraph
+        try:
+            objects = component.taskgraph_objects()
+        except Exception as e:
+           print("Could not get taskgraph objects for %s" % obj) 
+           raise e
+
+        # for each incoming connection (see if incoming signal exists)
+        signals = set()
+        for e in self.layer.graph.in_edges(obj):
+            serv = self.layer.get_param_value(self, 'target-service', e)
+            signals.add(serv.ref())
+
+        # for each outgoing connection (see if incoming signal exists)
+        for e in self.layer.graph.out_edges(obj):
+            serv = self.layer.get_param_value(self, 'source-service', e)
+            signals.add(serv.ref())
+
+        for sig in signals - {None}:
+            objects.update(component.taskgraph_objects(signal=sig))
+
+        objects = self._connect_junctions(objects)
+
+        return set([frozenset(objects)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+
+class TasksRPCEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Gets task objects (RPC) from repo
+        """
+        acl = { layer        : {'reads' : set(['coretasks', 'source-service', 'target-service'])}}
+        AnalysisEngine.__init__(self, layer, param='rpctasks', acl=acl)
+
+    def _connect_junctions(self, objects, junction_objects):
+        # connect junctions
+        for task in [t for t in objects if isinstance(t, Task)]:
+            if task.expect_out == 'junction':
+                for junction in junction_objects:
+                    if isinstance(junction, Tasklink):
+                        continue
+
+                    if junction.expect_in == 'junction' and \
+                       junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
+
+                        objects.add(Tasklink(task, junction, linktype='signal'))
+                        task.set_placeholder_out(None)
+                        break
+
+                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+
+        return objects
+
+    def _connect_rpc(self, obj, objects, call):
+        assert call in objects
+
+        # find return task
+        ret = None
+        for task in (t for t in objects if isinstance(t, Task)):
+            if task.expect_in == 'server' and task.expect_in_args['callertask'] == call:
+                ret = task
+                break
+
+        assert ret is not None, 'Could not find return task for %s' % call.expect_out_args
+
+        # find server component 
+        to_ref = call.expect_out_args['to_ref']
+        method = call.expect_out_args('method')
+        server = None
+        for e in self.layer.graph.out_edges(obj):
+            src = self.layer.get_param_value(self, 'source-service', e)
+            if src.ref() == to_ref:
+                server = e.target
+                server_ref = self.layer.get_param_value(self, 'target-service', e).ref()
+                break
+        assert(server is not None)
+
+        # get rpcobjects
+        if isinstance(server, model.Instance):
+            rpc_objects = server.component.taskgraph_objects(rpc=server_ref, method=method)
+        else:
+            rpc_objects = server.taskgraph_objects(rpc=server_ref, method=method)
+
+        assert len(rpc_objects), 'No task objects found for RPC'
+
+        # check rpcobjects for any calls
+        rpcs = set()
+        for task in (t for t in rpc_objects if isinstance(t, Task)):
+            if task.expect_out == 'server':
+                rpcs.add(task)
+
+        for rpc in rpcs:
+            rpc_objects = self._connect_rpc(server, rpc_objects, rpc)
+
+        # connect junction placeholders in rpc_objects
+        self._connect_junctions(rpc_objects, self.layer.get_param_value(self, 'coretasks', server))
+
+        # connect rpcobjects into objects
+        firsttask = None
+        lasttask  = None
+        for task in (t for t in rpc_objects if isinstance(t, Task)):
+            if task.expect_in == 'client':
+                firsttask = task
+            if task.expect_out == 'client':
+                lasttask = task
+
+        assert firsttask is not None
+        assert lasttask  is not None
+
+        objects.update(rpc_objects)
+        objects.add(Tasklink(call, firsttask))
+        objects.add(Tasklink(lasttask, ret))
+        call.set_placeholder_out(None)
+        ret.set_placeholder_in(None)
+        firsttask.set_placeholder_in(None)
+        lasttask.set_placeholder_out(None)
+
+        return objects
+
+    def map(self, obj, candidates):
+        """ Pulls taskgraph objects from repository
+        """
+        assert candidates is None
+
+        objects = self.layer.get_param_value(self, 'coretasks', obj)
+
+        rpcs = set()
+        for task in (t for t in objects if isinstance(t, Task)):
+            if task.expect_out == 'server':
+                rpcs.add(task)
+        for rpc in rpcs:
+            objects = self._connect_rpc(obj, objects, rpc)
+
+        return set([frozenset(objects)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+class TaskgraphEngine(AnalysisEngine):
+    def __init__(self, layer, target_layer):
+        """ Transforms a component graph into a task graph.
+        """
+        acl = { layer        : {'reads' : set(['mapping', 'rpctasks', 'source-service', 'target-service'])},
+                target_layer : {'writes' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='tasks', acl=acl)
+        self.target_layer = target_layer
+
+    def _graph_objects(self, obj, objects):
+        result = set()
+
+        for o in objects:
+            if isinstance(o, Task):
+                result.add(GraphObj(o, params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
+            else:
+                result.add(o)
+
+        return result
+
+    def _remove_unconnected_junctions(self, objects):
+        # remove unconnected junctions
+        tasks = set([t for t in objects if isinstance(t, Task)])
+        links = (t for t in objects if isinstance(t, Tasklink))
+        # first: aggregate seeds (junctions without any input)
+        unconnected = set()
+        for task in tasks:
+            if task.expect_in == 'junction':
+                connected = False
+                for link in links:
+                    if link.target == task:
+                        connected = True
+                if not connected:
+                    unconnected.add(task)
+        # second: iteratively add subsequent tasks to unconnected set
+        old = 0
+        while old != len(unconnected):
+            old = len(unconnected)
+            for task in tasks - unconnected:
+                connected = False
+                for link in (l for l in links if l.target == task):
+                    if link.source not in unconnected:
+                        connected = True
+
+                if not connected:
+                    unconnected.add(task)
+
+        # now remove tasklinks and tasks
+        for link in [l for l in objects if isinstance(l, Tasklink)]:
+            if link.source in unconnected or link.target in unconnected:
+                objects.remove(link)
+
+        return objects - unconnected
+
+    def map(self, obj, candidates):
+        assert candidates is None
+
+        if isinstance(obj, Edge):
+            # add Tasklinks
+            source_tasks = self.layer.get_param_value(self, 'tasks', obj.source)
+            target_tasks = self.layer.get_param_value(self, 'tasks', obj.target)
+            source_ref   = self.layer.get_param_value(self, 'source-service', obj).ref()
+            target_ref   = self.layer.get_param_value(self, 'target-service', obj).ref()
+
+            source_sender = None
+            source_receiver = None
+            # find sender or receiver in source_tasks
+            for task in (t for t in source_tasks if isinstance(t, Task)):
+                if task.expect_out == 'receiver' and \
+                   task.expect_out_args['to_ref'] == source_ref:
+                    source_sender = task
+                if task.expect_in == 'sender' and \
+                   task.expect_in_args['from_ref'] == source_ref:
+                    source_receiver = task
+
+            # find sender or receiver in target_tasks
+            target_sender = None
+            target_receiver = None
+            for task in (t for t in target_tasks if isinstance(t, Task)):
+                if task.expect_out == 'receiver' and \
+                   task.expect_out_args['to_ref'] == target_ref:
+                    target_sender = task
+                if task.expect_in == 'sender' and \
+                   task.expect_in_args['from_ref'] == target_ref:
+                    target_receiver = task
+
+            objects = set()
+            if source_sender is not None:
+                assert target_receiver is not None, "Receiver task on %s with ref %s is missing" % (obj.target, target_ref)
+                objects.add(Tasklink(source_sender, target_receiver, linktype='signal'))
+
+            if target_sender is not None:
+                assert source_receiver is not None, "Receiver task on %s with ref %s is missing" % (obj.source, source_ref)
+                objects.add(Tasklink(target_sender, source_receiver, linktype='signal'))
+
+        else:
+            objects = self.layer.get_param_value(self, 'rpctasks', obj)
+            objects = self._remove_unconnected_junctions(set(objects))
+
+        return set([frozenset(objects)])
+
+    def assign(self, obj, candidates):
+        """ Selects single candidate
+        """
+        assert len(candidates) == 1
+        return list(candidates)[0]
+
+    def check(self, obj, first):
+        """ Check task graph consistency 
+        """
+        taskobjects = self.layer.get_param_value(self, self.param, obj)
+
+        # component may have no tasks, which is an indicator for a superfluous component
+        # but not necessarily an error
+        if taskobjects is None:
+            logging.warning("No tasks found for component %s" % obj)
+        elif len(taskobjects) == 0:
+            logging.warning("No tasks found for component %s" % obj)
+
+        tasks = (t for t in taskobjects if isinstance(t, Task))
+        links = (t for t in taskobjects if isinstance(t, Tasklink))
+
+        # TODO check that sender exists for each receiver
+
+        # check for unconnected tasks
+        for t in tasks:
+            # There must not be a client/server placeholder in the taskgraph
+            if t.expect_in == 'client' or t.expect_in == 'server':
+                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % obj)
+                return False
+
+            # resulting taskgraph may still contain interrupt or sender placeholders,
+            #  junction placeholders must at least have one connection though
+            if t.expect_in == 'junction':
+                connections = 0
+                for l in links:
+                    if l.target == t:
+                        connections += 1
+
+                if connections == 0:
+                    logging.error("Junction placeholder (in) present in taskgraph for component %s" % obj)
+                    return False
+                elif connections > 1 and t.expect_in != 'junction':
+                    logging.error("Multiple connections to junction taskgraph for component %s" % obj)
+                    return False
+
+            if t.expect_out == 'server':
+                logging.error("Server placeholder (out) present in taskgraph for component %s" % obj)
+                return False
+
+        return True
+
+    def transform(self, obj, target_layer):
+        objects = self.layer.get_param_value(self, self.param, obj)
+        return self._graph_objects(obj, objects)
+
+    def source_types(self):
+        return tuple({model.Instance, parser.Repository.Component, Edge})
+
+    def target_types(self):
+        return tuple({Task})
 
 class NetworkEngine(AnalysisEngine):
     def __init__(self, layer, max_byte_s=10*1024*1024):
@@ -23,6 +368,7 @@ class NetworkEngine(AnalysisEngine):
     def _find_sink(self, obj, visited):
         # find 
         pfc = self.layer.get_param_value(self, 'mapping', obj)
+        comp = self.layer.get_param_value(self, 'component', obj)
 
         # trace ROM services
         for edge in self.layer.graph.in_edges(obj):
@@ -32,7 +378,6 @@ class NetworkEngine(AnalysisEngine):
             other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
             if other_pfc is not None and pfc != other_pfc:
                 continue
-
             for con in self.layer.get_param_value(self, 'connections', edge):
                 service = con.source_service
                 if service.name() == 'ROM':
@@ -146,9 +491,39 @@ class StaticEngine(AnalysisEngine):
         return candidates - exclude
 
 class MappingEngine(AnalysisEngine):
-    def __init__(self, layer):
-        acl = { layer        : {'reads' : set(['mapping']) }}
-        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+    def __init__(self, layer, repo, pf_model):
+        AnalysisEngine.__init__(self, layer, param='mapping')
+        self.pf_model = pf_model
+        self.repo = repo
+
+    def map(self, obj, candidates):
+        if candidates is not None and len(candidates) > 0:
+            return candidates
+
+        assert not isinstance(obj, Edge)
+
+        components = self.repo.find_components_by_type(obj.query(), obj.type())
+
+        if len(components) == 0:
+            logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
+            return set()
+
+        pf_components = self.pf_model.platform_graph.nodes()
+
+        candidates = set()
+
+        # iterate components and aggregate possible platform components
+        for c in components:
+            for pfc in pf_components:
+                if pfc.match_specs(c.requires_specs()):
+                    candidates.add(pfc)
+
+        print("%s: %s" % (obj, candidates))
+        return candidates
+
+    def assign(self, obj, candidates):
+        # TODO here we call the constraint solver
+        return list(candidates)[0]
 
     def check(self, obj, first):
         """ Checks whether a platform mapping is assigned to all nodes.
@@ -618,8 +993,24 @@ class ComponentEngine(AnalysisEngine):
         """
         return self.layer.get_param_value(self, self.param, obj) is not None
 
+class EnvPatternEngine(AnalysisEngine):
+    def __init__(self, layer, envmodel):
+        AnalysisEngine.__init__(self, layer, param='pattern')
+        self.envmodel = envmodel
+
+    def map(self, obj, candidates):
+        if self.envmodel is None:
+            return candidates
+
+        new_candidates = set()
+        for c in candidates:
+            if self.envmodel.accept_properties(c.properties()):
+                new_candidates.add(c)
+
+        return new_candidates
+
 class PatternEngine(AnalysisEngine):
-    def __init__(self, layer, target_layer, source_param='component'):
+    def __init__(self, layer, target_layer, source_param='component', envmodel=None):
         acl = { layer        : { 'reads'  : set([source_param]) },
                 target_layer : { 'writes' : set(['pattern-config', 'source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
@@ -640,7 +1031,10 @@ class PatternEngine(AnalysisEngine):
         if len(candidates) == 0:
             raise Exception("no pattern left for assignment")
 
-        return list(candidates)[0]
+        if len(candidates) == 1:
+            return list(candidates)[0]
+
+        return sorted(candidates, reverse=True, key=lambda c: c.prio())[0]
 
     def check(self, obj, first):
         """ Checks whether a pattern was assigned.
@@ -658,8 +1052,8 @@ class PatternEngine(AnalysisEngine):
         if self.layer.get_param_value(self, self.param, obj) is None:
             # no protocol stack was selected
             if isinstance(obj, Edge):
-                assert(obj.source in target_layer.graph.nodes())
-                assert(obj.target in target_layer.graph.nodes())
+                assert obj.source in target_layer.graph.nodes(), "%s is not in %s" % (obj.source, target_layer)
+                assert obj.target in target_layer.graph.nodes(), "%s is not in %s" % (obj.target, target_layer)
 
             return obj
         elif isinstance(obj, Edge):
@@ -676,13 +1070,6 @@ class SpecEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['mapping']) } }
         AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
-    def _match_specs(self, required, provided):
-        for spec in required:
-            if spec not in provided:
-                return False
-
-        return True
-
     def map(self, obj, candidates): 
         """ Reduces set of 'mapping' candidates by checking the obj's spec requirements.
         """
@@ -697,8 +1084,10 @@ class SpecEngine(AnalysisEngine):
             pf_comp = self.layer.get_param_value(self, 'mapping', obj)
             assert(pf_comp is not None)
 
-            if self._match_specs(c.requires_specs(), pf_comp.specs()):
-                keep.add(c)
+            for p in c.patterns():
+                if pf_comp.match_specs(p.requires_specs()):
+                    keep.add(c)
+                    break
 
         return keep
 
@@ -722,7 +1111,7 @@ class SpecEngine(AnalysisEngine):
         else:
             comp = obj
 
-        if not self._match_specs(comp.requires_specs(), pf_comp.specs()):
+        if not pf_comp.match_specs(comp.requires_specs()):
             return False
 
         return True
@@ -876,18 +1265,21 @@ class GenodeSubsystemEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='rte-instance')
 
 class BacktrackingTestEngine(AnalysisEngine):
-    def __init__(self, layer, param, dec_graph, failure_rate=0, fail_once=False):
+    def __init__(self, layer, param, model, failure_rate=0, fail_times=1000):
         super().__init__(layer, param)
-        self.dec_graph    = dec_graph
-        self.failure_rate = 0
-        self.fail_once    = fail_once
+        self.model         = model
+        self.failure_rate  = 0
+        self.fail_times    = fail_times
 
     def check(self, obj, first):
+        if self.fail_times == 0:
+            return True
 
-        # check if for every assign node alle the candidates have been used
-        for node in self.dec_graph.nodes():
-            if not self.dec_graph.candidates_exhausted(node):
-                return False
+        # check if for every assign node all the candidates have been used
+        for node in self.model.decision_graph.nodes():
+            if not self.model.decision_graph.candidates_exhausted(node):
+                self.fail_times -= 1
+                return node
 
         return True
 
@@ -902,51 +1294,72 @@ class InstantiationEngine(AnalysisEngine):
         self.factory      = factory
         self.target_layer = target_layer
 
+    def reset(self):
+        self.factory.reset()
+
     def map(self, obj, candidates):
         """ Get and map to dedicated and shared instance object from factory
         """
-        assert not isinstance(obj, Edge)
         assert candidates is None
+        if isinstance(obj, Edge):
+            source_candidates = self.layer.get_param_candidates(self, 'instance', obj.source)
+            source_value      = self.layer.get_param_value(self, 'instance', obj.source)
+            target_candidates = self.layer.get_param_candidates(self, 'instance', obj.target)
+            target_value      = self.layer.get_param_value(self, 'instance', obj.target)
 
-        # if it's already an instance
-        if isinstance(obj, model.Instance):
-            return {obj}
+            # TODO check that source and target service are the same
+            #      best done by using the factory to create edges once and reference them here
+            #      at the moment, we only use shareable=true for SISO components
+            if source_value.shared():
+                if len(source_candidates) > 1:
+                    return {False}
 
-        pfc = self.layer.get_param_value(self, 'mapping', obj)
-
-        ded    = self.factory.dedicated_instance(pfc.name(), obj,
-                        self.layer.get_param_value(self, 'pattern-config', obj))
-
-        if not obj.dedicated():
-            shared = self.factory.shared_instance   (pfc.name(), obj,
-                            self.layer.get_param_value(self, 'pattern-config', obj))
+            return {True}
         else:
-            # TODO if out edges have the same targets and constraints, we could still create a shared instance
-            return {ded}
 
-        return {ded, shared}
+            # if it's already an instance
+            if isinstance(obj, model.Instance):
+                return {obj}
+
+            pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+            ded    = self.factory.dedicated_instance(pfc.name(), obj,
+                            self.layer.get_param_value(self, 'pattern-config', obj))
+
+            if not obj.dedicated():
+                shared = self.factory.shared_instance   (pfc.name(), obj,
+                                self.layer.get_param_value(self, 'pattern-config', obj))
+            else:
+                # TODO if out edges have the same targets and constraints, we could still create a shared instance
+                return {ded}
+
+            return {ded, shared}
 
     def assign(self, obj, candidates):
         """ Assigns shared candidate if present
         """
-        assert not isinstance(obj, Edge)
-        assert len(candidates) > 0
+        if not isinstance(obj, Edge):
+            assert len(candidates) > 0
 
-        for c in candidates:
-            if c.shared():
-                return c
+            for c in candidates:
+                if c.shared():
+                    return c
 
         return list(candidates)[0]
 
     def transform(self, obj, target_layer):
 
         if isinstance(obj, Edge):
-            source = self.layer.get_param_value(self, self.param, obj.source)
-            target = self.layer.get_param_value(self, self.param, obj.target)
+            if self.layer.get_param_value(self, self.param, obj):
+                source = self.layer.get_param_value(self, self.param, obj.source)
+                target = self.layer.get_param_value(self, self.param, obj.target)
 
-            return GraphObj(Edge(source,target),
-                params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
-                        'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+                return GraphObj(Edge(source,target),
+                    params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
+                            'target-service': self.layer.get_param_value(self, 'target-service', obj)})
+            else:
+                # FIXME return already-inserted object to correctly set inter-layer relations
+                return set()
 
         else:
             return GraphObj(self.layer.get_param_value(self, self.param, obj),

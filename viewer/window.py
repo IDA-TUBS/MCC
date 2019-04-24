@@ -57,6 +57,21 @@ class Window(Gtk.ApplicationWindow):
               </packing>
             </child>
             <child>
+              <object class="GtkToolButton" id="save">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Exports the currently visible part of the graph</property>
+                <property name="action_name">win.save</property>
+                <property name="label" translatable="yes">Save</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-save</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkSeparatorToolItem">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
@@ -275,6 +290,7 @@ service parameter.
         # connect toolbar actions
         self._add_simple_action('reload', self.on_reload)
         self._add_simple_action('print', self.on_print)
+        self._add_simple_action('save', self.on_save)
         self._add_simple_action('ZoomIn', self.on_zoom_in)
         self._add_simple_action('ZoomOut', self.on_zoom_out)
         self._add_simple_action('ZoomFit', self.on_zoom_fit)
@@ -338,6 +354,24 @@ service parameter.
 
     def on_print(self, action, param):
         self.current_widget().on_print(action)
+
+    def on_save(self, action, param):
+        chooser = Gtk.FileChooserDialog(parent=self,
+                                        title="Save Graph",
+                                        action=Gtk.FileChooserAction.SAVE,
+                                        buttons=(Gtk.STOCK_CANCEL,
+                                                 Gtk.ResponseType.CANCEL,
+                                                 Gtk.STOCK_SAVE,
+                                                 Gtk.ResponseType.OK))
+        chooser.set_default_response(Gtk.ResponseType.OK)
+        chooser.set_current_folder(self.last_open_dir)
+        if chooser.run() == Gtk.ResponseType.OK:
+            filename = chooser.get_filename()
+            self.last_open_dir = chooser.get_current_folder()
+            chooser.destroy()
+            self.current_page().save_dot(filename)
+        else:
+            chooser.destroy()
 
     def on_close(self, action, param):
         self.notebook.remove_page(self.notebook.get_current_page())

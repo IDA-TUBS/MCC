@@ -169,6 +169,20 @@ class Page(Gtk.HPaned):
         except IOError as ex:
             self.error_dialog(str(ex))
 
+    def save_dot(self, filepath):
+        layers = self.layerview.selected_layers()
+        try:
+            if len(layers) > 1:
+                dot = self.dotfactory.get_layers(layers).encode('utf-8')
+            else:
+                dot = self.dotfactory.get_layer(layers[0]).encode('utf-8')
+
+            with open(filepath, 'wb') as dotfile:
+                dotfile.write(dot)
+
+        except IOError as ex:
+            self.error_dialog(str(ex))
+
     def reload(self):
         self._open_pickle(self.filename)
 
@@ -376,6 +390,7 @@ class Page(Gtk.HPaned):
 
     def _current_layers(self):
         return [self.model.by_name[x] for x in self.layerview.selected_layers()]
+
 
     def on_param_activated(self, treeview, path, column):
         # expand subtree

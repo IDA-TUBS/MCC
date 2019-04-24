@@ -121,6 +121,10 @@ class InstanceFactory:
         self.instances = dict()
         self.identifiers = dict()
 
+    def reset(self):
+        self.instances = dict()
+        self.identifiers = dict()
+
     def unique_name(self, component):
         # build unique name from component name, object id and sequence number
         if component.unique_label() not in self.identifiers:
@@ -221,6 +225,12 @@ class BaseChild:
     #######################
     # Component interface #
     #######################
+
+    def properties(self):
+        return set()
+
+    def prio(self):
+        return 0
 
     def requires_rte(self):
         # all components have the same RTE requirement
@@ -558,6 +568,13 @@ class SystemModel(BacktrackRegistry):
         else:
             return self.find_parents(parents, parent_layer, in_layer, parent_type)
 
+    def _pf_component(self, layer, node):
+        candidates = layer._get_param_candidates('mapping', node)
+        if candidates is None or len(candidates) == 0:
+            return None
+
+        return list(candidates)[0]
+
     def connect_functions(self):
         fa = self.by_name['func_arch']
 
@@ -576,16 +593,20 @@ class SystemModel(BacktrackRegistry):
                     # find providing child
                     local_match = None
                     remote_match = None
-                    pf_component = list(fa._get_param_candidates('mapping', c))[0]
+                    pf_component = self._pf_component(fa, c)
                     for node in fa.graph.nodes():
                         if node is not c:
+                            this_pf_component = self._pf_component(fa, node)
+
                             funcs = copy.copy(node.functions())
                             if hasattr(node, 'query'):
                                 for provider in self.repo.find_components_by_type(node.query(), node.type()):
                                     funcs.update(provider.functions())
 
                             if depfunc in funcs:
-                                if list(fa._get_param_candidates('mapping', node))[0].in_native_domain(pf_component):
+                                if this_pf_component is None or pf_component is None:
+                                    remote_match = node
+                                elif this_pf_component.in_native_domain(pf_component):
                                     local_match = node
                                 else:
                                     remote_match = node

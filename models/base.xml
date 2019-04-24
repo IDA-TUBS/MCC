@@ -12,24 +12,39 @@
 
 	<component name="remote_rom_client">
 		<provides>
-			<service name="ROM" />
+			<service name="ROM" ref='rom' />
 		</provides>
 		<requires>
-			<service name="Nic" />
+			<service name="Nic" ref='nic' />
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
 		<defaults dynamic='true' />
+		<timing>
+		    <on-signal from_ref="nic">
+		        <task name="unpackage" wcet="100" bcet="50"/>
+		        <signal to_ref="rom"/>
+		    </on-signal>
+		</timing>
 	</component>
 
 	<component name="remote_rom_server">
 		<requires>
-			<service name="Nic" />
-			<service name="ROM" />
+			<service name="Nic" ref='nic' />
+			<service name="ROM" ref='rom' />
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
 		<defaults dynamic='true' />
+		<timing>
+		    <on-signal from_ref="rom">
+		        <task name="package" wcet="100" bcet="50"/>
+		        <signal to_ref="nic"/>
+		    </on-signal>
+		    <on-signal from_ref="nic">
+		        <task name="acknowledge" wcet="100" bcet="50"/>
+		    </on-signal>
+		</timing>
 	</component>
 
 	<component name="core" singleton="true">
@@ -60,6 +75,15 @@
 			<ram quantum="16" />
 			<caps quantum="300" />
 		</requires>
+		<timing>
+		    <on-signal from_ref="client">
+		        <task name="send" wcet="100" bcet="50"/>
+		    </on-signal>
+		    <on-interrupt>
+		        <task name="recv" wcet="100" bcet="50"/>
+		        <signal to_ref="client" />
+		    </on-interrupt>
+		</timing>
 	</component>
 
 	<component name="nic_bridge" shareable="true">
@@ -72,6 +96,20 @@
 			<ram quantum="32" />
 			<caps quantum="300" />
 		</requires>
+		<timing>
+		    <on-signal from_ref="driver">
+		        <task name="recv" wcet="100" bcet="50"/>
+		        <signal junction="dispatch" />
+		    </on-signal>
+		    <on-signal from_ref="client">
+		        <task name="send" wcet="100" bcet="50"/>
+		        <signal to_ref="driver" />
+		    </on-signal>
+		    <junction name="dispatch" type="DEMUX">
+		        <task name="dispatch" wcet="100" bcet="50"/>
+		        <signal to_ref="client" />
+		    </junction>
+		</timing>
 	</component>
 
 	<composite name="ROM_PROXY">

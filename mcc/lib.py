@@ -93,7 +93,17 @@ class MccBase:
         # inherit mapping from all neighbours (excluding static platform components)
         model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
 
-    def _select_components(self, model, slayer, dlayer):
+    def _map_functions(self, model, layer):
+        fc = model.by_name[layer]
+
+        me = MappingEngine(fc, model.repo, model.platform)
+
+        pfmap = NodeStep(Map(me, 'map functions'))
+        pfmap.add_operation(Assign(me, 'map functions'))
+        pfmap.add_operation(Check(me, 'map functions'))
+        model.add_step(pfmap)
+
+    def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
 
         Args:
@@ -126,7 +136,12 @@ class MccBase:
 
         # select pattern (dummy step, nothing happening here)
         pe = PatternEngine(fc, ca)
-        model.add_step(MapAssignNodeStep(pe, 'pattern'))
+        epe = EnvPatternEngine(fc, envmodel)
+        patterns = Map(pe, 'pattern')
+        patterns.register_ae(epe)
+        patstep = NodeStep(patterns)
+        patstep.add_operation(Assign(pe, 'pattern'))
+        model.add_step(patstep)
 
         # sanity check and transform
         transform = NodeStep(Check(pe, name='pattern'))
@@ -151,7 +166,7 @@ class MccBase:
         self._complete_mapping(model, ca)
 
         # check mapping
-        model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
+        model.add_step(NodeStep(Check(MappingEngine(ca, model.repo, model.platform), name='platform mapping is complete')))
 
         # TODO (?) check that connections satisfy functional dependencies
 
@@ -286,7 +301,10 @@ class MccBase:
         instantiate.add_operation(Assign(ie, 'instantiate'))
         instantiate.add_operation(Transform(ie, ci, 'instantiate'))
         model.add_step(instantiate)
-        model.add_step(EdgeStep(Transform(ie, ci, 'copy edges')))
+        connect = EdgeStep(Map(ie, 'copy edges'))
+        connect.add_operation(Assign(ie, 'copy edges'))
+        connect.add_operation(Transform(ie, ci, 'copy edges'))
+        model.add_step(connect)
 
         # check singleton (per PfComponent)
         se = SingletonEngine(ci, pf_model)
@@ -307,6 +325,41 @@ class MccBase:
 
         model.add_step(resources)
 
+    def _timing_check(self, model, slayer, dlayer):
+        """ Build taskgraph layer and perform timing checks
+        """
+
+        slayer = model.by_name[slayer]
+        tg     = model.by_name[dlayer]
+
+        core = TasksCoreEngine(slayer)
+        rpc  = TasksRPCEngine(slayer)
+        ae   = TaskgraphEngine(slayer, tg)
+
+        coretasks = NodeStep(Map(core, 'get coretasks'))
+        coretasks.add_operation(Assign(core, 'get coretasks'))
+        model.add_step(coretasks)
+
+        rpctasks = NodeStep(Map(rpc, 'get rpctasks'))
+        rpctasks.add_operation(Assign(rpc, 'get rpctasks'))
+        model.add_step(rpctasks)
+
+        trafo = NodeStep(Map(ae, 'build taskgraph'))
+        trafo.add_operation(Assign(ae, 'build taskgraph'))
+        trafo.add_operation(Check(ae, 'build taskgraph'))
+        trafo.add_operation(Transform(ae, tg, 'build taskgraph'))
+        model.add_step(trafo)
+
+        con = EdgeStep(Map(ae, 'connect tasks'))
+        con.add_operation(Assign(ae, 'connect tasks'))
+        con.add_operation(Transform(ae, tg, 'connect tasks'))
+        model.add_step(con)
+
+        # TODO assign activation patterns
+
+        # TODO connect nic tasks (via Proxy)
+
+        # TODO check CPU load
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
@@ -316,14 +369,14 @@ class SimpleMcc(MccBase):
         MccBase.__init__(self, repo)
         self._test_backtracking = test_backtracking
 
-    def insert_random_backtracking_engine(self, model, failure_rate=0.0):
+    def insert_random_backtracking_engine(self, model, failure_rate=0.0, fail_times=0):
         # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
         #      if we then set failure_rate to 1.0, we can traverse the entire search space
         assert(0 <= failure_rate <= 1.0)
 
-        source_layer = model.steps[len(model.steps)-1].source_layer;
+        source_layer = model.steps[-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', model.decision_graph(), failure_rate, fail_once=False)
+        bt = BacktrackingTestEngine(source_layer, 'mapping', model, failure_rate, fail_times=fail_times)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
@@ -360,14 +413,14 @@ class SimpleMcc(MccBase):
         # remark: 'mapping' is already fixed in func_arch
         #  we thus assign just assign nodes to platform components as queried
         fa = model.by_name['func_arch']
-        qe = QueryEngine(fa)
-        model.add_step(NodeStep(Assign(qe, 'query')))
+
+        self._map_functions(model, 'func_arch')
 
         # solve reachability and transform into comm_arch
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')
 
         # select components and transform into comp_arch
-        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1')
+        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1', envmodel=envmodel)
 
         # TODO test case for protocol stack insertion
         self._insert_protocolstacks(model, slayer='comp_arch-pre1', dlayer='comp_arch-pre2')
@@ -394,9 +447,9 @@ class SimpleMcc(MccBase):
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
-            self.insert_random_backtracking_engine(model, 0.05)
+            self.insert_random_backtracking_engine(model, 0.05, 0)
 
-        model.print_steps()
+#        model.print_steps()
         if outpath is not None and dot_mcc:
             model.write_dot(outpath+'mcc.dot')
 
@@ -412,7 +465,7 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            model.execute()
+            model.execute(outpath)
             decision_graph = model.decision_graph
 
         except Exception as e:

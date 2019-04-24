@@ -42,10 +42,19 @@ refactoring
 extension
 	[_] (CCC C1) hardware scheduling
 	[_] (diss) task layer
+		[_] connect nic tasks (using Proxy)
+		[_] assign activation patterns
+		[_] assign priority and budget on comp_inst
+	[_] (diss) scheduling context / execution budget layer
 	[_] (CCC) reliability dummy engine
 	[_] (optional) Mapping
-		[_] implement MappingHelperEngine
-			: same resource, different resource, don't care
+		: see documents/mapping.{md,pdf}
+	[_] CP comparison
+		: backtrack all possibilities and create CP
+		add analysis engine methods
+			add_variables()
+			add_trafo_constraints()
+			add_check_constraints()
 testing / refinement
 	[X] compare hw_accelerations sw/hw
 	[_] c1 showcases

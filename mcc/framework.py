@@ -26,7 +26,7 @@ class DecisionGraph(Graph):
             return self.__str__()
 
         def __str__(self):
-            return '%s:%s:%s' % (self.layer, self.obj, self.param)
+            return '%s:(%s):%s' % (self.layer, self.obj, self.param)
 
     def __init__(self):
         super().__init__()
@@ -46,6 +46,9 @@ class DecisionGraph(Graph):
 
         # are there any candidates left
         candidates  = node.layer._get_param_candidates(node.param, node.obj)
+        if len(candidates) <= 1:
+            return True
+
         failed      = node.layer.get_param_failed(node.param, node.obj)
         value       = {node.layer._get_param_value(node.param, node.obj)}
 
@@ -149,7 +152,7 @@ class DecisionGraph(Graph):
 
             for node in nodes:
                 if node is None:
-                    print('Node is none')
+                    logging.info('Node is none')
 
                 node_str = '"{0}" [label="{1}", shape=hexagon]'.format(nodes.index(node), (node))
 
@@ -244,8 +247,8 @@ class Registry:
         # perform sanity checks (step's layers are correct, etc.)
         if len(self.steps) > 0:
             if not Registry._same_layers(self.steps[-1], step):
-                self.print_steps()
-                print(step)
+#                self.print_steps()
+#                logging.info(step)
                 assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
         else:
             assert(step.source_layer == self.by_order[0])
@@ -454,7 +457,7 @@ class Layer:
         return self.graph.remove_node(obj)
 
     def remove_edge(self, obj):
-        return self.graph.remove_edge(obj.source, obj.target, obj)
+        return self.graph.remove_edge(obj)
 
     def create_edge(self, s, t):
         return self.graph.create_edge(s, t)
@@ -675,6 +678,11 @@ class Layer:
             self.dependency_tracker.track_read(self, obj, param)
 
         return self._get_param_value(param, obj)
+
+    def track_read(self, param, obj):
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_read(self, obj, param)
 
     def _get_param_value(self, param, obj):
         params = self._get_params(obj)
@@ -1450,32 +1458,44 @@ class Transform(Operation):
         logging.info("Executing %s" % self)
 
         for (index ,obj) in enumerate(iterable):
+
+            # skip if parameter was already selected
+            if self.source_layer._get_param_value(self.target_layer.name, obj) is not None:
+                logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
+                continue
+
             self.source_layer.start_tracking(self)
 
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
-            assert new_objs, "transform() did not return any object"
+            if not new_objs:
+                logging.warning("transform() did not return any object (returned: %s)" % new_objs)
+                self.source_layer.stop_tracking()
+            else:
+                # remark: also returns already existing objects
+                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
+                assert len(inserted) > 0
 
-            # remark: also returns already existing objects
-            inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
-            assert len(inserted) > 0
+                for o in inserted:
+                    if not isinstance(o, Edge):
+                        assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
+                                self.target_layer.node_types())
 
-            for o in inserted:
-                if not isinstance(o, Edge):
-                    assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
-                            self.target_layer.node_types())
+                self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
+                self.source_layer.stop_tracking()
 
-            self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
-            for o in inserted:
-                src = self.target_layer._get_param_value(self.source_layer.name, o)
-                if src is None:
-                    src = obj
-                elif isinstance(src, set):
-                    src.add(obj)
-                else:
-                    src = { src, obj }
-                self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
+                self.source_layer.start_tracking(self)
+                self.source_layer.track_read(self.target_layer.name, obj)
+                for o in inserted:
+                    src = self.target_layer._get_param_value(self.source_layer.name, o)
+                    if src is None:
+                        src = obj
+                    elif isinstance(src, set) or isinstance(src, frozenset):
+                        src.add(obj)
+                    else:
+                        src = { src, obj }
+                    self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
 
-            self.source_layer.stop_tracking()
+                self.source_layer.stop_tracking()
 
         return True
 
@@ -1495,7 +1515,10 @@ class Check(Operation):
 
                 self.source_layer.start_tracking(self)
 
-                if not ae.check(obj, first):
+                result = ae.check(obj, first)
+                if isinstance(result, DecisionGraph.Node):
+                    raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
+                elif not result:
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
                 self.source_layer.stop_tracking(abort=True)

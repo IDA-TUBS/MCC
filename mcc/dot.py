@@ -34,6 +34,13 @@ class DotFactory:
                   'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
 
         self.add_style(
+                'task_graph',
+                { 'node' : ['shape=ellipse', 'colorscheme=set39', 'fillcolor=9', 'style=filled'],
+                  'edge' : { 'call' : 'arrowhead=normal',
+                             'signal' : 'arrowhead=normal,style=dashed' },
+                  'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
+
+        self.add_style(
                 'platform',
                 { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                                'edge' : {'undirected' : ['arrowhead=none', 'arrowtail=none'],
@@ -80,6 +87,8 @@ class DotFactory:
 
     def _output_edge(self, layer, dotfile, edge, prefix="  "):
         style = self.dot_styles[layer.name]['edge']
+        if isinstance(style, dict):
+            style = style[edge.edgetype()]
         name = layer._get_param_value('service', edge)
 
         if name is not None:

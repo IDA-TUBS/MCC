@@ -180,6 +180,12 @@ class Repository(XMLParser):
             self.repo = repo
             self.xml_node = xml_node
 
+        def properties(self):
+            return set()
+
+        def prio(self):
+            return 0
+
         def uid(self):
             # if singleton, return (binary) name
             if self.singleton():
@@ -315,6 +321,103 @@ class Repository(XMLParser):
 
             return set([self])
 
+        def _taskgraph_objects(self, root, expect, **kwargs):
+            # return tasks and tasklinks within given node
+            objects = list()
+            for node in root:
+                if node.tag == 'task':
+                    newtask = Task(name=node.get('name'),
+                                   wcet=int(node.get('wcet')),
+                                   bcet=int(node.get('bcet')),
+                                   thread=self)
+                    if len(objects):
+                        if objects[-1].expect_out == 'server':
+                            newtask.set_placeholder_in('server',
+                                                       callertask=objects[-1])
+                        else:
+                            objects.append(Tasklink(objects[-1], newtask))
+                    else:
+                        newtask.set_placeholder_in(expect, **kwargs)
+
+                    objects.append(newtask)
+
+                elif node.tag == 'signal':
+                    if node.get('junction'):
+                        objects[-1].set_placeholder_out('junction',
+                                                        name=node.get('junction'))
+                    else:
+                        objects[-1].set_placeholder_out('receiver',
+                                                        to_ref=node.get('to_ref'))
+
+                elif node.tag == 'call':
+                    objects[-1].set_placeholder_out('server',
+                                                    to_ref=node.get('to_ref'),
+                                                    method=node.get('method'))
+
+            if objects[0].expect_in == 'client':
+                objects[-1].expect_out == 'client'
+
+            return set(objects)
+
+        def taskgraph_objects(self, rpc=None, method=None, signal=None):
+            # find <timing>
+            timing = self.xml_node.find('./timing')
+            if timing is None:
+                return set()
+
+            if rpc is not None:
+                if method is None:
+                    node = timing.find('./on-rpc[@from_ref="%s"]' % rpc)
+                else:
+                    node = timing.find('./on-rpc[@from_ref="%s",@method="%s"]' % (rpc, method))
+
+                assert node is not None, '<on-rpc from_ref="%s" method="%s"> not present' % (rpc, method)
+
+                # TODO remember to connect junction placeholders (caller)
+                # TODO remember to connect server placeholders
+                return self._taskgraph_objects(node, 'client', from_ref=rpc, method=method)
+
+            elif signal is not None:
+                node = timing.find('./on-signal[@from_ref="%s"]' % signal)
+                if node is not None:
+                    return self._taskgraph_objects(node, 'sender', from_ref=signal)
+
+                return set()
+
+                # TODO remember to connect junction placeholders (caller)
+                # TODO remember to connect server placeholders
+            else:
+                junction_objects = set()
+                for junction_node in timing.findall('junction'):
+                    junction_objects.update(self._taskgraph_objects(junction_node,
+                                                                    'junction',
+                                                                    junction_name=junction_node.get('name'),
+                                                                    junction_type=junction_node.get('type')))
+
+                objects = set()
+                for time_node in timing.findall('on-time'):
+                    objects.update(self._taskgraph_objects(time_node, None,
+                                                           period=time_node.get('period')))
+
+                # on-interrupt
+                for interrupt_node in timing.findall('on-interrupt'):
+                    objects.update(self._taskgraph_objects(interrupt_node, 'interrupt'))
+
+#                # link to junctions
+#                for task in objects:
+#                    if task.expect_out == 'junction':
+#                        for junction in junction_objects:
+#                            if junction.expect_in == 'junction':
+#                                objects.add(Tasklink(task, junction))
+#                                task.set_placeholder_out(None)
+#                        assert task.expect_out is None
+
+                objects.update(junction_objects)
+
+                # TODO remember to connect junction placeholders (caller)
+                # TODO remember to connect server placeholders
+                return objects
+
         def __repr__(self):
             return self.label()
 
@@ -331,11 +434,31 @@ class Repository(XMLParser):
         def label(self):
             return self.component.label()
 
+        def properties(self):
+            props = self.xml_node.get('properties')
+            if props is not None:
+                return props.split()
+
+            return set()
+
+        def prio(self):
+            prio = self.xml_node.get('prio')
+            if prio is not None:
+                return int(prio)
+
+            return 0
+
         def requires_specs(self):
-            return self.component.requires_specs
+            specs = set()
+            for c in self.xml_node.findall("component"):
+                components = self.repo.find_components_by_type(c.get('name'), querytype='component')
+                assert(len(components) == 1)
+                specs.update(components[0].requires_specs())
+
+            return specs
 
         def requires_rte(self):
-            return self.component.requires_rte
+            return self.component.requires_rte()
 
         def providing_component(self, service, function=None, to_ref=None):
             result = set()
@@ -1049,6 +1172,13 @@ class PlatformParser:
                 names.add(r.get('name'))
 
             return names
+
+        def match_specs(self, required):
+            for spec in required:
+                if spec not in self.specs():
+                    return False
+
+            return True
 
         def specs(self):
             names = set()
