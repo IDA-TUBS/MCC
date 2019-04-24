@@ -491,9 +491,39 @@ class StaticEngine(AnalysisEngine):
         return candidates - exclude
 
 class MappingEngine(AnalysisEngine):
-    def __init__(self, layer):
-        acl = { layer        : {'reads' : set(['mapping']) }}
-        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+    def __init__(self, layer, repo, pf_model):
+        AnalysisEngine.__init__(self, layer, param='mapping')
+        self.pf_model = pf_model
+        self.repo = repo
+
+    def map(self, obj, candidates):
+        if candidates is not None and len(candidates) > 0:
+            return candidates
+
+        assert not isinstance(obj, Edge)
+
+        components = self.repo.find_components_by_type(obj.query(), obj.type())
+
+        if len(components) == 0:
+            logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
+            return set()
+
+        pf_components = self.pf_model.platform_graph.nodes()
+
+        candidates = set()
+
+        # iterate components and aggregate possible platform components
+        for c in components:
+            for pfc in pf_components:
+                if pfc.match_specs(c.requires_specs()):
+                    candidates.add(pfc)
+
+        print("%s: %s" % (obj, candidates))
+        return candidates
+
+    def assign(self, obj, candidates):
+        # TODO here we call the constraint solver
+        return list(candidates)[0]
 
     def check(self, obj, first):
         """ Checks whether a platform mapping is assigned to all nodes.
@@ -1040,13 +1070,6 @@ class SpecEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['mapping']) } }
         AnalysisEngine.__init__(self, layer, param=param, acl=acl)
 
-    def _match_specs(self, required, provided):
-        for spec in required:
-            if spec not in provided:
-                return False
-
-        return True
-
     def map(self, obj, candidates): 
         """ Reduces set of 'mapping' candidates by checking the obj's spec requirements.
         """
@@ -1062,7 +1085,7 @@ class SpecEngine(AnalysisEngine):
             assert(pf_comp is not None)
 
             for p in c.patterns():
-                if self._match_specs(p.requires_specs(), pf_comp.specs()):
+                if pf_comp.match_specs(p.requires_specs()):
                     keep.add(c)
                     break
 
@@ -1088,7 +1111,7 @@ class SpecEngine(AnalysisEngine):
         else:
             comp = obj
 
-        if not self._match_specs(comp.requires_specs(), pf_comp.specs()):
+        if not pf_comp.match_specs(comp.requires_specs()):
             return False
 
         return True

@@ -93,6 +93,16 @@ class MccBase:
         # inherit mapping from all neighbours (excluding static platform components)
         model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
 
+    def _map_functions(self, model, layer):
+        fc = model.by_name[layer]
+
+        me = MappingEngine(fc, model.repo, model.platform)
+
+        pfmap = NodeStep(Map(me, 'map functions'))
+        pfmap.add_operation(Assign(me, 'map functions'))
+        pfmap.add_operation(Check(me, 'map functions'))
+        model.add_step(pfmap)
+
     def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
 
@@ -156,7 +166,7 @@ class MccBase:
         self._complete_mapping(model, ca)
 
         # check mapping
-        model.add_step(NodeStep(Check(MappingEngine(ca), name='platform mapping is complete')))
+        model.add_step(NodeStep(Check(MappingEngine(ca, model.repo, model.platform), name='platform mapping is complete')))
 
         # TODO (?) check that connections satisfy functional dependencies
 
@@ -403,8 +413,8 @@ class SimpleMcc(MccBase):
         # remark: 'mapping' is already fixed in func_arch
         #  we thus assign just assign nodes to platform components as queried
         fa = model.by_name['func_arch']
-        qe = QueryEngine(fa)
-        model.add_step(NodeStep(Assign(qe, 'query')))
+
+        self._map_functions(model, 'func_arch')
 
         # solve reachability and transform into comm_arch
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')

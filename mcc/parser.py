@@ -1174,6 +1174,13 @@ class PlatformParser:
 
             return names
 
+        def match_specs(self, required):
+            for spec in required:
+                if spec not in self.specs():
+                    return False
+
+            return True
+
         def specs(self):
             names = set()
             for r in self._root.findall('provides/spec'):
