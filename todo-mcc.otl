@@ -51,6 +51,12 @@ extension
 	[_] (CCC) reliability dummy engine
 	[_] (optional) Mapping
 		: see documents/mapping.{md,pdf}
+	[_] CP comparison
+		: backtrack all possibilities and create CP
+		add analysis engine methods
+			add_variables()
+			add_trafo_constraints()
+			add_check_constraints()
 testing / refinement
 	[X] compare hw_accelerations sw/hw
 	[_] c1 showcases
