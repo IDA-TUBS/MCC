@@ -445,6 +445,8 @@ class SimpleMcc(MccBase):
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
 
+        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
+
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
             self.insert_random_backtracking_engine(model, 0.05, 0)

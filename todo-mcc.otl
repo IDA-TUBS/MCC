@@ -41,6 +41,8 @@ refactoring
 		: dismissed, but asserting that Check does not manipulate any param
 extension
 	[_] (CCC C1) hardware scheduling
+		[_] MCC: export LGF
+		[_] import and evaluate task graph
 	[_] (diss) task layer
 		[_] connect nic tasks (using Proxy)
 		[_] assign activation patterns

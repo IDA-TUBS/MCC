@@ -515,7 +515,7 @@ class Layer:
                 inserted.add(self.graph.add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
-        elif isinstance(obj, set) or isinstance(obj, list):
+        elif isinstance(obj, set) or isinstance(obj, list) or isinstance(obj, frozenset):
 
             # first add all nodes and remember edges
             edges = set()
@@ -672,7 +672,7 @@ class Layer:
         Returns:
             Values for the given param and object. None if parameter is not present.
         """
-        assert(ae.check_acl(self, param, 'reads'))
+        assert ae.check_acl(self, param, 'reads'), "read access to %s not granted" % param
 
         if self.dependency_tracker:
             self.dependency_tracker.track_read(self, obj, param)

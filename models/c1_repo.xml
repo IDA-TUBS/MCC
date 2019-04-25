@@ -262,12 +262,6 @@
 			<ram quantum="36" />
 			<caps quantum="300" />
 		</requires>
-		<defaults>
-			<config>
-				<dst_rom name_left="img_left" name_right="img_right" size="0x140000"/>
-				<trigger_rom name="trigger_remote"/>
-			</config>
-		</defaults>
 		<timing>
 		    <on-signal from_ref="trigger">
 		        <task name="trigger" wcet="100" bcet="50"/>
@@ -276,6 +270,12 @@
 		    </on-signal>
 		    <!-- TODO on-time model? -->
 		</timing>
+		<defaults>
+			<config>
+				<dst_rom name_left="img_left" name_right="img_right" size="0x140000"/>
+				<trigger_rom name="trigger_remote"/>
+			</config>
+		</defaults>
 	</component>
 
 	<component name="debay_left">

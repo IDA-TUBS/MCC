@@ -16,6 +16,7 @@ except ImportError:
 import logging
 
 from mcc.graph import GraphObj, Edge
+from mcc.taskmodel import *
 
 class XMLParser:
     def __init__(self, xml_file, xsd_file=None):
