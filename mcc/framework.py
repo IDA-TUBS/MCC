@@ -1334,7 +1334,7 @@ class Assign(Operation):
             candidates = raw_cand - self.source_layer.get_param_failed(self.param, obj)
 
             if len(candidates) == 0:
-                logging.error("No candidates left for param '%s'." % self.param)
+                logging.error("No candidates left for param '%s' of object %s." % (self.param, obj))
                 # TODO test case for testing that no candidates are left
                 # (e.g. add dummy component for a function with an additional unresolvable dependency)
                 raise ConstraintNotSatisfied(self.analysis_engines[0].layer, self.param, obj)

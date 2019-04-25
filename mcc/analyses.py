@@ -477,16 +477,16 @@ class StaticEngine(AnalysisEngine):
         assert candidates is not None
 
         exclude = set()
-        for obj in candidates:
-            if obj.static():
-                exclude.add(obj)
+        for o in candidates:
+            if o.static():
+                exclude.add(o)
 
         candidates -= exclude
 
         if len(candidates) > 1:
             logging.warning("Still cannot inherit mapping unambigously.")
         elif len(candidates) == 1 and len(exclude) > 0:
-            logging.warning("Mapping was reduced by excluding static subsystems.")
+            logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" % (obj, candidates-exclude))
 
         return candidates - exclude
 
@@ -509,6 +509,8 @@ class MappingEngine(AnalysisEngine):
             return set()
 
         pf_components = self.pf_model.platform_graph.nodes()
+        static = set([pfc for pfc in pf_components if pfc.static()])
+        pf_components = pf_components - static
 
         candidates = set()
 
