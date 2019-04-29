@@ -992,15 +992,30 @@ class ExternalAnalysisEngine(AnalysisEngine):
 class DummyEngine(AnalysisEngine):
     """ Can be used for identity-tranformation.
     """
-    def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, None)
+    def __init__(self, layer, target_layer, params=None):
+        if params is not None:
+            acl = { layer        : {'reads'  : set()},
+                    target_layer : {'writes' : set()}}
+            for param in params:
+                acl[layer]['reads'].add(param)
+                acl[target_layer]['writes'].add(param)
+
+        AnalysisEngine.__init__(self, layer, None, acl=acl)
+        self.params = params
 
     def transform(self, obj, target_layer):
         if isinstance(obj, Edge):
             assert(obj.source in target_layer.graph.nodes())
             assert(obj.target in target_layer.graph.nodes())
 
-        return obj
+        if self.params is None:
+            return obj
+
+        params = dict()
+        for p in self.params:
+            params[p] = self.layer.get_param_value(self, p, obj)
+
+        return GraphObj(obj, params=params)
 
     def check(self, obj, first):
         return True
@@ -1635,26 +1650,26 @@ class MapAssignEdgeStep(EdgeStep):
 class CopyNodeTransform(Transform):
     """ Transform operation that returns the nodes found in the layer.
     """
-    def __init__(self, layer, target_layer):
-        Transform.__init__(self, DummyEngine(layer), target_layer)
+    def __init__(self, layer, target_layer, params):
+        Transform.__init__(self, DummyEngine(layer, target_layer, params), target_layer)
 
 class CopyEdgeTransform(Transform):
     """ Transform operation that returns the edges found in the layer.
     """
-    def __init__(self, layer, target_layer):
-        Transform.__init__(self, DummyEngine(layer), target_layer)
+    def __init__(self, layer, target_layer, params):
+        Transform.__init__(self, DummyEngine(layer, target_layer, params), target_layer)
 
 class CopyNodeStep(NodeStep):
     """ Copies nodes to target layer.
     """
-    def __init__(self, layer, target_layer):
-        NodeStep.__init__(self, CopyNodeTransform(layer, target_layer))
+    def __init__(self, layer, target_layer, params):
+        NodeStep.__init__(self, CopyNodeTransform(layer, target_layer, params))
 
 class CopyEdgeStep(EdgeStep):
     """ Copies edges to target layer.
     """
-    def __init__(self, layer, target_layer):
-        EdgeStep.__init__(self, CopyEdgeTransform(layer, target_layer))
+    def __init__(self, layer, target_layer, params):
+        EdgeStep.__init__(self, CopyEdgeTransform(layer, target_layer, params))
 
 class CopyMappingStep(NodeStep):
     """ Copies 'mapping' parameter of the nodes to the target layer.

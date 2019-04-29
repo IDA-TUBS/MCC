@@ -15,6 +15,9 @@ from mcc import model
 from mcc import parser
 from mcc.taskmodel import *
 
+import itertools
+import copy
+
 class TasksCoreEngine(AnalysisEngine):
     def __init__(self, layer):
         """ Gets task objects (core) from repo
@@ -484,11 +487,129 @@ class StaticEngine(AnalysisEngine):
         candidates -= exclude
 
         if len(candidates) > 1:
-            logging.warning("Still cannot inherit mapping unambigously.")
+            logging.warning("Still cannot inherit mapping unambiguously.")
         elif len(candidates) == 1 and len(exclude) > 0:
             logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" % (obj, candidates-exclude))
 
         return candidates - exclude
+
+class FunctionEngine(AnalysisEngine):
+    class Dependency:
+        def __init__(self, function, provider):
+            self.function = function
+            self.provider = provider
+
+        def __repr__(self):
+            return "depends on %s from %s" % (self.function, self.provider)
+
+    def __init__(self, layer, target_layer, repo):
+        acl = { layer        : {'reads' : {'mapping', 'service'}},
+                target_layer : {'writes' : {'mapping', 'service'}}}
+        AnalysisEngine.__init__(self, layer, param='dependencies', acl=acl)
+        self.repo = repo
+        self.target_layer = target_layer
+
+    def _required_functions(self, obj):
+        # return required and unsatisfied function dependencies of 'obj'
+        result = set()
+        for dep in obj.dependencies('function'):
+            depfunc = dep['function']
+            # edge exists?
+            satisfied = False
+            for e in self.layer.graph.out_edges(obj):
+                sc = self.layer.get_param_value(self, 'service', e)
+                if sc.function == depfunc:
+                    satisfied = True
+
+            if not satisfied:
+                result.add(depfunc)
+
+        return result
+
+    def _provided_functions(self, obj):
+        # return functions provided by 'obj'
+        funcs = copy.copy(obj.functions())
+        if hasattr(obj, 'query'):
+            for provider in self.repo.find_components_by_type(obj.query(), obj.type()):
+                funcs.update(provider.functions())
+
+        return funcs
+
+    def _candidate_set(self, dependencies):
+        # convert dependencies dict into candidate set
+        result = set()
+
+        # we simply create all permuations
+        for cand in itertools.product(*dependencies.values()):
+            result.add(frozenset(cand))
+
+        return result
+
+    def _calculate_costs(self, from_pfc, candidate):
+        costs = 0
+        for obj in candidate:
+            pfc = self.layer.get_param_value(self, 'mapping', obj.provider)
+
+            if not from_pfc.in_native_domain(pfc):
+                costs += 1
+
+        return costs
+
+    def map(self, obj, candidates):
+        # aggregate dependencies
+        functions = self._required_functions(obj)
+        if len(functions) == 0:
+            return {None}
+
+        dependencies = dict()
+        for f in functions:
+            # find function provider(s)
+            dependencies[f] = set()
+            for node in self.layer.graph.nodes():
+                if node is obj:
+                    continue
+
+                if f in self._provided_functions(node):
+                    dependencies[f].add(self.Dependency(f, node))
+
+        return self._candidate_set(dependencies)
+
+    def assign(self, obj, candidates):
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+        if len(candidates) == 1:
+            return list(candidates)[0]
+
+        best      = None
+        for cand in candidates:
+            costs = self._calculate_costs(pfc, cand)
+            if best is None:
+                min_costs = costs
+                best      = cand
+            elif costs < min_costs:
+                min_costs = costs
+                best      = cand
+
+        return best
+
+    def transform(self, obj, target_layer):
+        assert not isinstance(obj, Edge)
+
+        graph_objs = set()
+        graph_objs.add(GraphObj(obj, params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
+
+        dependencies = self.layer.get_param_value(self, self.param, obj)
+        if dependencies is not None:
+            for dep in dependencies:
+                graph_objs.add(GraphObj(Edge(obj, dep.provider),
+                                        params={'service' : model.ServiceConstraints(function=dep.function)}))
+
+        return graph_objs
+
+    def target_types(self):
+        # target layer has the same types as source layer
+        return self.layer.node_types()
+
 
 class MappingEngine(AnalysisEngine):
     def __init__(self, layer, repo, pf_model):
@@ -534,7 +655,7 @@ class MappingEngine(AnalysisEngine):
 
         okay = self.layer.get_param_value(self, 'mapping', obj) is not None
         if not okay:
-            logging.info("Node '%s' is not mapped to anything.", obj)
+            logging.error("Node '%s' is not mapped to anything.", obj)
 
         return okay
 

@@ -94,14 +94,26 @@ class MccBase:
         model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
 
     def _map_functions(self, model, layer):
-        fc = model.by_name[layer]
+        fa = model.by_name[layer]
 
-        me = MappingEngine(fc, model.repo, model.platform)
+        me = MappingEngine(fa, model.repo, model.platform)
 
         pfmap = NodeStep(Map(me, 'map functions'))
         pfmap.add_operation(Assign(me, 'map functions'))
         pfmap.add_operation(Check(me, 'map functions'))
         model.add_step(pfmap)
+
+    def _connect_functions(self, model, slayer, dlayer):
+        fq = model.by_name[slayer]
+        fa = model.by_name[dlayer]
+
+        fe = FunctionEngine(fq, fa, model.repo)
+        deps = NodeStep(Map(fe, 'dependencies'))
+        deps.add_operation(Assign(fe, 'dependencies'))
+        deps.add_operation(Transform(fe, fa, 'dependencies'))
+
+        model.add_step(deps)
+        model.add_step(CopyEdgeStep(fq, fa, {'service'}))
 
     def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
@@ -195,8 +207,7 @@ class MccBase:
         model.add_step(select)
 
         # copy nodes
-        model.add_step(CopyNodeStep(slayer, dlayer))
-        model.add_step(CopyMappingStep(slayer, dlayer))
+        model.add_step(CopyNodeStep(slayer, dlayer, {'mapping'}))
 
         # copy or transform edges
         model.add_step(EdgeStep(Transform(pe, dlayer)))
@@ -274,8 +285,7 @@ class MccBase:
         model.add_step(reachability)
 
         # copy nodes to comm arch
-        model.add_step(CopyNodeStep(fa, fc))
-        model.add_step(CopyMappingStep(fa, fc))
+        model.add_step(CopyNodeStep(fa, fc, {'mapping'}))
 
         # perform arc split
         model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
@@ -403,18 +413,13 @@ class SimpleMcc(MccBase):
         query_model = FuncArchQuery(system)
 
         # 4a) create system model from query model and base
-        model.from_query(query_model, base)
+        model.from_query(query_model, 'func_query', base)
 
-        # 4b) solve function dependencies (if already known)
-        #      currently, we assume that all functional dependencies
-        #      are predefined in the query
-        model.connect_functions()
+        self._map_functions(model, 'func_query')
 
-        # remark: 'mapping' is already fixed in func_arch
-        #  we thus assign just assign nodes to platform components as queried
-        fa = model.by_name['func_arch']
-
-        self._map_functions(model, 'func_arch')
+        # currently, we assume that all functional dependencies
+        # are predefined in the query
+        self._connect_functions(model, 'func_query', 'func_arch')
 
         # solve reachability and transform into comm_arch
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')

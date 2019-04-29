@@ -52,6 +52,7 @@ class DotFactory:
 
 
         self.copy_style('func_arch', 'comm_arch')
+        self.copy_style('func_arch', 'func_query')
         self.copy_style('comp_arch', 'comp_inst')
         self.copy_style('comp_arch', 'comp_arch-pre1')
         self.copy_style('comp_arch', 'comp_arch-pre2')

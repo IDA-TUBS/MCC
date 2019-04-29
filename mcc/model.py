@@ -524,6 +524,7 @@ class SystemModel(BacktrackRegistry):
     """
     def __init__(self, repo, platform, dotpath=None):
         super().__init__()
+        self.add_layer(Layer('func_query', nodetypes={ChildQuery,BaseChild}))
         self.add_layer(Layer('func_arch', nodetypes={ChildQuery,BaseChild}))
         self.add_layer(Layer('comm_arch', nodetypes={ChildQuery,Proxy,BaseChild}))
         self.add_layer(Layer('comp_arch-pre1', nodetypes={Repository.Component,Instance}))
@@ -570,76 +571,20 @@ class SystemModel(BacktrackRegistry):
         else:
             return self.find_parents(parents, parent_layer, in_layer, parent_type)
 
-    def _pf_component(self, layer, node):
-        candidates = layer._get_param_candidates('mapping', node)
-        if candidates is None or len(candidates) == 0:
-            return None
-
-        return list(candidates)[0]
-
-    def connect_functions(self):
-        fa = self.by_name['func_arch']
-
-        for c in fa.graph.nodes():
-            # for each dependency
-            for dep in c.dependencies('function'):
-                depfunc = dep['function']
-                # edge exists?
-                satisfied = False
-                for e in fa.graph.out_edges(c):
-                    sc = fa._get_param_value('service', e)
-                    if sc.function == depfunc:
-                        satisfied = True
-
-                if not satisfied:
-                    # find providing child
-                    local_match = None
-                    remote_match = None
-                    pf_component = self._pf_component(fa, c)
-                    for node in fa.graph.nodes():
-                        if node is not c:
-                            this_pf_component = self._pf_component(fa, node)
-
-                            funcs = copy.copy(node.functions())
-                            if hasattr(node, 'query'):
-                                for provider in self.repo.find_components_by_type(node.query(), node.type()):
-                                    funcs.update(provider.functions())
-
-                            if depfunc in funcs:
-                                if this_pf_component is None or pf_component is None:
-                                    remote_match = node
-                                elif this_pf_component.in_native_domain(pf_component):
-                                    local_match = node
-                                else:
-                                    remote_match = node
-
-                    provider = None
-                    if local_match is not None:
-                        provider = local_match
-                    elif remote_match is not None:
-                        provider = remote_match
-
-                    if provider is not None:
-                        e = fa.create_edge(c, provider)
-                        fa._set_param_value('service', e, ServiceConstraints(function=depfunc))
-                        satisfied = True
-
-                assert satisfied, "Cannot satisfy function dependency '%s' from '%s'" % (depfunc, c)
-
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:
             DotFactory(self, self.platform).write_layer(layer.name, self.dotpath+layer.name+suffix+".dot")
 
-    def _insert_base(self, base):
-        fa = self.by_name['func_arch']
+    def _insert_base(self, base, name='func_query'):
+        fa = self.by_name[name]
 
         for bcomp in base.base_arch():
             fa.add_node(bcomp)
             pf_comp = self.platform.find_by_name(bcomp.subsystem())
             fa._set_param_candidates('mapping', bcomp, set([pf_comp]))
 
-    def from_query(self, query_model, base=None):
-        fa = self.by_name['func_arch']
+    def from_query(self, query_model, name='func_query', base=None):
+        fa = self.by_name[name]
         self.reset(fa)
 
         if base is not None:
@@ -647,7 +592,7 @@ class SystemModel(BacktrackRegistry):
 
         # insert nodes
         for child in query_model.children():
-            self._insert_query(child)
+            self._insert_query(child, fa)
 
         # insert edges
         for route in query_model.routes():
@@ -665,11 +610,10 @@ class SystemModel(BacktrackRegistry):
 
                 fa._set_param_value('service', e, ServiceConstraints(function=function))
 
-    def _insert_query(self, child):
+    def _insert_query(self, child, fa):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
 
         # add node to functional architecture layer
-        fa = self.by_name['func_arch']
         fa.add_node(child)
 
         # set pre-defined mapping
