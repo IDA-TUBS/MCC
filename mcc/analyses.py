@@ -909,9 +909,13 @@ class ProtocolStackEngine(AnalysisEngine):
         assert source_service is not None and target_service is  not None, "source-service (%s) or target-service (%s) not present for %s" % (source_service, target_service, obj)
 
         if not source_service.matches(target_service):
-            comps = self.repo.find_protocolstacks(from_service=source_service.name(), to_service=target_service.name())
+            comps = self.repo.find_components_by_type(querytype='proto',
+                          query={ 'from_service' : source_service.name(),
+                                  'to_service'   : target_service.name()})
             if len(comps) == 0:
-                logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
+                logging.error("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
+                return set()
+
             return comps
 
         return set([None])
