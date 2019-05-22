@@ -502,6 +502,12 @@ class FunctionEngine(AnalysisEngine):
         def __repr__(self):
             return "depends on %s from %s" % (self.function, self.provider)
 
+        def __eq__(self, o):
+            return self.function == o.function and self.provider == o.provider
+
+        def __hash__(self):
+            return hash((self.function, self.provider))
+
     def __init__(self, layer, target_layer, repo):
         acl = { layer        : {'reads' : {'mapping', 'service'}},
                 target_layer : {'writes' : {'mapping', 'service'}}}
