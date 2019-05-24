@@ -135,6 +135,8 @@ class BacktrackRegistry(Registry):
 
         # no candidates left => find previous decisions with candidates left
         #  i.e. breadth-first search in reverse direction
+        # TODO reimplement graph._neightbours with a breadth-first search?
+        #      this way, we could use graph.predecessors with recursive=True
         visited  = nodes
         queue    = list(nodes)
         while len(queue):

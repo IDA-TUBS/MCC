@@ -94,27 +94,22 @@ class Graph:
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge
 
-    def predecessors(self, node):
-        result = set()
-        for (s, t) in self.graph.in_edges(node, keys=False):
-            result.add(s)
-
-        return result
-
-    def successors(self, node, recursive=False):
-        result = set()
-        for (s, t) in self.graph.out_edges(node, keys=False):
-            result.add(t)
+    def _neightbours(self, node, aggregator, recursive):
+        result = set(aggregator(node))
 
         if recursive:
             tmp = set()
             for n in result:
-                tmp.update(self.successors(n, recursive=True))
-
+                tmp.update(self._neightbours(n, aggregator, recursive))
             result.update(tmp)
 
         return result
 
+    def predecessors(self, node, recursive=False):
+        return self._neightbours(node, self.graph.predecessors, recursive)
+
+    def successors(self, node, recursive=False):
+        return self._neightbours(node, self.graph.successors, recursive)
 
     def in_edges(self, node):
         edges = set()
