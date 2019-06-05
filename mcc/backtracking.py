@@ -80,6 +80,12 @@ class BacktrackRegistry(Registry):
             except ConstraintNotSatisfied as cns:
                 logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
 
+                if outpath is not None:
+                    name = 'decision-try-%d.dot' % self.backtracking_try
+                    path = outpath + name
+                    failed = self._failed_params(cns)
+                    self.decision_graph.write_dot(path, failed, True)
+
                 # find branch point
                 culprit = self.find_culprit(cns)
                 if culprit is None:
@@ -108,17 +114,7 @@ class BacktrackRegistry(Registry):
         return True
 
     def find_culprit(self, cns):
-        # find culprit in decision graph
-
-        if cns.param is None:
-            culprits = self.decision_graph.search(layer=cns.layer,
-                                                  obj  =cns.obj)
-        else:
-            culprit = self.decision_graph.find_node(layer=cns.layer,
-                                                    obj  =cns.obj,
-                                                    param=cns.param)
-            assert culprit is not None
-            culprits = { culprit }
+        culprits = self._failed_params(cns)
 
         if len(culprits) == 0:
             # use leaves to find branching point
@@ -127,6 +123,17 @@ class BacktrackRegistry(Registry):
                     culprits.add(n)
 
         return self._find_brancheable(culprits)
+
+    def _failed_params(self, cns):
+        if cns.param is None:
+            return self.decision_graph.search(layer=cns.layer,
+                                              obj  =cns.obj)
+
+        params = self.decision_graph.find_node(layer=cns.layer,
+                                               obj  =cns.obj,
+                                               param=cns.param)
+        assert params is not None
+        return { params }
 
     def _find_brancheable(self, nodes):
         for n in nodes:

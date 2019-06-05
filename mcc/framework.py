@@ -140,25 +140,54 @@ class DecisionGraph(Graph):
         self.remove_node(node)
         del self.node_store[node.layer][node.obj][node.param]
 
-    def write_dot(self, filename):
-
-        # TODO for readability, we could omit the root node
-        # TODO for readability, we should write subgraphs
+    def write_dot(self, filename, leaves=None, verbose=False):
+        """
+        Args:
+            :param leaves: skip nodes which are not predecessors of the leaves
+            :param verbose: show additional data for each node
+        """
 
         with open(filename, 'w') as file:
             file.write('digraph {\n')
 
-            nodes = [node for node in self.graph.nodes()]
+            if leaves is None:
+                nodes = list(self.graph.nodes())
+            else:
+                #first, avoid duplicates
+                nodes = set(leaves)
+                for leaf in leaves:
+                    nodes |= self.predecessors(leaf, True)
+                nodes = list(nodes) #now, allow indexing
+            nodes.remove(self.root) #increase readability
 
             for node in nodes:
                 if node is None:
                     logging.info('Node is none')
 
-                node_str = '"{0}" [label="{1}", shape=hexagon]'.format(nodes.index(node), (node))
+                label = str(node)
+                if verbose:
+                    def plist(data):
+                        return ', '.join([str(o) for o in data])
 
+                    l = node.layer
+                    arg = (node.param, node.obj)
+                    #TODO getting candidates fails sometimes with a KeyError
+                    #     if leaves is None
+                    data = {
+                            'candidates': plist(l._get_param_candidates(*arg)),
+                            'failed': plist(l.get_param_failed(*arg)),
+                            'value': l._get_param_value(*arg),
+                            'exhausted': self.candidates_exhausted(node),
+                            }
+                    data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
+                    label += '\n' + data
+
+                node_str = '"{0}" [label="{1}", shape=box]\n'.format(nodes.index(node), label)
                 file.write(node_str)
 
             for (source, target) in self.graph.edges():
+                if not {source, target}.issubset(nodes):
+                    continue
                 edge = '{} -> {}\n'.format(nodes.index(source), nodes.index(target))
                 file.write(edge)
 
@@ -1221,7 +1250,7 @@ class Map(Operation):
             if param_value is not None:
                 continue
 
-            # check if we can resue old results
+            # check if we can reuse old results
             candidates = self.source_layer._get_param_candidates(self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
