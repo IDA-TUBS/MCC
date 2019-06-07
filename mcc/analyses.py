@@ -1076,10 +1076,7 @@ class QueryEngine(AnalysisEngine):
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
         """
-        if len(candidates) == 0:
-            logging.error("No mapping candidate for '%s'." % (obj.label()))
-            raise Exception("ERROR")
-        elif len(candidates) > 1:
+        if len(candidates) > 1:
             logging.info("Multiple mapping candidates for '%s'." % (obj.label()))
 
         return list(candidates)[0]
@@ -1121,8 +1118,6 @@ class ComponentEngine(AnalysisEngine):
         """ Assigns the first candidate.
         """
         assert(not isinstance(obj, Edge))
-
-        assert len(candidates) != 0, "no component left for assignment to child %s" % obj
 
         return list(candidates)[0]
 
@@ -1166,9 +1161,6 @@ class PatternEngine(AnalysisEngine):
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
         """
-        if len(candidates) == 0:
-            raise Exception("no pattern left for assignment")
-
         if len(candidates) == 1:
             return list(candidates)[0]
 
@@ -1336,7 +1328,6 @@ class ReachabilityEngine(AnalysisEngine):
         """ Assigns first candidate
         """
         assert(isinstance(obj, Edge))
-        assert(len(candidates) > 0)
 
         return list(candidates)[0]
 
@@ -1477,8 +1468,6 @@ class InstantiationEngine(AnalysisEngine):
         """ Assigns shared candidate if present
         """
         if not isinstance(obj, Edge):
-            assert len(candidates) > 0
-
             for c in candidates:
                 if c.shared():
                     return c
