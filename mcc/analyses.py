@@ -1088,9 +1088,10 @@ class QueryEngine(AnalysisEngine):
         return self.layer.node_types()
 
 class ComponentEngine(AnalysisEngine):
-    def __init__(self, layer, repo):
+    def __init__(self, layer, repo, parent_layer_name):
         AnalysisEngine.__init__(self, layer, param='component')
         self.repo = repo
+        self._parent_layer_name = parent_layer_name
 
     def map(self, obj, candidates):
         """ Finds component candidates for queried childs.
@@ -1098,6 +1099,10 @@ class ComponentEngine(AnalysisEngine):
         assert(not isinstance(obj, Edge))
 
         assert(candidates is None)
+
+        #We don't use parameters but obj's attributes, which were set by an
+        #transform operation.
+        self.layer.track_read(self._parent_layer_name, obj)
 
         if isinstance(obj, model.BaseChild):
             return set([obj])
