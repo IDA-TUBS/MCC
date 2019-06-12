@@ -579,7 +579,7 @@ class SystemModel(BacktrackRegistry):
         fa = self.by_name[name]
 
         for bcomp in base.base_arch():
-            fa.add_node(bcomp)
+            fa._add_node(bcomp)
             pf_comp = self.platform.find_by_name(bcomp.subsystem())
             fa._set_param_candidates('mapping', bcomp, set([pf_comp]))
 
@@ -614,7 +614,7 @@ class SystemModel(BacktrackRegistry):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
 
         # add node to functional architecture layer
-        fa.add_node(child)
+        fa._add_node(child)
 
         # set pre-defined mapping
         if hasattr(child, "platform_component"):

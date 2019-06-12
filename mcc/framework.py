@@ -476,10 +476,10 @@ class Layer:
         self.dependency_tracker = None
         self.tracked_operation  = None
 
-    def add_node(self, obj):
+    def _add_node(self, obj):
         return self.graph.add_node(obj, self.node_types())
 
-    def add_edge(self, obj):
+    def _add_edge(self, obj):
         return self.graph.add_edge(obj)
 
     def remove_node(self, obj):
@@ -541,7 +541,7 @@ class Layer:
 
         if isinstance(obj, Edge):
             if not nodes_only:
-                inserted.add(self.graph.add_edge(obj))
+                inserted.add(self._add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
         elif isinstance(obj, set) or isinstance(obj, list) or isinstance(obj, frozenset):
@@ -562,15 +562,15 @@ class Layer:
         elif isinstance(obj, GraphObj):
             if obj.is_edge():
                 if not nodes_only:
-                    o = self.add_edge(obj.obj)
+                    o = self._add_edge(obj.obj)
                     self.set_params(ae, o, obj.params())
                     inserted.add(o)
             else:
-                o = self.add_node(obj.obj)
+                o = self._add_node(obj.obj)
                 self.set_params(ae, o, obj.params())
                 inserted.add(o)
         else:
-            inserted.add(self.add_node(obj))
+            inserted.add(self._add_node(obj))
 
         return inserted
 
