@@ -515,11 +515,6 @@ class FunctionEngine(AnalysisEngine):
         def __repr__(self):
             return "depends on %s from %s" % (self.function, self.provider)
 
-        def __eq__(self, o):
-            return self.function == o.function and self.provider == o.provider
-
-        def __hash__(self):
-            return hash((self.function, self.provider))
 
     def __init__(self, layer, target_layer, repo):
         acl = { layer        : {'reads' : {'mapping', 'service'}},
@@ -1467,8 +1462,6 @@ class InstantiationEngine(AnalysisEngine):
         if isinstance(obj, Edge):
             source_candidates = self.layer.get_param_candidates(self, 'instance', obj.source)
             source_value      = self.layer.get_param_value(self, 'instance', obj.source)
-            target_candidates = self.layer.get_param_candidates(self, 'instance', obj.target)
-            target_value      = self.layer.get_param_value(self, 'instance', obj.target)
 
             # TODO check that source and target service are the same
             #      best done by using the factory to create edges once and reference them here
