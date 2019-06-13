@@ -94,7 +94,7 @@ class BacktrackRegistry(Registry):
                 print("\nRolling back to: %s" % (culprit))
 
                 # mark value as bad if there are other candidates
-                bad = culprit.layer._get_param_value(culprit.param, culprit.obj)
+                bad = culprit.layer.untracked_get_param_value(culprit.param, culprit.obj)
                 culprit.layer.add_param_failed(culprit.param, culprit.obj, bad)
 
                 # cut-off subtree
@@ -161,7 +161,7 @@ class BacktrackRegistry(Registry):
         # invalidate operations associated with start node
         for op in self.decision_graph.operations(start):
             if isinstance(op, Assign):
-                start.layer._clear_param_value(start.param, start.obj)
+                start.layer.untracked_clear_param_value(start.param, start.obj)
                 self.operations[op] = False
             elif isinstance(op, Map):
                 continue
@@ -178,15 +178,15 @@ class BacktrackRegistry(Registry):
             for op in self.decision_graph.operations(n):
                 if not deleted:
                     if isinstance(op, Assign):
-                        n.layer._clear_param_value(n.param, n.obj)
+                        n.layer.untracked_clear_param_value(n.param, n.obj)
                     elif isinstance(op, Map):
-                        n.layer._clear_param_candidates(n.param, n.obj)
+                        n.layer.untracked_clear_param_candidates(n.param, n.obj)
                     elif isinstance(op, Transform):
                         if self.clear_layers:
                             for node in op.source_layer.graph.nodes():
-                                op.source_layer._clear_param_value(op.target_layer.name, node)
+                                op.source_layer.untracked_clear_param_value(op.target_layer.name, node)
                             for edge in op.source_layer.graph.edges():
-                                op.source_layer._clear_param_value(op.target_layer.name, edge)
+                                op.source_layer.untracked_clear_param_value(op.target_layer.name, edge)
                             self.reset(op.target_layer)
 
                             for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
@@ -194,7 +194,7 @@ class BacktrackRegistry(Registry):
                                     if o.target_layer == self.by_order[i]:
                                         self.operations[o] = False
                         else:
-                            trg_nodes = n.layer._get_param_value(op.target_layer.name, n.obj)
+                            trg_nodes = n.layer.untracked_get_param_value(op.target_layer.name, n.obj)
                             if not isinstance(trg_nodes, set):
                                 trg_nodes = {trg_nodes}
 
@@ -202,7 +202,7 @@ class BacktrackRegistry(Registry):
                                 self.delete_recursive(trg, op.target_layer)
 
                             # clear source->target layer mapping
-                            n.layer._clear_param_value(op.target_layer.name, n.obj)
+                            n.layer.untracked_clear_param_value(op.target_layer.name, n.obj)
                     else:
                         raise NotImplementedError
 
@@ -222,7 +222,7 @@ class BacktrackRegistry(Registry):
 
         nextlayer = self._next_layer(layer)
         if nextlayer is not None:
-            nodes = layer._get_param_value(nextlayer.name, obj)
+            nodes = layer.untracked_get_param_value(nextlayer.name, obj)
             if not isinstance(nodes, set):
                 nodes = {nodes}
 

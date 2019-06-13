@@ -30,16 +30,16 @@ class BaseModelQuery:
             for c in _components.graph.nodes():
                 for cnew in components.graph.nodes():
                     if c.identifier() == cnew.identifier():
-                        q = self._components._get_param_value('query', c)
-                        components._set_param_value('query', cnew, q)
+                        q = self._components.untracked_get_param_value('query', c)
+                        components.untracked_set_param_value('query', cnew, q)
 
         # replace _components
         self._components = components
 
         # new components are mapped to query
         for c in self._components.graph.nodes():
-            if self._components._get_param_value('query', c) is None:
-                self._components._set_param_value('query', c, query)
+            if self._components.untracked_get_param_value('query', c) is None:
+                self._components.untracked_set_param_value('query', c, query)
 
     def insert(self, name, query_graph, comp_inst, filename=None):
         # insert name and query graph
@@ -58,7 +58,7 @@ class BaseModelQuery:
 
         # aggregate components per subsystem
         for c in self._components.graph.nodes():
-            name = self._components._get_param_value('mapping', c).name()
+            name = self._components.untracked_get_param_value('mapping', c).name()
             if name not in subsystems:
                 subsystems[name] = set()
             subsystems[name].add(c)
@@ -74,7 +74,7 @@ class BaseModelQuery:
         # return instances of given subsystem
         instances = set()
         for c in self._components.graph.nodes():
-            if subsystem == self._components._get_param_value('mapping', c).name():
+            if subsystem == self._components.untracked_get_param_value('mapping', c).name():
                 instances.add(c.untracked_obj())
 
         return instances

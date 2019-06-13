@@ -537,7 +537,7 @@ class SystemModel(BacktrackRegistry):
         self.repo = repo
         self.dotpath = dotpath
 
-    def find_parents(self, child, cur_layer, in_layer=None, parent_type=None):
+    def untracked_find_parents(self, child, cur_layer, in_layer=None, parent_type=None):
         """ Find nodes in upper layer `in_layer` or of type `parent_type` that have a correspondence
             connection to `child`.
         """
@@ -562,15 +562,15 @@ class SystemModel(BacktrackRegistry):
             return set()
 
         # perform a breadth-first search
-        parents = layer._get_param_value(parent_layer.name, child)
+        parents = layer.untracked_get_param_value(parent_layer.name, child)
         if isinstance(parents, set):
             result = set()
             for p in parents:
-                found, layer = self.find_parents(p, parent_layer, in_layer, parent_type)
+                found, layer = self.untracked_find_parents(p, parent_layer, in_layer, parent_type)
                 result.update(found)
             return result, layer
         else:
-            return self.find_parents(parents, parent_layer, in_layer, parent_type)
+            return self.untracked_find_parents(parents, parent_layer, in_layer, parent_type)
 
     def _output_layer(self, layer, suffix=''):
         if self.dotpath is not None:
@@ -582,7 +582,7 @@ class SystemModel(BacktrackRegistry):
         for bcomp in base.base_arch():
             node = fa._add_node(Layer.Node(bcomp))
             pf_comp = self.platform.find_by_name(bcomp.subsystem())
-            fa._set_param_candidates('mapping', node, set([pf_comp]))
+            fa.untracked_set_param_candidates('mapping', node, set([pf_comp]))
 
     def from_query(self, query_model, name='func_query', base=None):
         fa = self.by_name[name]
@@ -601,7 +601,7 @@ class SystemModel(BacktrackRegistry):
             # remark: nodes in query_model and fa are the same objects
             e = fa.graph.create_edge(node_lookup[route.source], node_lookup[route.target])
             if 'service' in query_model.query_graph.edge_attributes(route):
-                fa._set_param_value('service', e, ServiceConstraints(name=query_model.query_graph.edge_attributes(route)['service']))
+                fa.untracked_set_param_value('service', e, ServiceConstraints(name=query_model.query_graph.edge_attributes(route)['service']))
             else:
                 functions = route.target.functions()
                 assert len(functions) <= 1, "Dependency to child with multiple functions (%s) detected." % functions
@@ -610,7 +610,7 @@ class SystemModel(BacktrackRegistry):
                 if len(functions) == 1:
                     function = list(functions)[0]
 
-                fa._set_param_value('service', e, ServiceConstraints(function=function))
+                fa.untracked_set_param_value('service', e, ServiceConstraints(function=function))
 
     def _insert_query(self, child, fa):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
@@ -621,9 +621,9 @@ class SystemModel(BacktrackRegistry):
         # set pre-defined mapping
         if hasattr(child, "platform_component"):
             if child.platform_component() is not None:
-                fa._set_param_candidates('mapping', node, set([child.platform_component()]))
+                fa.untracked_set_param_candidates('mapping', node, set([child.platform_component()]))
         elif child.subsystem() is not None:
             pf_comp = self.platform.find_by_name(child.subsystem())
-            fa._set_param_candidates('mapping', node, set([pf_comp]))
+            fa.untracked_set_param_candidates('mapping', node, set([pf_comp]))
 
         return node

@@ -366,8 +366,8 @@ class Page(Gtk.HPaned):
                 self._expand_param(node, current_layer, obj, param, style=style)
 
     def _expand_param(self, parent, layer, obj, param, style=None):
-        value      = layer._get_param_value(param, obj)
-        candidates = layer._get_param_candidates(param, obj)
+        value      = layer.untracked_get_param_value(param, obj)
+        candidates = layer.untracked_get_param_candidates(param, obj)
 
         if style is None:
             tmp, style = self._stylize(layer, param, candidates, value)

@@ -82,10 +82,10 @@ class DynamicConfigGenerator():
         layer = self.start_node.layer
         obj   = self.start_node.layer_node
 
-        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        parents, parent_layer = model.untracked_find_parents(obj, layer, parent_type=Proxy)
         config = ET.SubElement(root, 'config')
         for p in parents:
-            remotename = parent_layer._get_param_value('remotename', p)
+            remotename = parent_layer.untracked_get_param_value('remotename', p)
             ips, remote_uid = self._remote_rom_ips_uid(remotename)
 
             src_ip = ips[0]
@@ -103,10 +103,10 @@ class DynamicConfigGenerator():
         obj   = self.start_node.layer_node
 
         assert obj is not None, "layer node is None for %s" %self.start_node.layer_obj
-        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        parents, parent_layer = model.untracked_find_parents(obj, layer, parent_type=Proxy)
         config = ET.SubElement(root, 'config')
         for p in parents:
-            remotename = parent_layer._get_param_value('remotename', p)
+            remotename = parent_layer.untracked_get_param_value('remotename', p)
             ips, remote_uid = self._remote_rom_ips_uid(remotename)
 
             src_ip = ips[1]
@@ -128,9 +128,9 @@ class DynamicConfigGenerator():
         layer = self.start_node.layer
         obj   = self.start_node.layer_node
 
-        parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
+        parents, parent_layer = model.untracked_find_parents(obj, layer, parent_type=Proxy)
         for p in parents:
-            remotename = parent_layer._get_param_value('remotename', p)
+            remotename = parent_layer.untracked_get_param_value('remotename', p)
             ips, remote_uid = self._remote_rom_ips_uid(remotename)
 
             # find ROM service without label and correct child
@@ -471,16 +471,16 @@ class GenodeConfigurator:
     def create_configs(self, model, layer_name):
         layer = model.by_name[layer_name]
         for inst in layer.graph.nodes():
-            pfc = layer._get_param_value('mapping', inst)
+            pfc = layer.untracked_get_param_value('mapping', inst)
             if pfc in self.configs:
 
                 node = self.configs[pfc].create_start_node(inst, model, layer)
 
                 # add routes
                 for e in layer.graph.out_edges(inst):
-                    source_service = layer._get_param_value('source-service', e)
-                    target_service = layer._get_param_value('target-service', e)
-                    target_pfc     = layer._get_param_value('mapping', e.target)
+                    source_service = layer.untracked_get_param_value('source-service', e)
+                    target_service = layer.untracked_get_param_value('target-service', e)
+                    target_pfc     = layer.untracked_get_param_value('mapping', e.target)
                     if target_pfc == pfc:
                         node.add_route(self.Route(server=e.target.untracked_obj().identifier,
                                                   service=source_service.name(),

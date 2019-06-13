@@ -45,12 +45,12 @@ class DecisionGraph(Graph):
             return True
 
         # are there any candidates left
-        candidates  = node.layer._get_param_candidates(node.param, node.obj)
+        candidates  = node.layer.untracked_get_param_candidates(node.param, node.obj)
         if len(candidates) <= 1:
             return True
 
         failed      = node.layer.get_param_failed(node.param, node.obj)
-        value       = {node.layer._get_param_value(node.param, node.obj)}
+        value       = {node.layer.untracked_get_param_value(node.param, node.obj)}
 
         return len(candidates-failed-value) == 0
 
@@ -165,7 +165,7 @@ class DecisionGraph(Graph):
                     logging.info('Node is none')
 
                 label = str(node)
-                if verbose:
+                if verbose and node.param != 'obj':
                     def plist(data):
                         return ', '.join([str(o) for o in data])
 
@@ -174,9 +174,9 @@ class DecisionGraph(Graph):
                     #TODO getting candidates fails sometimes with a KeyError
                     #     if leaves is None
                     data = {
-                            'candidates': plist(l._get_param_candidates(*arg)),
+                            'candidates': plist(l.untracked_get_param_candidates(*arg)),
                             'failed': plist(l.get_param_failed(*arg)),
-                            'value': l._get_param_value(*arg),
+                            'value': l.untracked_get_param_value(*arg),
                             'exhausted': self.candidates_exhausted(node),
                             }
                     data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
@@ -458,7 +458,7 @@ class Layer:
             self._obj = obj
 
         def obj(self, layer):
-            layer.track_read('obj', self._obj)
+            layer.track_read('obj', self)
             return self._obj
 
         def untracked_obj(self):
@@ -601,7 +601,7 @@ class Layer:
 
         return inserted
 
-    def _get_params(self, obj):
+    def untracked_get_params(self, obj):
         if isinstance(obj, Edge): # obj is an edge
             attributes = self.graph.edge_attributes(obj)
         else:
@@ -619,11 +619,11 @@ class Layer:
 
         if nodes:
             for n in self.graph.nodes():
-                if param in self._get_params(n):
+                if param in self.untracked_get_params(n):
                     self.dependency_tracker.track_read(self, n, param)
         if edges:
             for e in self.graph.edges():
-                if param in self._get_params(e):
+                if param in self.untracked_get_params(e):
                     self.dependency_tracker.track_read(self, e, param)
 
     def get_param_candidates(self, ae, param, obj):
@@ -645,10 +645,10 @@ class Layer:
         if self.dependency_tracker:
             self.dependency_tracker.track_read(self, obj, param)
 
-        return self._get_param_candidates(param, obj)
+        return self.untracked_get_param_candidates(param, obj)
 
-    def _get_param_candidates(self, param, obj):
-        params = self._get_params(obj)
+    def untracked_get_param_candidates(self, param, obj):
+        params = self.untracked_get_params(obj)
 
         if param in params:
             return params[param]['candidates']
@@ -656,7 +656,7 @@ class Layer:
             return set()
 
     def get_param_failed(self, param, obj):
-        params = self._get_params(obj)
+        params = self.untracked_get_params(obj)
 
         if param in params:
             if 'failed' in params[param]:
@@ -665,7 +665,7 @@ class Layer:
         return set()
 
     def add_param_failed(self, param, obj, value):
-        params = self._get_params(obj)
+        params = self.untracked_get_params(obj)
 
         assert param in params, "param %s not available on %s for %s" % (param,self,obj)
 
@@ -674,11 +674,11 @@ class Layer:
 
         params[param]['failed'].add(value)
 
-    def _clear_param_value(self, param, obj):
-        self._set_param_value(param, obj, None)
+    def untracked_clear_param_value(self, param, obj):
+        self.untracked_set_param_value(param, obj, None)
 
-    def _clear_param_candidates(self, param, obj):
-        params = self._get_params(obj)
+    def untracked_clear_param_candidates(self, param, obj):
+        params = self.untracked_get_params(obj)
         if param in params:
             params[param]['candidates'] = set()
 
@@ -701,13 +701,12 @@ class Layer:
         assert(ae.check_acl(self, param, 'writes'))
         assert(isinstance(candidates, set))
 
-        if self.dependency_tracker:
-            self.dependency_tracker.track_written(self, obj, param)
+        self.track_written(param, obj)
 
-        self._set_param_candidates(param, obj, candidates)
+        self.untracked_set_param_candidates(param, obj, candidates)
 
-    def _set_param_candidates(self, param, obj, candidates):
-        params = self._get_params(obj)
+    def untracked_set_param_candidates(self, param, obj, candidates):
+        params = self.untracked_get_params(obj)
 
         if param not in params:
             params[param] = { 'value' : None, 'candidates' : set() }
@@ -730,10 +729,9 @@ class Layer:
         """
         assert ae.check_acl(self, param, 'reads'), "read access to %s not granted" % param
 
-        if self.dependency_tracker:
-            self.dependency_tracker.track_read(self, obj, param)
+        self.track_read(param, obj)
 
-        return self._get_param_value(param, obj)
+        return self.untracked_get_param_value(param, obj)
 
     def track_read(self, param, obj):
 
@@ -745,8 +743,8 @@ class Layer:
         if self.dependency_tracker:
             self.dependency_tracker.track_written(self, obj, param)
 
-    def _get_param_value(self, param, obj):
-        params = self._get_params(obj)
+    def untracked_get_param_value(self, param, obj):
+        params = self.untracked_get_params(obj)
 
         if param in params:
             return params[param]['value']
@@ -767,13 +765,12 @@ class Layer:
         """
         assert(ae.check_acl(self, param, 'writes'))
 
-        if self.dependency_tracker:
-            self.dependency_tracker.track_written(self, obj, param)
+        self.track_written(param, obj)
 
-        self._set_param_value(param, obj, value)
+        self.untracked_set_param_value(param, obj, value)
 
-    def _set_param_value(self, param, obj, value):
-        params = self._get_params(obj)
+    def untracked_set_param_value(self, param, obj, value):
+        params = self.untracked_get_params(obj)
 
         if param not in params:
             params[param] = { 'value' : None, 'candidates' : set() }
@@ -1280,12 +1277,12 @@ class Map(Operation):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            param_value = self.source_layer._get_param_value(self.param, obj)
+            param_value = self.source_layer.untracked_get_param_value(self.param, obj)
             if param_value is not None:
                 continue
 
             # check if we can reuse old results
-            candidates = self.source_layer._get_param_candidates(self.param, obj)
+            candidates = self.source_layer.untracked_get_param_candidates(self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
@@ -1538,7 +1535,7 @@ class Transform(Operation):
         for (index ,obj) in enumerate(iterable):
 
             # skip if parameter was already selected
-            if self.source_layer._get_param_value(self.target_layer.name, obj) is not None:
+            if self.source_layer.untracked_get_param_value(self.target_layer.name, obj) is not None:
                 logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
                 continue
 
@@ -1561,18 +1558,17 @@ class Transform(Operation):
                                     % (o.untracked_obj(), self.target_layer.node_types())
 
                 self.source_layer.stop_tracking()
-                self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
+                self.source_layer.untracked_set_param_value(self.target_layer.name, obj, inserted)
 
                 for o in inserted:
-                    src = self.target_layer._get_param_value(self.source_layer.name, o)
+                    src = self.target_layer.untracked_get_param_value(self.source_layer.name, o)
                     if src is None:
                         src = obj
                     elif isinstance(src, set) or isinstance(src, frozenset):
                         src.add(obj)
                     else:
                         src = { src, obj }
-                    self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
-
+                    self.target_layer.untracked_set_param_value(self.source_layer.name, o, src)
 
         return True
 

@@ -90,7 +90,7 @@ class DotFactory:
         style = self.dot_styles[layer.name]['edge']
         if isinstance(style, dict):
             style = style[edge.edgetype()]
-        name = layer._get_param_value('service', edge)
+        name = layer.untracked_get_param_value('service', edge)
 
         if name is not None:
             label = "label=\"%s\"," % name
@@ -121,7 +121,7 @@ class DotFactory:
         # aggregate platform nodes
         subsystems = set()
         for n in layer.graph.nodes():
-            sub = layer._get_param_value('mapping', n)
+            sub = layer.untracked_get_param_value('mapping', n)
             if sub is not None:
                 subsystems.add(sub)
 
@@ -147,8 +147,8 @@ class DotFactory:
             # add components of this subsystem
             for comp in layer.graph.nodes():
                 # only process children in this subsystem
-                if layer._get_param_value('mapping', comp) is None \
-                   or sub.name() != layer._get_param_value('mapping', comp).name():
+                if layer.untracked_get_param_value('mapping', comp) is None \
+                   or sub.name() != layer.untracked_get_param_value('mapping', comp).name():
                     continue
 
                 # remember first node as cluster node
@@ -159,8 +159,8 @@ class DotFactory:
 
             # add internal dependencies
             for edge in layer.graph.edges():
-                sub1 = layer._get_param_value('mapping', edge.source)
-                sub2 = layer._get_param_value('mapping', edge.target)
+                sub1 = layer.untracked_get_param_value('mapping', edge.source)
+                sub2 = layer.untracked_get_param_value('mapping', edge.target)
                 if sub1 == sub and sub2 == sub:
                     self._output_edge(layer, output, edge, prefix="    ")
 
@@ -169,7 +169,7 @@ class DotFactory:
         # add components with no subsystem
         for comp in layer.graph.nodes():
             # only process children in this subsystem
-            if layer._get_param_value('mapping', comp) is not None:
+            if layer.untracked_get_param_value('mapping', comp) is not None:
                 continue
 
             # remember first node as cluster node
@@ -180,8 +180,8 @@ class DotFactory:
 
         # add internal dependencies
         for edge in layer.graph.edges():
-            sub1 = layer._get_param_value('mapping', edge.source)
-            sub2 = layer._get_param_value('mapping', edge.target)
+            sub1 = layer.untracked_get_param_value('mapping', edge.source)
+            sub2 = layer.untracked_get_param_value('mapping', edge.target)
             if sub1 == None and sub2 == None:
                 self._output_edge(layer, output, edge, prefix="    ")
 
@@ -204,8 +204,8 @@ class DotFactory:
 
         # add child dependencies between subsystems
         for edge in layer.graph.edges():
-            sub1 = layer._get_param_value('mapping', edge.source)
-            sub2 = layer._get_param_value('mapping', edge.target)
+            sub1 = layer.untracked_get_param_value('mapping', edge.source)
+            sub2 = layer.untracked_get_param_value('mapping', edge.target)
             if sub1 != sub2:
                 self._output_edge(layer, output, edge)
 
