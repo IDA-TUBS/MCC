@@ -77,7 +77,7 @@ class DotFactory:
         self.dot_styles[name] = styles
 
     def _output_node(self, layer, dotfile, node, prefix="  "):
-        label = "label=\"%s\"," % node.label()
+        label = "label=\"%s\"," % node.untracked_obj().label()
         style = ','.join(self.dot_styles[layer.name]['node'])
 
         dotfile.write("%s%s [URL=\"%s\",%s%s];\n" % (prefix,

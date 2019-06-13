@@ -65,7 +65,8 @@ class BaseModelQuery:
 
         arch = set()
         for name, comps in subsystems.items():
-            arch.add(BaseChild('base', name, comps, self._components.graph.subgraph(comps)))
+            instances = [c.untracked_obj() for c in comps]
+            arch.add(BaseChild('base', name, instances, self._components.graph.subgraph(comps)))
 
         return arch
 
@@ -74,7 +75,7 @@ class BaseModelQuery:
         instances = set()
         for c in self._components.graph.nodes():
             if subsystem == self._components._get_param_value('mapping', c).name():
-                instances.add(c)
+                instances.add(c.untracked_obj())
 
         return instances
 

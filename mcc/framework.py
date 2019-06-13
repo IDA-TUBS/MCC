@@ -452,6 +452,21 @@ class Registry:
 
 
 class Layer:
+
+    class Node:
+        def __init__(self, obj):
+            self._obj = obj
+
+        def obj(self, layer):
+            layer.track_read('obj', self._obj)
+            return self._obj
+
+        def untracked_obj(self):
+            return self._obj
+
+        def __repr__(self):
+            return 'Node: %s' % self._obj
+
     """ Implementation of a single layer in the cross-layer model.
     """
     def __init__(self, name, nodetypes={object}):
@@ -476,10 +491,21 @@ class Layer:
         self.dependency_tracker = None
         self.tracked_operation  = None
 
-    def _add_node(self, obj):
-        return self.graph.add_node(obj, self.node_types())
+    def _add_node(self, node):
+
+        assert isinstance(node, self.Node)
+        obj  = node.untracked_obj()
+
+        assert isinstance(obj, self.node_types()), \
+               "%s is does not match types %s" % (obj, self.node_types())
+
+        self.track_written('obj', node)
+        return self.graph.add_node(node)
 
     def _add_edge(self, obj):
+        assert isinstance(obj, Edge)
+        assert isinstance(obj.source, self.Node), '%s is not a Node' % obj.source
+        assert isinstance(obj.target, self.Node), '%s is not a Node' % obj.target
         return self.graph.add_edge(obj)
 
     def remove_node(self, obj):
@@ -570,7 +596,8 @@ class Layer:
                 self.set_params(ae, o, obj.params())
                 inserted.add(o)
         else:
-            inserted.add(self._add_node(obj))
+            o = self._add_node(obj)
+            inserted.add(o)
 
         return inserted
 
@@ -712,6 +739,11 @@ class Layer:
 
         if self.dependency_tracker:
             self.dependency_tracker.track_read(self, obj, param)
+
+    def track_written(self, param, obj):
+
+        if self.dependency_tracker:
+            self.dependency_tracker.track_written(self, obj, param)
 
     def _get_param_value(self, param, obj):
         params = self._get_params(obj)
@@ -1183,7 +1215,7 @@ class Operation:
 
     def register_ae(self, ae):
         """ Registers another analysis engine.
-        
+
         The analysis engine is checked for compatibility.
 
         Args:
@@ -1208,6 +1240,8 @@ class Operation:
         Returns:
             boolean.
         """
+        if not isinstance(obj, Edge):
+            obj = obj.untracked_obj()
         for ae in self.analysis_engines:
             if not isinstance(obj, ae.source_types()):
                 logging.error("%s is not an instance of %s" % (type(obj), ae.source_types()))
@@ -1521,14 +1555,14 @@ class Transform(Operation):
 
                 for o in inserted:
                     if not isinstance(o, Edge):
-                        assert isinstance(o, self.target_layer.node_types()), "%s does not match types %s" % (o,
-                                self.target_layer.node_types())
+                        assert isinstance(o.untracked_obj(),
+                                          self.target_layer.node_types()), \
+                               "%s does not match types %s" \
+                                    % (o.untracked_obj(), self.target_layer.node_types())
 
-                self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
                 self.source_layer.stop_tracking()
+                self.source_layer.set_param_value(self.analysis_engines[0], self.target_layer.name, obj, inserted)
 
-                self.source_layer.start_tracking(self)
-                self.source_layer.track_read(self.target_layer.name, obj)
                 for o in inserted:
                     src = self.target_layer._get_param_value(self.source_layer.name, o)
                     if src is None:
@@ -1539,7 +1573,6 @@ class Transform(Operation):
                         src = { src, obj }
                     self.target_layer.set_param_value(self.analysis_engines[0], self.source_layer.name, o, src)
 
-                self.source_layer.stop_tracking()
 
         return True
 

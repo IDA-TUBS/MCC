@@ -443,7 +443,7 @@ class Page(Gtk.HPaned):
             for node in current_layer.graph.nodes():
                 if current_layer.graph.node_attributes(node)['id'] == url:
                     #TODO underscores aren't properly rendered
-                    title = 'Parameters for %s (%s)' % (node.label(), current_layer.name)
+                    title = 'Parameters for %s (%s)' % (node.untracked_obj().label(), current_layer.name)
 
                     nodetree = self.paramview.add_treenode(None, "Node Parameters",
                                                            {'background' : 'lightgray'},

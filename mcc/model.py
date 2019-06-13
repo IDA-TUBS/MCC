@@ -541,6 +541,7 @@ class SystemModel(BacktrackRegistry):
         """ Find nodes in upper layer `in_layer` or of type `parent_type` that have a correspondence
             connection to `child`.
         """
+        assert isinstance(child, Layer.Node) or isinstance(child, Edge)
         assert in_layer is not None or parent_type is not None
         assert in_layer is None or in_layer in self.by_name.keys() or in_layer in self.by_name.values()
         assert cur_layer in self.by_name.keys() or cur_layer in self.by_name.values()
@@ -553,7 +554,7 @@ class SystemModel(BacktrackRegistry):
             if cur_layer is in_layer:
                 return ({ child }, cur_layer)
         else:
-            if isinstance(child, parent_type):
+            if isinstance(child.untracked_obj(), parent_type):
                 return ({ child }, cur_layer)
 
         parent_layer = self._prev_layer(layer)
@@ -579,9 +580,9 @@ class SystemModel(BacktrackRegistry):
         fa = self.by_name[name]
 
         for bcomp in base.base_arch():
-            fa._add_node(bcomp)
+            node = fa._add_node(Layer.Node(bcomp))
             pf_comp = self.platform.find_by_name(bcomp.subsystem())
-            fa._set_param_candidates('mapping', bcomp, set([pf_comp]))
+            fa._set_param_candidates('mapping', node, set([pf_comp]))
 
     def from_query(self, query_model, name='func_query', base=None):
         fa = self.by_name[name]
@@ -591,13 +592,14 @@ class SystemModel(BacktrackRegistry):
             self._insert_base(base)
 
         # insert nodes
+        node_lookup = dict()
         for child in query_model.children():
-            self._insert_query(child, fa)
+            node_lookup[child] = self._insert_query(child, fa)
 
         # insert edges
         for route in query_model.routes():
             # remark: nodes in query_model and fa are the same objects
-            e = fa.graph.create_edge(route.source, route.target)
+            e = fa.graph.create_edge(node_lookup[route.source], node_lookup[route.target])
             if 'service' in query_model.query_graph.edge_attributes(route):
                 fa._set_param_value('service', e, ServiceConstraints(name=query_model.query_graph.edge_attributes(route)['service']))
             else:
@@ -614,13 +616,14 @@ class SystemModel(BacktrackRegistry):
         assert(len(self.by_name['comp_arch'].graph.nodes()) == 0)
 
         # add node to functional architecture layer
-        fa._add_node(child)
+        node = fa._add_node(Layer.Node(child))
 
         # set pre-defined mapping
         if hasattr(child, "platform_component"):
             if child.platform_component() is not None:
-                fa._set_param_candidates('mapping', child, set([child.platform_component()]))
+                fa._set_param_candidates('mapping', node, set([child.platform_component()]))
         elif child.subsystem() is not None:
             pf_comp = self.platform.find_by_name(child.subsystem())
-            fa._set_param_candidates('mapping', child, set([pf_comp]))
+            fa._set_param_candidates('mapping', node, set([pf_comp]))
 
+        return node

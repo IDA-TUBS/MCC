@@ -80,7 +80,7 @@ class DynamicConfigGenerator():
     def _rom_server_xml(self, root):
         model = self.start_node.model
         layer = self.start_node.layer
-        obj   = self.start_node.layer_obj
+        obj   = self.start_node.layer_node
 
         parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
         config = ET.SubElement(root, 'config')
@@ -100,8 +100,9 @@ class DynamicConfigGenerator():
     def _rom_client_xml(self, root):
         model = self.start_node.model
         layer = self.start_node.layer
-        obj   = self.start_node.layer_obj
+        obj   = self.start_node.layer_node
 
+        assert obj is not None, "layer node is None for %s" %self.start_node.layer_obj
         parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
         config = ET.SubElement(root, 'config')
         for p in parents:
@@ -125,7 +126,7 @@ class DynamicConfigGenerator():
     def _rom_server_route(self):
         model = self.start_node.model
         layer = self.start_node.layer
-        obj   = self.start_node.layer_obj
+        obj   = self.start_node.layer_node
 
         parents, parent_layer = model.find_parents(obj, layer, parent_type=Proxy)
         for p in parents:
@@ -138,7 +139,7 @@ class DynamicConfigGenerator():
                 if not found and r.service == 'ROM' and r.from_label.empty():
                     # only if routed to correct child
                     for e in layer.graph.out_edges(obj):
-                        if not found and e.target.identifier == r.server:
+                        if not found and e.target.untracked_obj().identifier == r.server:
                             r.from_label.label = remote_uid
                             found = True
 
@@ -266,11 +267,12 @@ class GenodeConfigurator:
         def __init__(self, inst, parent, model, layer):
             self.model     = model
             self.layer     = layer
-            self.layer_obj = inst
+            self.layer_node= inst
+            self.layer_obj = inst.untracked_obj()
 
-            self.name      = inst.identifier
-            self.component = inst.component
-            self.config    = inst.config.xml() if inst.config is not None else None
+            self.name      = self.layer_obj.identifier
+            self.component = self.layer_obj.component
+            self.config    = self.layer_obj.config.xml() if self.layer_obj.config is not None else None
             self.parent    = parent
             self.routes    = list()
 
@@ -406,7 +408,7 @@ class GenodeConfigurator:
                     logging.info("Schema validation (%s) succeeded" % self.filename)
 
         def create_start_node(self, inst, model, layer):
-            name = inst.identifier
+            name = inst.untracked_obj().identifier
             assert name not in self.start_nodes
             self.start_nodes[name] = GenodeConfigurator.StartNode(inst, self, model, layer)
 
@@ -480,7 +482,7 @@ class GenodeConfigurator:
                     target_service = layer._get_param_value('target-service', e)
                     target_pfc     = layer._get_param_value('mapping', e.target)
                     if target_pfc == pfc:
-                        node.add_route(self.Route(server=e.target.identifier,
+                        node.add_route(self.Route(server=e.target.untracked_obj().identifier,
                                                   service=source_service.name(),
                                                   from_label=source_service.label(),
                                                   to_label=target_service.label()))

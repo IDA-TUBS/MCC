@@ -17,6 +17,7 @@ import logging
 
 from mcc.graph import GraphObj, Edge
 from mcc.taskmodel import *
+from mcc.framework import Layer
 
 class XMLParser:
     def __init__(self, xml_file, xsd_file=None):
@@ -320,7 +321,7 @@ class Repository(XMLParser):
             # for composites, we must select a pattern first
             assert(self.xml_node.tag != 'composite')
 
-            return set([self])
+            return set([Layer.Node(self)])
 
         def _taskgraph_objects(self, root, expect, **kwargs):
             # return tasks and tasklinks within given node
@@ -519,6 +520,7 @@ class Repository(XMLParser):
             # fill set with atomic components and their edges as specified in the pattern
             flattened = set()
 
+            node_lookup  = dict()
             child_lookup = dict()
             name_lookup = dict()
             # first, add all components and create lookup table by child name
@@ -529,11 +531,12 @@ class Repository(XMLParser):
                 assert len(components) == 1, 'Cannot resolve component in pattern unambiguously'
 
                 child_lookup[c] = components[0]
+                node_lookup[components[0]]  = Layer.Node(components[0])
                 params = dict()
                 config = c.find('./config')
                 if config is not None:
                     params['pattern-config'] = Repository.ElementWrapper(config)
-                flattened.add(GraphObj(components[0], params))
+                flattened.add(GraphObj(node_lookup[components[0]], params))
 
             # second, add connections
             for c in self.xml_node.findall("component"):
@@ -551,7 +554,9 @@ class Repository(XMLParser):
                             provided = name_lookup[name].provides_services(name=s.get('name'))
                             assert(len(provided) == 1)
                             params = { 'source-service' : source_service, 'target-service' : provided[0]}
-                            flattened.add(GraphObj(Edge(child_lookup[c], name_lookup[name]), params))
+                            flattened.add(GraphObj(
+                                Edge(node_lookup[child_lookup[c]],
+                                     node_lookup[name_lookup[name]]), params))
 
             return flattened
 

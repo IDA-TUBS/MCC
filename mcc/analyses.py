@@ -49,10 +49,9 @@ class TasksCoreEngine(AnalysisEngine):
         """
         assert candidates is None
 
-        if isinstance(obj, model.Instance):
-            component = obj.component
-        else:
-            component = obj
+        component = obj.obj(self.layer)
+        if isinstance(component, model.Instance):
+            component = component.component
 
         # get time-triggered taskgraph
         try:
@@ -209,14 +208,25 @@ class TaskgraphEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param='tasks', acl=acl)
         self.target_layer = target_layer
 
+    def _edge(self, link):
+        link.source = self._node(link.source)
+        link.target = self._node(link.target)
+        return link
+
+    def _node(self, task):
+        if not hasattr(task, 'node'):
+            task.node = Layer.Node(task)
+
+        return task.node
+
     def _graph_objects(self, obj, objects):
         result = set()
 
         for o in objects:
             if isinstance(o, Task):
-                result.add(GraphObj(o, params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
+                result.add(GraphObj(self._node(o), params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
             else:
-                result.add(o)
+                result.add(self._edge(o))
 
         return result
 
@@ -312,12 +322,14 @@ class TaskgraphEngine(AnalysisEngine):
         """
         taskobjects = self.layer.get_param_value(self, self.param, obj)
 
+        component = obj.obj(self.layer)
+
         # component may have no tasks, which is an indicator for a superfluous component
         # but not necessarily an error
         if taskobjects is None:
-            logging.warning("No tasks found for component %s" % obj)
+            logging.warning("No tasks found for component %s" % component)
         elif len(taskobjects) == 0:
-            logging.warning("No tasks found for component %s" % obj)
+            logging.warning("No tasks found for component %s" % component)
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
         links = (t for t in taskobjects if isinstance(t, Tasklink))
@@ -328,7 +340,7 @@ class TaskgraphEngine(AnalysisEngine):
         for t in tasks:
             # There must not be a client/server placeholder in the taskgraph
             if t.expect_in == 'client' or t.expect_in == 'server':
-                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % obj)
+                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % component)
                 return False
 
             # resulting taskgraph may still contain interrupt or sender placeholders,
@@ -340,14 +352,14 @@ class TaskgraphEngine(AnalysisEngine):
                         connections += 1
 
                 if connections == 0:
-                    logging.error("Junction placeholder (in) present in taskgraph for component %s" % obj)
+                    logging.error("Junction placeholder (in) present in taskgraph for component %s" % component)
                     return False
                 elif connections > 1 and t.expect_in != 'junction':
-                    logging.error("Multiple connections to junction taskgraph for component %s" % obj)
+                    logging.error("Multiple connections to junction taskgraph for component %s" % component)
                     return False
 
             if t.expect_out == 'server':
-                logging.error("Server placeholder (out) present in taskgraph for component %s" % obj)
+                logging.error("Server placeholder (out) present in taskgraph for component %s" % component)
                 return False
 
         return True
@@ -462,7 +474,7 @@ class QuantumEngine(AnalysisEngine):
         if pfc not in self.state:
             self.state[pfc] = pfc.quantum(self.name)
 
-        self.state[pfc] -= obj.component.requires_quantum(self.name)
+        self.state[pfc] -= obj.obj(self.layer).component.requires_quantum(self.name)
 
         if self.state[pfc] < 0:
             logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
@@ -489,7 +501,8 @@ class StaticEngine(AnalysisEngine):
         if len(candidates) > 1:
             logging.warning("Still cannot inherit mapping unambiguously.")
         elif len(candidates) == 1 and len(exclude) > 0:
-            logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" % (obj, candidates-exclude))
+            logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" \
+                            % (obj.obj(self.layer), candidates-exclude))
 
         return candidates - exclude
 
@@ -518,7 +531,7 @@ class FunctionEngine(AnalysisEngine):
     def _required_functions(self, obj):
         # return required and unsatisfied function dependencies of 'obj'
         result = set()
-        for dep in obj.dependencies('function'):
+        for dep in obj.obj(self.layer).dependencies('function'):
             depfunc = dep['function']
             # edge exists?
             satisfied = False
@@ -533,10 +546,11 @@ class FunctionEngine(AnalysisEngine):
         return result
 
     def _provided_functions(self, obj):
+        comp = obj.obj(self.layer)
         # return functions provided by 'obj'
-        funcs = copy.copy(obj.functions())
-        if hasattr(obj, 'query'):
-            for provider in self.repo.find_components_by_type(obj.query(), obj.type()):
+        funcs = copy.copy(comp.functions())
+        if hasattr(comp, 'query'):
+            for provider in self.repo.find_components_by_type(comp.query(), comp.type()):
                 funcs.update(provider.functions())
 
         return funcs
@@ -553,8 +567,8 @@ class FunctionEngine(AnalysisEngine):
 
     def _calculate_costs(self, from_pfc, candidate):
         costs = 0
-        for obj in candidate:
-            pfc = self.layer.get_param_value(self, 'mapping', obj.provider)
+        for cand in candidate:
+            pfc = self.layer.get_param_value(self, 'mapping', cand.provider)
 
             if not from_pfc.in_native_domain(pfc):
                 costs += 1
@@ -629,10 +643,12 @@ class MappingEngine(AnalysisEngine):
 
         assert not isinstance(obj, Edge)
 
-        components = self.repo.find_components_by_type(obj.query(), obj.type())
+        child = obj.obj(self.layer)
+
+        components = self.repo.find_components_by_type(child.query(), child.type())
 
         if len(components) == 0:
-            logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
+            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
             return set()
 
         pf_components = self.pf_model.platform_graph.nodes()
@@ -647,7 +663,7 @@ class MappingEngine(AnalysisEngine):
                 if pfc.match_specs(c.requires_specs()):
                     candidates.add(pfc)
 
-        print("%s: %s" % (obj, candidates))
+        print("%s: %s" % (child, candidates))
         return candidates
 
     def assign(self, obj, candidates):
@@ -717,7 +733,7 @@ class ComponentDependencyEngine(AnalysisEngine):
                 return True
         else:
             # iterate function dependencies
-            for s in obj.requires_services():
+            for s in obj.obj(self.layer).requires_services():
                 # find provider among connected nodes
                 found = 0
                 for con in self.layer.graph.out_edges(obj):
@@ -827,8 +843,11 @@ class ServiceEngine(AnalysisEngine):
 
     def _find_in_target_layer(self, component, nodes):
         for x in nodes:
-            if hasattr(x, 'uid'):
-                if x.uid() == component.uid():
+            if isinstance(x, Edge):
+                continue
+            obj = x.obj(self.target_layer)
+            if hasattr(obj, 'uid'):
+                if obj.uid() == component.uid():
                     return x
 
         return None
@@ -938,22 +957,22 @@ class MuxerEngine(AnalysisEngine):
     class Muxer:
         def __init__(self, service, component, replicate=False):
             self.service   = service
-            self.component = component
             self.replicate = replicate
             self.edges     = set()
+
+            if self.replicate:
+                # return copy of component
+                self.component = Repository.Component(component.xml_node, component.repo)
+            else:
+                self.component = component
+
+            self.component_node = Layer.Node(self.component)
 
         def assign_edge(self, edge):
             self.edges.add(edge)
 
         def assigned(self, edge):
             return edge in self.edges
-
-        def assigned_component(self, edge):
-            if self.replicate:
-                # return copy of component
-                return Repository.Component(self.component.xml_node, self.component.repo)
-            else:
-                return self.component
 
         def assigned_service(self):
             res = self.component.provides_services(self.service.name())
@@ -990,9 +1009,11 @@ class MuxerEngine(AnalysisEngine):
         else:
             assert candidates is None
 
+            component = obj.obj(self.layer)
+
             # FIXME we can only handle a single client cardinality restriction
             restricted_service = None
-            for s in obj.provides_services():
+            for s in component.provides_services():
                 if s.max_clients() is not None:
                     assert restricted_service is None, \
                         "We can only handle a single max_client restriction per component."
@@ -1023,9 +1044,9 @@ class MuxerEngine(AnalysisEngine):
             if len(candidates) > 0:
                 return candidates
 
-            # if no muxer available but obj is not a singleton, we can replicate obj
-            if not obj.singleton():
-                cand = self.Muxer(restricted_service, obj)
+            # if no muxer available but obj is not a singleton, we can replicate component
+            if not component.singleton():
+                cand = self.Muxer(restricted_service, component, replicate=True)
                 for e in affected_edges:
                     cand.assign_edge(e)
 
@@ -1044,7 +1065,7 @@ class MuxerEngine(AnalysisEngine):
         if isinstance(obj, Edge):
             muxer   = self.layer.get_param_value(self, self.param, obj)
             if muxer is not None:
-                return GraphObj(Edge(obj.source, muxer.assigned_component(obj)),
+                return GraphObj(Edge(obj.source, muxer.component_node),
                     params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
                             'target-service': muxer.assigned_service()})
             else:
@@ -1056,8 +1077,8 @@ class MuxerEngine(AnalysisEngine):
             muxer   = self.layer.get_param_value(self, self.param, obj)
             new_objs = {GraphObj(obj, params={'mapping':mapping})}
             if muxer is not None:
-                new_objs.add(GraphObj(muxer.component))
-                new_objs.add(GraphObj(Edge(muxer.component, obj),
+                new_objs.add(GraphObj(muxer.component_node))
+                new_objs.add(GraphObj(Edge(muxer.component_node, obj),
                                       params={'source-service':muxer.source_service(),
                                               'target-service':muxer.target_service()}))
 
@@ -1077,7 +1098,7 @@ class QueryEngine(AnalysisEngine):
         """ Assigns the first candidate.
         """
         if len(candidates) > 1:
-            logging.info("Multiple mapping candidates for '%s'." % (obj.label()))
+            logging.info("Multiple mapping candidates for '%s'." % (obj))
 
         return list(candidates)[0]
 
@@ -1100,17 +1121,18 @@ class ComponentEngine(AnalysisEngine):
         #We don't use parameters but obj's attributes, which were set by an
         #transform operation.
         self.layer.track_read(self._parent_layer_name, obj)
+        child = obj.obj(self.layer)
 
-        if isinstance(obj, model.BaseChild):
-            return set([obj])
+        if isinstance(child, model.BaseChild):
+            return set([child])
 
-        components = self.repo.find_components_by_type(obj.query(), obj.type())
+        components = self.repo.find_components_by_type(child.query(), child.type())
 
         if len(components) == 0:
-            logging.error("Cannot find referenced child %s '%s'." % (obj.type(), obj.query()))
+            logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
             return set()
         elif len(components) > 1:
-            logging.info("Multiple candidates found for child %s '%s'." % (obj.type(), obj.query()))
+            logging.info("Multiple candidates found for child %s '%s'." % (child.type(), child.query()))
 
         return set(components)
 
@@ -1205,8 +1227,10 @@ class SpecEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
+        child = obj.obj(self.layer)
+
         # no need to check this for proxies
-        if isinstance(obj, model.Proxy):
+        if isinstance(child, model.Proxy):
             return candidates
 
         keep = set()
@@ -1226,8 +1250,10 @@ class SpecEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
+        child = obj.obj(self.layer)
+
         # no need to check this for proxies
-        if isinstance(obj, model.Proxy):
+        if isinstance(child, model.Proxy):
             return True
 
         pf_comp = self.layer.get_param_value(self, 'mapping', obj)
@@ -1239,7 +1265,7 @@ class SpecEngine(AnalysisEngine):
                 print("No component assigned from candidates: %s" % self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
-            comp = obj
+            comp = child
 
         if not pf_comp.match_specs(comp.requires_specs()):
             return False
@@ -1256,8 +1282,10 @@ class RteEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
+        child = obj.obj(self.layer)
+
         # no need to check this for proxies
-        if isinstance(obj, model.Proxy):
+        if isinstance(child, model.Proxy):
             return candidates
 
         keep = set()
@@ -1276,8 +1304,10 @@ class RteEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
+        child = obj.obj(self.layer)
+
         # no need to check this for proxies
-        if isinstance(obj, model.Proxy):
+        if isinstance(child, model.Proxy):
             return True
 
         pf_comp = self.layer.get_param_value(self, 'mapping', obj)
@@ -1289,7 +1319,7 @@ class RteEngine(AnalysisEngine):
                 print("No component assigned from candidates: %s" % self.layer.get_param_candidates(self, 'component', obj))
             assert(comp is not None)
         else:
-            comp = obj
+            comp = child
 
         if comp.requires_rte() != pf_comp.rte():
             return False
@@ -1350,7 +1380,8 @@ class ReachabilityEngine(AnalysisEngine):
 
             service = self.layer.get_param_value(self, 'service', obj)
             proxy = model.Proxy(carrier=carrier, service=service)
-            result = [GraphObj(proxy, params={'remotename' : service.function})]
+            proxynode = Layer.Node(proxy)
+            result = [GraphObj(proxynode, params={'remotename' : service.function})]
 
             src_map = self.layer.get_param_value(self, target_layer.name, obj.source)
             dst_map = self.layer.get_param_value(self, target_layer.name, obj.target)
@@ -1359,22 +1390,23 @@ class ReachabilityEngine(AnalysisEngine):
             src = list(src_map)[0]
             dst = list(dst_map)[0]
 
-            result.append(GraphObj(Edge(src, proxy), params={'service' : proxy.service}))
-            result.append(GraphObj(Edge(proxy, dst), params={'service' : proxy.service}))
+            result.append(GraphObj(Edge(src, proxynode), params={'service' : proxy.service}))
+            result.append(GraphObj(Edge(proxynode, dst), params={'service' : proxy.service}))
 
             # add dependencies to pcomp
             found = False
             for n in self.layer.graph.nodes():
-                if pcomp in n.functions():
+                comp = n.obj(self.layer)
+                if pcomp in comp.functions():
                     pfc  = self.layer.get_param_value(self, 'mapping', n)
                     pfc_source = self.layer.get_param_value(self, 'mapping', obj.source)
                     pfc_target = self.layer.get_param_value(self, 'mapping', obj.target)
                     if pfc.in_native_domain(pfc_source):
-                        result.append(GraphObj(Edge(proxy, n), params={ 'service' :
+                        result.append(GraphObj(Edge(proxynode, n), params={ 'service' :
                             model.ServiceConstraints(name=carrier, from_ref='to', function=pcomp) }))
                         found = True
                     elif pfc.in_native_domain(pfc_target):
-                        result.append(GraphObj(Edge(proxy, n), params={ 'service' :
+                        result.append(GraphObj(Edge(proxynode, n), params={ 'service' :
                             model.ServiceConstraints(name=carrier, from_ref='from', function=pcomp) }))
                         found = True
 
@@ -1417,7 +1449,7 @@ class BacktrackingTestEngine(AnalysisEngine):
 
 class InstantiationEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, factory):
-        acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config'} },
+        acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config', 'comp_inst'} },
                 target_layer : { 'writes' : { 'mapping', 'source-service', 'target-service' }}}
         AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
         self.factory      = factory
@@ -1425,6 +1457,12 @@ class InstantiationEngine(AnalysisEngine):
 
     def reset(self):
         self.factory.reset()
+
+    def _find_node(self, obj, instance):
+        for n in self.layer.get_param_value(self, self.target_layer.name, obj):
+            if n.obj(self.target_layer) == instance:
+                return n
+        return None
 
     def map(self, obj, candidates):
         """ Get and map to dedicated and shared instance object from factory
@@ -1446,17 +1484,19 @@ class InstantiationEngine(AnalysisEngine):
             return {True}
         else:
 
+            component = obj.obj(self.layer)
+
             # if it's already an instance
-            if isinstance(obj, model.Instance):
-                return {obj}
+            if isinstance(component, model.Instance):
+                return {component}
 
             pfc = self.layer.get_param_value(self, 'mapping', obj)
 
-            ded    = self.factory.dedicated_instance(pfc.name(), obj,
+            ded    = self.factory.dedicated_instance(pfc.name(), component,
                             self.layer.get_param_value(self, 'pattern-config', obj))
 
-            if not obj.dedicated():
-                shared = self.factory.shared_instance   (pfc.name(), obj,
+            if not component.dedicated():
+                shared = self.factory.shared_instance   (pfc.name(), component,
                                 self.layer.get_param_value(self, 'pattern-config', obj))
             else:
                 # TODO if out edges have the same targets and constraints, we could still create a shared instance
@@ -1481,7 +1521,13 @@ class InstantiationEngine(AnalysisEngine):
                 source = self.layer.get_param_value(self, self.param, obj.source)
                 target = self.layer.get_param_value(self, self.param, obj.target)
 
-                return GraphObj(Edge(source,target),
+                source_node = self._find_node(obj.source, source)
+                target_node = self._find_node(obj.target, target)
+
+                assert source_node is not None
+                assert target_node is not None
+
+                return GraphObj(Edge(source_node,target_node),
                     params={'source-service': self.layer.get_param_value(self, 'source-service', obj),
                             'target-service': self.layer.get_param_value(self, 'target-service', obj)})
             else:
@@ -1489,7 +1535,11 @@ class InstantiationEngine(AnalysisEngine):
                 return set()
 
         else:
-            return GraphObj(self.layer.get_param_value(self, self.param, obj),
+            instance = self.layer.get_param_value(self, self.param, obj)
+            if not hasattr(instance, 'node'):
+                instance.node = Layer.Node(instance)
+
+            return GraphObj(instance.node,
                             params={'mapping':self.layer.get_param_value(self, 'mapping', obj)})
 
     def target_types(self):
@@ -1504,19 +1554,21 @@ class SingletonEngine(AnalysisEngine):
     def check(self, obj, first):
         assert not isinstance(obj, Edge)
 
+        instance = obj.obj(self.layer)
+
         # first, every node, which is a singleton component, must only be present once per PfComponent
         subsys = self.layer.get_param_value(self, 'mapping', obj)
-        if obj.component.singleton():
+        if instance.component.singleton():
             for n in self.layer.graph.nodes() - {obj}:
-                if n.is_component(obj.component):
+                if n.obj(self.layer).is_component(instance.component):
                     other_subsys = self.layer.get_param_value(self, 'mapping', n)
                     if subsys.same_singleton_domain(other_subsys):
-                        logging.error("%s is instantiated in %s and %s" % (obj.component, subsys, other_subsys))
+                        logging.error("%s is instantiated in %s and %s" % (instance.component, subsys, other_subsys))
                         return False
 
         # second, every service provision with a max_clients restriction must have at most n clients
         restrictions = dict()
-        for s in obj.provides_services():
+        for s in instance.provides_services():
             clients = 0
             if s.max_clients() is not None:
                 restrictions[s] = { 'max' : int(s.max_clients()), 'cur' : 0 }
@@ -1531,7 +1583,7 @@ class SingletonEngine(AnalysisEngine):
 
         for s in restrictions:
             if restrictions[s]['cur'] > restrictions[s]['max']:
-                logging.error('Instance %s has to many clients for service %s.' % (obj, s))
+                logging.error('Instance %s has to many clients for service %s.' % (instance, s))
                 return False
 
         return True
