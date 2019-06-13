@@ -116,7 +116,7 @@ class MccBase:
         model.add_step(deps)
         model.add_step(CopyEdgeStep(fq, fa, {'service'}))
 
-    def _select_components(self, model, slayer, dlayer, envmodel, parent_layer):
+    def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
 
         Args:
@@ -128,7 +128,7 @@ class MccBase:
         fc = model.by_name[slayer]
         ca = model.by_name[dlayer]
 
-        ce   = ComponentEngine(fc, self.repo, parent_layer)
+        ce   = ComponentEngine(fc, self.repo)
         rtee = RteEngine(fc)
         spe  = SpecEngine(fc)
 
@@ -426,7 +426,7 @@ class SimpleMcc(MccBase):
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')
 
         # select components and transform into comp_arch
-        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1', envmodel=envmodel, parent_layer='func_arch')
+        self._select_components(model, slayer='comm_arch', dlayer='comp_arch-pre1', envmodel=envmodel)
 
         # TODO test case for protocol stack insertion
         self._insert_protocolstacks(model, slayer='comp_arch-pre1', dlayer='comp_arch-pre2')
