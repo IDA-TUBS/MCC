@@ -68,8 +68,7 @@ class Graph:
     def __init__(self):
         self.graph = MultiDiGraph()
 
-    def add_node(self, obj, types):
-        assert isinstance(obj, tuple(types)), "%s is does not match types %s" % (obj, types)
+    def add_node(self, obj):
         self.graph.add_node(obj)
         return obj
 

@@ -388,7 +388,7 @@ class SimplePlatformModel(PlatformModel):
             reachability_map[comm] = set()
 
         for c in self.parser.pf_components():
-            self.platform_graph.add_node(c, {self.parser.PfComponent})
+            self.platform_graph.add_node(c)
             for comm in c.comms():
                 reachability_map[comm].add(c)
 
@@ -483,7 +483,7 @@ class FuncArchQuery(QueryModel):
 
     def _parse(self):
         for child in self.parser.children():
-            self.query_graph.add_node(child, {ChildQuery})
+            self.query_graph.add_node(child)
 
         # parse and add explicit routes
         for child in self.query_graph.nodes():

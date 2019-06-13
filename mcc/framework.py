@@ -38,7 +38,7 @@ class DecisionGraph(Graph):
 
         # add root node
         self.root = self.Node(None, None, None)
-        super().add_node(self.root, {self.Node})
+        super().add_node(self.root)
 
     def candidates_exhausted(self, node):
         if node == self.root:
@@ -114,7 +114,7 @@ class DecisionGraph(Graph):
     def add_node(self, layer, obj, param):
         found = self.find_node(layer, obj, param)
         if found is None:
-            found = super().add_node(self.Node(layer, obj, param), {self.Node})
+            found = super().add_node(self.Node(layer, obj, param))
             self.node_attributes(found)['operations'] = set()
 
             if layer not in self.node_store:
