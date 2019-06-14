@@ -164,13 +164,23 @@ class DecisionGraph(Graph):
                 if node is None:
                     logging.info('Node is none')
 
+                l = node.layer
+                arg = (node.param, node.obj)
+                ncands = len(l.untracked_get_param_candidates(*arg))
+
+                style = "shape=box"
+                if ncands == 0:
+                    style += ",style=dashed"
+                elif ncands == 1:
+                    style += ",style=\"filled,solid\",fillcolor=grey90"
+                else:
+                    style += ",style=\"filled,solid\",fillcolor=coral"
+
                 label = str(node)
                 if verbose and node.param != 'obj':
                     def plist(data):
                         return ', '.join([str(o) for o in data])
 
-                    l = node.layer
-                    arg = (node.param, node.obj)
                     #TODO getting candidates fails sometimes with a KeyError
                     #     if leaves is None
                     data = {
@@ -182,7 +192,7 @@ class DecisionGraph(Graph):
                     data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
                     label += '\n' + data
 
-                node_str = '"{0}" [label="{1}", shape=box]\n'.format(nodes.index(node), label)
+                node_str = '"{0}" [label="{1}", {2}]\n'.format(nodes.index(node), label, style)
                 file.write(node_str)
 
             for (source, target) in self.graph.edges():
