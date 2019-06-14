@@ -246,7 +246,7 @@ class Registry:
 
     def _prev_layer(self, layer):
         if layer in self.by_name.keys():
-            current_layer = self.by_name[layer.name]
+            current_layer = self.by_name[layer]
         else:
             assert layer in self.by_name.values()
             current_layer = layer
@@ -652,6 +652,7 @@ class Layer:
 
     def _set_associated_objects(self, target_layer, obj, objects):
         assert isinstance(target_layer, str)
+        assert target_layer != self.name
 
         interlayer = self._interlayer(obj)
         interlayer[target_layer] = objects
