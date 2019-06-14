@@ -192,7 +192,14 @@ class BacktrackRegistry(Registry):
                                     if o.target_layer == self.by_order[i]:
                                         self.operations[o] = False
                         else:
-                            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, n.obj)
+                            src_node = n.layer.associated_objects(op.source_layer.name, n.obj)
+
+                            # FIXME handle case where multiple source objects exist
+                            assert not isinstance(src_node, set)
+                            if src_node not in n.layer.graph.nodes() and src_node not in n.layer.graph.edges():
+                                continue
+
+                            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, src_node)
                             if not isinstance(trg_nodes, set):
                                 trg_nodes = {trg_nodes}
 
