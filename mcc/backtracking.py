@@ -37,8 +37,6 @@ class BacktrackRegistry(Registry):
         if operation not in self.operations:
             return False
 
-        if isinstance(operation, Transform):
-            return False
 
         if self.operations[operation] == True:
             logging.info("Skipping %s" % operation)
@@ -184,9 +182,9 @@ class BacktrackRegistry(Registry):
                     elif isinstance(op, Transform):
                         if self.clear_layers:
                             for node in op.source_layer.graph.nodes():
-                                op.source_layer.untracked_clear_param_value(op.target_layer.name, node)
+                                op.source_layer._set_associated_objects(op.target_layer.name, node, None)
                             for edge in op.source_layer.graph.edges():
-                                op.source_layer.untracked_clear_param_value(op.target_layer.name, edge)
+                                op.source_layer._set_associated_objects(op.target_layer.name, edge, None)
                             self.reset(op.target_layer)
 
                             for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
@@ -194,7 +192,7 @@ class BacktrackRegistry(Registry):
                                     if o.target_layer == self.by_order[i]:
                                         self.operations[o] = False
                         else:
-                            trg_nodes = n.layer.untracked_get_param_value(op.target_layer.name, n.obj)
+                            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, n.obj)
                             if not isinstance(trg_nodes, set):
                                 trg_nodes = {trg_nodes}
 
@@ -202,12 +200,11 @@ class BacktrackRegistry(Registry):
                                 self.delete_recursive(trg, op.target_layer)
 
                             # clear source->target layer mapping
-                            n.layer.untracked_clear_param_value(op.target_layer.name, n.obj)
+                            op.source_layer._set_associated_objects(op.target_layer.name, n.obj, None)
                     else:
                         raise NotImplementedError
 
                 # invalidate operations
-                # FIXME some operations (e.g. Transform) are not marked as incomplete
                 self.operations[op] = False
                 for ae in op.analysis_engines:
                     if hasattr(ae, 'reset'):
@@ -222,7 +219,7 @@ class BacktrackRegistry(Registry):
 
         nextlayer = self._next_layer(layer)
         if nextlayer is not None:
-            nodes = layer.untracked_get_param_value(nextlayer.name, obj)
+            nodes = layer.associated_objects(nextlayer.name, obj)
             if not isinstance(nodes, set):
                 nodes = {nodes}
 

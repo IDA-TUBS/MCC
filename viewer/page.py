@@ -15,10 +15,11 @@ from mcc.importexport import PickleImporter
 from mcc import graph as mccgraph
 
 class ModelItem():
-    def __init__(self, layer, obj, link=True, param=None, expanded=False):
+    def __init__(self, layer, obj, link=True, param=None, relation=None, expanded=False):
         self.layer = layer
         self.obj   = obj
-        self.param = param
+        self.param    = param
+        self.relation = relation
         self.expanded = expanded
         self.link     = link
 
@@ -266,19 +267,24 @@ class Page(Gtk.HPaned):
         dlg.run()
         dlg.destroy()
 
+    def _stylize_layer(self, current_layer, layer):
+        style = dict()
+
+        # use italic for inter-layer relations
+        style['style'] = Pango.Style.ITALIC
+
+        if self.model.by_name[layer] == self._parent_layer(current_layer):
+            name = 'Parent layer (%s)' % layer
+        elif self.model.by_name[layer] == self._child_layer(current_layer):
+            name = 'Child layer (%s)' % layer
+        else:
+            name = 'Layer (%s)' % layer
+
+        return name, style
+
     def _stylize(self, layer, param, candidates, value):
         style = dict()
         name = param
-        if param in self.model.by_name.keys():
-            # use italic for inter-layer relations
-            style['style'] = Pango.Style.ITALIC
-
-            if self.model.by_name[param] == self._parent_layer(layer):
-                name = 'Parent layer (%s)' % param
-            elif self.model.by_name[param] == self._child_layer(layer):
-                name = 'Child layer (%s)' % param
-            else:
-                name = 'Layer (%s)' % param
 
         if len(candidates) == 0:
             # use normal font weight if there was no decision
@@ -327,10 +333,8 @@ class Page(Gtk.HPaned):
                                             link_item=self._link(layer, element))
 
     def _add_paramtree(self, current_layer, parent, obj):
-        if isinstance(obj, mccgraph.Edge):
-            params = current_layer.graph.edge_attributes(obj)['params']
-        else:
-            params = current_layer.graph.node_attributes(obj)['params']
+        params    = current_layer.untracked_get_params(obj)
+        relations = current_layer._interlayer(obj)
 
         if hasattr(obj, 'viewer_properties'):
             propnode = self.paramview.add_treenode(parent,
@@ -348,22 +352,25 @@ class Page(Gtk.HPaned):
             value      = content['value']
             candidates = content['candidates']
 
-            expand = True
-            if param in self.model.by_name.keys():
-                expand = False
-
-            expand_link = None
-            if not expand:
-                expand_link = {ModelItem(current_layer, obj, link=False, param=param)}
-
             name, style = self._stylize(current_layer, param, candidates, value)
             node = self.paramview.add_treenode(parent,
                                                name,
                                                style,
                                                {'underline' : Pango.Underline.SINGLE},
+                                               link_item=None)
+
+            self._expand_param(node, current_layer, obj, param, style=style)
+
+        for layer in relations.keys():
+            expand_link = {ModelItem(current_layer, obj, link=False, relation=layer)}
+
+            name, style = self._stylize_layer(current_layer, layer)
+            node = self.paramview.add_treenode(parent,
+                                               name,
+                                               style,
+                                               {'underline' : Pango.Underline.SINGLE},
                                                link_item=expand_link)
-            if expand:
-                self._expand_param(node, current_layer, obj, param, style=style)
+
 
     def _expand_param(self, parent, layer, obj, param, style=None):
         value      = layer.untracked_get_param_value(param, obj)
@@ -381,6 +388,14 @@ class Page(Gtk.HPaned):
             if candidate == value:
                 continue
             self._add_value(parent, candidate, layer, style)
+
+    def _expand_relation(self, parent, layer, obj, relation, style=None):
+        objects    = layer.associated_objects(relation, obj)
+
+        if style is None:
+            tmp, style = self._stylize_layer(layer, relation)
+
+        self._add_value(parent, objects, self.model.by_name[relation], style, {'weight' : 800})
 
     def _parent_layer(self, current):
         return self.model._prev_layer(current)
@@ -401,6 +416,8 @@ class Page(Gtk.HPaned):
                 if item.is_expandable():
                     if item.param is not None:
                         self._expand_param(treeiter, item.layer, item.obj, item.param)
+                    elif item.relation is not None:
+                        self._expand_relation(treeiter, item.layer, item.obj, item.relation)
                     else:
                         self._add_paramtree(item.layer, treeiter, item.obj)
                     treeview.expand_row(path, True)

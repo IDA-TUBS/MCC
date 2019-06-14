@@ -562,7 +562,7 @@ class SystemModel(BacktrackRegistry):
             return set()
 
         # perform a breadth-first search
-        parents = layer.untracked_get_param_value(parent_layer.name, child)
+        parents = layer.associated_objects(parent_layer.name, child)
         if isinstance(parents, set):
             result = set()
             for p in parents:

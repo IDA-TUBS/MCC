@@ -16,6 +16,12 @@ class DecisionGraph(Graph):
     """ Stores dependencies between decisions.
     """
 
+    # TODO for clarity we should add a second node type that represents operations
+    #      an operation node represents a transition, i.e. it captures what operation
+    #      produced what params and what params have been accessed to do this
+    #      for transform operations, this is basically a n-to-m hyperedge
+    #      for map and assign operations it is a n-to-1 hyperedge
+
     class Node:
         def __init__(self, layer, obj, param):
             self.layer = layer
@@ -158,6 +164,7 @@ class DecisionGraph(Graph):
                 for leaf in leaves:
                     nodes |= self.predecessors(leaf, True)
                 nodes = list(nodes) #now, allow indexing
+
             nodes.remove(self.root) #increase readability
 
             for node in nodes:
@@ -502,7 +509,6 @@ class Layer:
         self.tracked_operation  = None
 
     def _add_node(self, node):
-
         assert isinstance(node, self.Node)
         obj  = node.untracked_obj()
 
@@ -622,6 +628,33 @@ class Layer:
             attributes['params'] = dict()
 
         return attributes['params']
+
+    def _interlayer(self, obj):
+        if isinstance(obj, Edge):
+            attributes = self.graph.edge_attributes(obj)
+        else:
+            attributes = self.graph.node_attributes(obj)
+
+        if 'interlayer' not in attributes:
+            attributes['interlayer'] = dict()
+
+        return attributes['interlayer']
+
+    def associated_objects(self, target_layer, obj):
+        assert isinstance(target_layer, str)
+
+        interlayer = self._interlayer(obj)
+
+        if target_layer not in interlayer:
+            return None
+
+        return interlayer[target_layer]
+
+    def _set_associated_objects(self, target_layer, obj, objects):
+        assert isinstance(target_layer, str)
+
+        interlayer = self._interlayer(obj)
+        interlayer[target_layer] = objects
 
     def _mark_all_params_read(self, param, nodes=True, edges=True):
         if not self.dependency_tracker:
@@ -1108,15 +1141,14 @@ class CopyEngine(AnalysisEngine):
         """
         if source_param is None:
             source_param = param
-        acl = { layer        : {'reads' : set([source_layer.name])},
-                source_layer : {'reads' : set([layer.name, source_param])}}
+        acl = { source_layer : {'reads' : set([source_param])}}
 
         AnalysisEngine.__init__(self, layer, param, acl=acl)
         self.source_layer = source_layer
         self.source_param = source_param
 
     def map(self, obj, candidates):
-        src_obj = self.layer.get_param_value(self, self.source_layer.name, obj)
+        src_obj = self.layer.associated_objects(self.source_layer.name, obj)
         return set([self.source_layer.get_param_value(self, self.source_param, src_obj)])
 
     def assign(self, obj, candidates):
@@ -1510,9 +1542,6 @@ class Transform(Operation):
         if 'writes' not in ae.acl[self.target_layer]:
             ae.acl[self.target_layer]['writes'] = set()
 
-        ae.acl[self.source_layer]['writes'].add(self.target_layer.name)
-        ae.acl[self.target_layer]['writes'].add(self.source_layer.name)
-
     def _check_ae_compatible(self, ae):
         Operation._check_ae_compatible(self, ae)
 
@@ -1545,7 +1574,7 @@ class Transform(Operation):
         for (index ,obj) in enumerate(iterable):
 
             # skip if parameter was already selected
-            if self.source_layer.untracked_get_param_value(self.target_layer.name, obj) is not None:
+            if self.source_layer.associated_objects(self.target_layer.name, obj) is not None:
                 logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
                 continue
 
@@ -1554,7 +1583,6 @@ class Transform(Operation):
             new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
             if not new_objs:
                 logging.warning("transform() did not return any object (returned: %s)" % new_objs)
-                self.source_layer.stop_tracking()
             else:
                 # remark: also returns already existing objects
                 inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
@@ -1567,18 +1595,19 @@ class Transform(Operation):
                                "%s does not match types %s" \
                                     % (o.untracked_obj(), self.target_layer.node_types())
 
-                self.source_layer.stop_tracking()
-                self.source_layer.untracked_set_param_value(self.target_layer.name, obj, inserted)
+                self.source_layer._set_associated_objects(self.target_layer.name, obj, inserted)
 
                 for o in inserted:
-                    src = self.target_layer.untracked_get_param_value(self.source_layer.name, o)
+                    src = self.target_layer.associated_objects(self.source_layer.name, o)
                     if src is None:
                         src = obj
                     elif isinstance(src, set) or isinstance(src, frozenset):
                         src.add(obj)
                     else:
                         src = { src, obj }
-                    self.target_layer.untracked_set_param_value(self.source_layer.name, o, src)
+                    self.target_layer._set_associated_objects(self.source_layer.name, o, src)
+
+            self.source_layer.stop_tracking()
 
         return True
 

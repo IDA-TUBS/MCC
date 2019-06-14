@@ -756,7 +756,7 @@ class ServiceEngine(AnalysisEngine):
             return '%s to %s' % (self.source_service, self.target_service)
 
     def __init__(self, layer, target_layer):
-        acl = { layer        : { 'reads'  : set(['service', 'pattern', 'component', target_layer.name]) },
+        acl = { layer        : { 'reads'  : set(['service', 'pattern', 'component']) },
                 target_layer : { 'writes' : set(['source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='connections', acl=acl)
         self.target_layer = target_layer
@@ -858,8 +858,8 @@ class ServiceEngine(AnalysisEngine):
         source_pattern = self.layer.get_param_value(self, 'pattern', obj.source)
         target_pattern = self.layer.get_param_value(self, 'pattern', obj.target)
 
-        src_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.source)
-        dst_mapping = self.layer.get_param_value(self, self.target_layer.name, obj.target)
+        src_mapping = self.layer.associated_objects(self.target_layer.name, obj.source)
+        dst_mapping = self.layer.associated_objects(self.target_layer.name, obj.target)
 
         graph_objs = set()
         for con in self.layer.get_param_value(self, self.param, obj):
@@ -1319,7 +1319,7 @@ class RteEngine(AnalysisEngine):
 
 class ReachabilityEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, platform_model):
-        acl = { layer        : { 'reads'  : set(['mapping', 'service', target_layer.name]) },
+        acl = { layer        : { 'reads'  : set(['mapping', 'service']) },
                 target_layer : { 'writes' : set(['service', 'remotename'])}}
         AnalysisEngine.__init__(self, layer, param='proxy', acl=acl)
         self.platform_model = platform_model
@@ -1374,8 +1374,8 @@ class ReachabilityEngine(AnalysisEngine):
             proxynode = Layer.Node(proxy)
             result = [GraphObj(proxynode, params={'remotename' : service.function})]
 
-            src_map = self.layer.get_param_value(self, target_layer.name, obj.source)
-            dst_map = self.layer.get_param_value(self, target_layer.name, obj.target)
+            src_map = self.layer.associated_objects(target_layer.name, obj.source)
+            dst_map = self.layer.associated_objects(target_layer.name, obj.target)
             assert(len(src_map) == 1)
             assert(len(dst_map) == 1)
             src = list(src_map)[0]
@@ -1440,7 +1440,7 @@ class BacktrackingTestEngine(AnalysisEngine):
 
 class InstantiationEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, factory):
-        acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config', 'comp_inst'} },
+        acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config'} },
                 target_layer : { 'writes' : { 'mapping', 'source-service', 'target-service' }}}
         AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
         self.factory      = factory
@@ -1450,7 +1450,7 @@ class InstantiationEngine(AnalysisEngine):
         self.factory.reset()
 
     def _find_node(self, obj, instance):
-        for n in self.layer.get_param_value(self, self.target_layer.name, obj):
+        for n in self.layer.associated_objects(self.target_layer.name, obj):
             if n.obj(self.target_layer) == instance:
                 return n
         return None
