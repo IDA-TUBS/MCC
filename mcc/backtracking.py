@@ -81,8 +81,10 @@ class BacktrackRegistry(Registry):
                 if outpath is not None:
                     name = 'decision-try-%d.dot' % self.backtracking_try
                     path = outpath + name
-                    failed = self._failed_params(cns)
-                    self.decision_graph.write_dot(path, failed, True)
+                    leaves = set()
+                    for p in self._failed_params(cns):
+                        leaves.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+                    self.decision_graph.write_dot(path, leaves, True)
 
                 # find branch point
                 culprit = self.find_culprit(cns)
@@ -96,7 +98,9 @@ class BacktrackRegistry(Registry):
                 culprit.layer.add_param_failed(culprit.param, culprit.obj, bad)
 
                 # cut-off subtree
-                self.invalidate_subtree(culprit)
+                node = self.decision_graph.find_assign(culprit.layer, culprit.obj, culprit.param)
+                print("   assigned by operation: %s" % (node))
+                self.invalidate_subtree(node)
 
                 if outpath is not None:
                     export = PickleExporter(self)
@@ -124,19 +128,19 @@ class BacktrackRegistry(Registry):
 
     def _failed_params(self, cns):
         if cns.param is None:
-            return self.decision_graph.search(layer=cns.layer,
-                                              obj  =cns.obj)
+            return self.decision_graph.lookup_decisions(layer=cns.layer,
+                                                        obj  =cns.obj)
 
-        params = self.decision_graph.find_node(layer=cns.layer,
-                                               obj  =cns.obj,
-                                               param=cns.param)
-        assert params is not None
-        return { params }
+        return {self.decision_graph.param(cns.layer, cns.obj, cns.param)}
 
-    def _find_brancheable(self, nodes):
-        for n in nodes:
-            if not self.decision_graph.candidates_exhausted(n):
-                return n
+    def _find_brancheable(self, params):
+        for p in params:
+            if not self.decision_graph.candidates_exhausted(p):
+                return p
+
+        nodes = set()
+        for p in params:
+            nodes.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
 
         # no candidates left => find previous decisions with candidates left
         #  i.e. breadth-first search in reverse direction
@@ -150,22 +154,56 @@ class BacktrackRegistry(Registry):
                 visited.add(n)
                 queue.append(n)
 
-                if not self.decision_graph.candidates_exhausted(n):
-                    return n
+                for p in self.decision_graph.written_params(n):
+                    if not self.decision_graph.candidates_exhausted(p):
+                        return p
 
         return None
 
+    def _rollback_assign(self, node):
+        for p in self.decision_graph.written_params(node):
+            p.layer.untracked_clear_param_value(p.param, p.obj)
+
+    def _rollback_map(self, node):
+        for p in self.decision_graph.written_params(node):
+            p.layer.untracked_clear_param_candidates(p.param, p.obj)
+
+        # reset state partially, if map is rolled back
+        # (we assume that state is only modified by Map operations)
+        for ae in node.operation.analysis_engines:
+            if hasattr(ae, 'reset'):
+                ae.reset(node)
+
+    def _rollback_transform(self, node):
+        op = node.operation
+        if self.clear_layers:
+            for node in op.source_layer.graph.nodes():
+                op.source_layer._set_associated_objects(op.target_layer.name, node, None)
+            for edge in op.source_layer.graph.edges():
+                op.source_layer._set_associated_objects(op.target_layer.name, edge, None)
+            self.reset(op.target_layer)
+
+            for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
+                for o in self.operations.keys():
+                    if o.target_layer == self.by_order[i]:
+                        self.operations[o] = False
+        else:
+            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, node.obj)
+            if not isinstance(trg_nodes, set):
+                trg_nodes = {trg_nodes}
+
+            for trg in trg_nodes:
+                self.delete_recursive(trg, op.target_layer)
+
+            # clear source->target layer mapping
+            op.source_layer._set_associated_objects(op.target_layer.name, node.obj, None)
+
     def invalidate_subtree(self, start):
-        # invalidate operations associated with start node
-        for op in self.decision_graph.operations(start):
-            if isinstance(op, Assign):
-                start.layer.untracked_clear_param_value(start.param, start.obj)
-                self.operations[op] = False
-            elif isinstance(op, Map):
-                continue
-            elif isinstance(op, Transform):
-                # we the start node is not a transform operation
-                raise NotImplementedError
+        assert isinstance(start.operation, Assign)
+
+        # rollback assign completely
+        self._rollback_assign(start)
+        self.operations[start.operation] = False
 
         for n in self.decision_graph.successors(start, recursive=True):
             deleted = True
@@ -173,52 +211,23 @@ class BacktrackRegistry(Registry):
                 deleted = False
 
             # invalidate layer depending on what operations were involved
-            for op in self.decision_graph.operations(n):
-                if not deleted:
-                    if isinstance(op, Assign):
-                        n.layer.untracked_clear_param_value(n.param, n.obj)
-                    elif isinstance(op, Map):
-                        n.layer.untracked_clear_param_candidates(n.param, n.obj)
-                    elif isinstance(op, Transform):
-                        if self.clear_layers:
-                            for node in op.source_layer.graph.nodes():
-                                op.source_layer._set_associated_objects(op.target_layer.name, node, None)
-                            for edge in op.source_layer.graph.edges():
-                                op.source_layer._set_associated_objects(op.target_layer.name, edge, None)
-                            self.reset(op.target_layer)
+            op = n.operation
+            if not deleted:
+                if isinstance(op, Assign):
+                    self._rollback_assign(n)
+                elif isinstance(op, Map):
+                    self._rollback_map(n)
+                elif isinstance(op, Transform):
+                    self._rollback_transform(n)
+                else:
+                    raise NotImplementedError
 
-                            for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
-                                for o in self.operations.keys():
-                                    if o.target_layer == self.by_order[i]:
-                                        self.operations[o] = False
-                        else:
-                            src_node = n.layer.associated_objects(op.source_layer.name, n.obj)
-
-                            # FIXME handle case where multiple source objects exist
-                            assert not isinstance(src_node, set)
-                            if src_node not in n.layer.graph.nodes() and src_node not in n.layer.graph.edges():
-                                continue
-
-                            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, src_node)
-                            if not isinstance(trg_nodes, set):
-                                trg_nodes = {trg_nodes}
-
-                            for trg in trg_nodes:
-                                self.delete_recursive(trg, op.target_layer)
-
-                            # clear source->target layer mapping
-                            op.source_layer._set_associated_objects(op.target_layer.name, n.obj, None)
-                    else:
-                        raise NotImplementedError
-
-                # invalidate operations
-                self.operations[op] = False
-                for ae in op.analysis_engines:
-                    if hasattr(ae, 'reset'):
-                        ae.reset()
+            self.operations[op] = False
 
             # remove node from decision graph
             self.decision_graph.remove(n)
+
+        self.decision_graph.remove(start)
 
     def delete_recursive(self, obj, layer):
         if obj not in layer.graph.nodes() and obj not in layer.graph.edges():

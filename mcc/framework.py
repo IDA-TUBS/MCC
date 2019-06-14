@@ -16,13 +16,54 @@ class DecisionGraph(Graph):
     """ Stores dependencies between decisions.
     """
 
-    # TODO for clarity we should add a second node type that represents operations
-    #      an operation node represents a transition, i.e. it captures what operation
-    #      produced what params and what params have been accessed to do this
-    #      for transform operations, this is basically a n-to-m hyperedge
-    #      for map and assign operations it is a n-to-1 hyperedge
+    class Writers:
+        def __init__(self):
+            self.assign    = None
+            self.map       = None
+            self.transform = set()
 
-    class Node:
+        def all(self):
+            result = set()
+
+            if self.assign is not None:
+                result.add(self.assign)
+
+            if self.map is not None:
+                result.add(self.map)
+
+            result.update(self.transform)
+
+            return result
+
+        def empty(self):
+            return self.assign is None and self.map is None and len(self.transform) == 0
+
+        def register(self, node):
+            if isinstance(node.operation, Assign):
+                assert self.assign is None
+                self.assign = node
+            elif isinstance(node.operation, Map):
+                assert self.map is None, "Multiple map operations are not supported"
+                self.map = node
+            elif isinstance(node.operation, Transform):
+                self.transform.add(node)
+            else:
+                raise NotImplementedError
+
+        def deregister(self, node):
+            if isinstance(node.operation, Assign):
+                assert self.assign == node
+                self.assign = None
+            elif isinstance(node.operation, Map):
+                assert self.map == node
+                self.map = None
+            elif isinstance(node.operation, Transform):
+                self.transform.remove(node)
+            else:
+                raise NotImplementedError
+
+
+    class Param:
         def __init__(self, layer, obj, param):
             self.layer = layer
             self.obj   = obj
@@ -34,31 +75,66 @@ class DecisionGraph(Graph):
         def __str__(self):
             return '%s:(%s):%s' % (self.layer, self.obj, self.param)
 
+        def __hash__(self):
+            return hash((self.layer, self.obj, self.param))
+
+        def __eq__(self, rhs):
+            return self.layer == rhs.layer and \
+                   self.obj   == rhs.obj   and \
+                   self.param == rhs.param
+
+
+    class Node:
+        def __init__(self, layer, obj, operation):
+            self.layer     = layer
+            self.obj       = obj
+            self.operation = operation
+
+        def __repr__(self):
+            return self.__str__()
+
+        def __hash__(self):
+            return hash((self.layer, self.obj, self.operation))
+
+        def __str__(self):
+            param = ''
+            if self.operation.param is not None:
+                param = " '%s'" % self.operation.param
+
+            return '[%s] %s%s (%s)' % (self.layer, type(self.operation).__name__, param, self.obj)
+
+        def __eq__(self, rhs):
+            return self.layer == rhs.layer and \
+                   self.obj   == rhs.obj   and \
+                   self.operation == rhs.operation
+
+
     def __init__(self):
         super().__init__()
 
         self.read    = set()
         self.written = set()
 
-        self.node_store = dict()
+        self.param_store = dict()
 
         # add root node
-        self.root = self.Node(None, None, None)
-        super().add_node(self.root)
+        self.root = self.add_node(None, None, None)
 
-    def candidates_exhausted(self, node):
-        if node == self.root:
-            return True
 
-        # are there any candidates left
-        candidates  = node.layer.untracked_get_param_candidates(node.param, node.obj)
+    def candidates_exhausted(self, p):
+        assert isinstance(p, self.Param)
+
+        candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
         if len(candidates) <= 1:
             return True
 
-        failed      = node.layer.get_param_failed(node.param, node.obj)
-        value       = {node.layer.untracked_get_param_value(node.param, node.obj)}
+        failed = p.layer.get_param_failed(p.param, p.obj)
+        value  = {p.layer.untracked_get_param_value(p.param, p.obj)}
 
-        return len(candidates-failed-value) == 0
+        if len(candidates-failed-value) > 0:
+            return False
+
+        return True
 
     def initialize_tracking(self, layers):
         for layer in layers:
@@ -68,8 +144,10 @@ class DecisionGraph(Graph):
         self.read    = set()
         self.written = set()
 
-    def stop_tracking(self, operation):
-        self.add_dependencies(operation, self.read-self.written, self.written)
+    def stop_tracking(self, layer, obj, operation):
+        node = self.add_node(layer, obj, operation)
+        self.add_dependencies(node, self.read-self.written, self.written)
+
         self.read    = set()
         self.written = set()
 
@@ -77,74 +155,123 @@ class DecisionGraph(Graph):
         assert len(self.written) == 0, "check operation has written params: %s" % self.written
 
     def track_read(self, layer, obj, param):
-        self.read.add(self.find_dependency(layer, obj, param))
+        self.read.add(self.Param(layer, obj, param))
 
     def track_written(self, layer, obj, param):
-        self.written.add(self.add_node(layer, obj, param))
+        self.written.add(self.Param(layer, obj, param))
 
-    def find_dependency(self, layer, obj, param):
-        node = self.find_node(layer, obj, param)
-        if node is None:
-            return self.root
+    def find_writers(self, layer, obj, param):
+        param_obj = self.Param(layer, obj, param)
+        if param_obj not in self.param_store.keys():
+            return self.Writers()
 
-        return node
+        return self.param_store[param_obj]
 
-    def find_node(self, layer, obj, param):
-        if layer not in self.node_store:
-            return None
+    def find_assign(self, layer, obj, param):
+        w = self.find_writers(layer, obj, param)
 
-        if obj not in self.node_store[layer]:
-            return None
+        assert w.assign is not None
 
-        if param not in self.node_store[layer][obj]:
-            return None
+        return w.assign
 
-        return self.node_store[layer][obj][param]
+    def param(self, layer, obj, param):
+        return self.Param(layer, obj, param)
 
-    def search(self, layer, obj):
-        if layer not in self.node_store:
-            return None
-
-        if obj not in self.node_store[layer]:
-            return None
-
+    def find_operations(self, layer, obj):
         nodes = set()
-        for node in self.node_store[layer][obj].values():
-            nodes.add(node)
+        for node in self.nodes():
+            if node.layer == layer and node.obj == obj:
+                nodes.add(node)
 
         return nodes
 
-    def operations(self, node):
-        return self.node_attributes(node)['operations']
+    def lookup_decisions(self, layer, obj):
+        params = set()
+        for op in self.find_operations(layer, obj):
+            for p in self.written_params(op):
+                if len(p.layer.untracked_get_param_candidates(p.param, p.obj)):
+                    params.add(p)
 
-    def add_node(self, layer, obj, param):
-        found = self.find_node(layer, obj, param)
-        if found is None:
-            found = super().add_node(self.Node(layer, obj, param))
-            self.node_attributes(found)['operations'] = set()
+        return params
 
-            if layer not in self.node_store:
-                self.node_store[layer] = dict()
-            if obj not in self.node_store[layer]:
-                self.node_store[layer][obj] = dict()
+    def read_params(self, node):
+        return self.node_attributes(node)['read']
 
-            self.node_store[layer][obj][param] = found
+    def written_params(self, node):
+        return self.node_attributes(node)['written']
 
-        return found
+    def add_node(self, layer, obj, operation):
 
-    def add_dependencies(self, operation, read, written):
-        if len(read) == 0 and len(written) > 0:
-            read.add(self.root)
+        node = super().add_node(self.Node(layer, obj, operation))
+        self.node_attributes(node)['written'] = set()
+        self.node_attributes(node)['read']    = set()
 
-        for n in written:
-            self.node_attributes(n)['operations'].add(operation)
+        return node
 
-            for dep in read:
-                self.create_edge(dep, n)
+    def add_dependencies(self, node, read, written):
+        written_params = self.written_params(node)
+        read_params    = self.read_params(node)
+
+        writers = set()
+        for p in read:
+            tmp = self.find_writers(p.layer, p.obj, p.param)
+            if not tmp.empty():
+                read_params.add(p)
+                writers.update(tmp.all())
+
+        # if node.operation is assign, add connection to map operation
+        if isinstance(node.operation, Assign):
+            assert len(written) == 1
+            for p in written:
+                tmp = self.find_writers(p.layer, p.obj, p.param)
+                assert tmp.map is not None
+                writers.add(tmp.map)
+
+        elif len(read_params) == 0 and len(written) > 0:
+            read_params.add(self.root)
+            self.create_edge(self.root, node)
+
+        for w in writers:
+            self.create_edge(w, node)
+
+        for p in written:
+            written_params.add(p)
+
+            if p not in self.param_store:
+                self.param_store[p] = self.Writers()
+
+            self.param_store[p].register(node)
 
     def remove(self, node):
+        for p in self.written_params(node):
+            w = self.find_writers(p.layer, p.obj, p.param)
+            w.deregister(node)
+
+            if w.empty():
+                del self.param_store[p]
+
         self.remove_node(node)
-        del self.node_store[node.layer][node.obj][node.param]
+
+    def _stylize_node(self, node):
+
+        all_no  = True
+        choice  = False
+        for p in self.written_params(node):
+            ncands = len(p.layer.untracked_get_param_candidates(p.param, p.obj))
+            if ncands != 0:
+                all_no = False
+            if ncands > 1:
+                choice = True
+
+        style = "shape=box"
+        if choice:
+            style += ",style=\"filled,solid\",fillcolor=coral"
+        elif all_no:
+            style += ",style=dashed"
+        else:
+            style += ",style=\"filled,solid\",fillcolor=grey90"
+
+        return style
 
     def write_dot(self, filename, leaves=None, verbose=False):
         """
@@ -171,33 +298,23 @@ class DecisionGraph(Graph):
                 if node is None:
                     logging.info('Node is none')
 
-                l = node.layer
-                arg = (node.param, node.obj)
-                ncands = len(l.untracked_get_param_candidates(*arg))
-
-                style = "shape=box"
-                if ncands == 0:
-                    style += ",style=dashed"
-                elif ncands == 1:
-                    style += ",style=\"filled,solid\",fillcolor=grey90"
-                else:
-                    style += ",style=\"filled,solid\",fillcolor=coral"
+                style = self._stylize_node(node)
 
                 label = str(node)
-                if verbose and node.param != 'obj':
-                    def plist(data):
-                        return ', '.join([str(o) for o in data])
-
-                    #TODO getting candidates fails sometimes with a KeyError
-                    #     if leaves is None
-                    data = {
-                            'candidates': plist(l.untracked_get_param_candidates(*arg)),
-                            'failed': plist(l.get_param_failed(*arg)),
-                            'value': l.untracked_get_param_value(*arg),
-                            'exhausted': self.candidates_exhausted(node),
-                            }
-                    data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
-                    label += '\n' + data
+#                if verbose:
+#                    def plist(data):
+#                        return ', '.join([str(o) for o in data])
+#
+#                    #TODO getting candidates fails sometimes with a KeyError
+#                    #     if leaves is None
+#                    data = {
+#                            'candidates': plist(l.untracked_get_param_candidates(*arg)),
+#                            'failed': plist(l.get_param_failed(*arg)),
+#                            'value': l.untracked_get_param_value(*arg),
+#                            'exhausted': self.candidates_exhausted(node),
+#                            }
+#                    data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
+#                    label += '\n' + data
 
                 node_str = '"{0}" [label="{1}", {2}]\n'.format(nodes.index(node), label, style)
                 file.write(node_str)
@@ -553,14 +670,14 @@ class Layer:
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
-    def stop_tracking(self, abort=False):
+    def stop_tracking(self, obj, abort=False):
         if self.dependency_tracker is not None:
             if abort:
                 self.dependency_tracker.check_tracking()
                 self.tracked_operation = None
             else:
                 assert(self.tracked_operation is not None)
-                self.dependency_tracker.stop_tracking(self.tracked_operation)
+                self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation)
                 self.tracked_operation = None
 
     def set_params(self, ae, obj, params):
@@ -1343,7 +1460,7 @@ class Map(Operation):
 
             self.source_layer.set_param_candidates(self.analysis_engines[0], self.param, obj, candidates)
 
-            self.source_layer.stop_tracking()
+            self.source_layer.stop_tracking(obj)
 
         return True
 
@@ -1405,7 +1522,7 @@ class BatchMap(Map):
             assert(candidates is not None)
             self.source_layer.set_param_candidates(ae, self.param, obj, candidates)
 
-        self.source_layer.stop_tracking()
+        self.source_layer.stop_tracking(obj)
 
         return True
 
@@ -1462,7 +1579,7 @@ class Assign(Operation):
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
-            self.source_layer.stop_tracking()
+            self.source_layer.stop_tracking(obj)
 
         return True
 
@@ -1508,7 +1625,7 @@ class BatchAssign(Assign):
 
             self.source_layer.set_param_value(ae, self.param, obj, result)
 
-        self.stop_tracking()
+        self.stop_tracking(obj)
 
         return True
 
@@ -1608,7 +1725,7 @@ class Transform(Operation):
                         src = { src, obj }
                     self.target_layer._set_associated_objects(self.source_layer.name, o, src)
 
-            self.source_layer.stop_tracking()
+            self.source_layer.stop_tracking(obj)
 
         return True
 
@@ -1634,7 +1751,7 @@ class Check(Operation):
                 elif not result:
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
-                self.source_layer.stop_tracking(abort=True)
+                self.source_layer.stop_tracking(obj, abort=True)
 
                 first = False
 

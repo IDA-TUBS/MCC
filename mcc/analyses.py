@@ -1446,8 +1446,9 @@ class InstantiationEngine(AnalysisEngine):
         self.factory      = factory
         self.target_layer = target_layer
 
-    def reset(self):
-        self.factory.reset()
+    def reset(self, obj):
+        if isinstance(obj, Layer.Node):
+            self.factory.remove_instance(self.layer.untracked_get_param_value(self, 'instance', obj))
 
     def _find_node(self, obj, instance):
         for n in self.layer.associated_objects(self.target_layer.name, obj):

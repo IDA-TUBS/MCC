@@ -93,6 +93,9 @@ class Instance:
     def register_replacement(self, instance):
         self.replaces.add(instance)
 
+    def remove_replacement(self, instance):
+        self.replaces.remove(instance)
+
     def replaces(self):
         return self.replaces
 
@@ -122,10 +125,6 @@ class InstanceFactory:
         self.instances = dict()
         self.identifiers = dict()
 
-    def reset(self):
-        self.instances = dict()
-        self.identifiers = dict()
-
     def unique_name(self, component):
         # build unique name from component name, object id and sequence number
         if component.unique_label() not in self.identifiers:
@@ -134,6 +133,13 @@ class InstanceFactory:
             self.identifiers[component.unique_label()] += 1
 
         return "%s-%s" % (component.unique_label(), self.identifiers[component.unique_label()])
+
+    def remove_instance(self, subsystem, inst):
+        if subsystem not in self.instances:
+            return
+
+        del self.instances[subsystem]['dedicated'][inst.component]
+        self.instances[subsystem]['shared'][inst.component_uid()].remove_replacement(inst)
 
     def insert_existing_instances(self, subsystem, existing):
         if subsystem not in self.instances:
