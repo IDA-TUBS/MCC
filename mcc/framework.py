@@ -1275,7 +1275,7 @@ class CopyEngine(AnalysisEngine):
 class InheritEngine(AnalysisEngine):
     """ Inherits a parameter from neighbouring nodes.
     """
-    def __init__(self, layer, param, out_edges=True, in_edges=True):
+    def __init__(self, layer, param, out_edges=True, in_edges=True, target_param=None):
         """ 
         Args:
             :param layer: The layer on which we operate.
@@ -1287,29 +1287,44 @@ class InheritEngine(AnalysisEngine):
             :param in_edges: Whether to evaluate incoming edges when iterating neighbouring nodes.
             :type  in_edges: boolean
         """
-        AnalysisEngine.__init__(self, layer, param)
+        if target_param is None:
+            target_param = param
+        else:
+            acl = { layer : {'reads' : set([param])}}
+
+        AnalysisEngine.__init__(self, layer, target_param, acl=acl)
         self.out_edges=out_edges
         self.in_edges=in_edges
+        self.source_param = param
 
     def map(self, obj, candidates):
         candidates = set()
+
+        if self.source_param != self.param:
+            value = self.layer.get_param_value(self, self.source_param, obj)
+            if value is not None:
+                candidates.add(value)
 
         if self.out_edges:
             edges = self.layer.graph.out_edges(obj)
 
             for e in edges:
-                candidates.add(self.layer.get_param_value(self, self.param, e.target))
+                value = self.layer.get_param_value(self, self.source_param, e.target)
+                if value is not None:
+                    candidates.add(value)
 
         if self.in_edges:
             edges = self.layer.graph.in_edges(obj)
 
             for e in edges:
-                candidates.add(self.layer.get_param_value(self, self.param, e.source))
+                value = self.layer.get_param_value(self, self.source_param, e.source)
+                if value is not None:
+                    candidates.add(value)
 
         if len(candidates) > 1:
-            logging.warning("Cannot inherit '%s' from source/target node unambiguously" % (self.param))
+            logging.warning("Cannot inherit '%s' from source/target node unambiguously" % (self.source_param))
         elif len(candidates) == 0:
-            logging.warning("No value for param '%s' for node %s\'s nodes." % (self.param, obj))
+            logging.warning("No value for param '%s' for node %s\'s nodes." % (self.source_param, obj))
 
         return candidates
 
@@ -1889,8 +1904,8 @@ class CopyEdgeStep(EdgeStep):
 class CopyMappingStep(NodeStep):
     """ Copies 'mapping' parameter of the nodes to the target layer.
     """
-    def __init__(self, layer, target_layer):
-        ce = CopyEngine(target_layer, 'mapping', layer)
+    def __init__(self, layer, target_layer, target_param='mapping', source_param='mapping'):
+        ce = CopyEngine(target_layer, target_param, layer, source_param=source_param)
         NodeStep.__init__(self, Map(ce))
         self.add_operation(Assign(ce))
 
@@ -1925,7 +1940,7 @@ class InheritFromTargetStep(NodeStep):
     """ Inherits a parameter value from neighbouring target nodes.
     """
     def __init__(self, layer, param):
-        ie = InheritEngine(layer, param, out_edges=True, in_eges=False)
+        ie = InheritEngine(layer, param, out_edges=True, in_edges=False)
         NodeStep.__init__(self, Map(ie))
         self.add_operation(Assign(ie))
 
@@ -1933,8 +1948,8 @@ class InheritFromBothStep(NodeStep):
     """ Inherits a parameter value from neighbouring source and target nodes.
     """
 
-    def __init__(self, layer, param, engines=None):
-        ie = InheritEngine(layer, param='mapping')
+    def __init__(self, layer, param, target_param=None, engines=None):
+        ie = InheritEngine(layer, param=param, target_param=target_param)
         op = Map(ie)
         if engines is not None:
             for ae in engines:

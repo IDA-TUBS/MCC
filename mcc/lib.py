@@ -90,9 +90,12 @@ class MccBase:
         """
         self.repo = repo
 
-    def _complete_mapping(self, model, layer):
+    def _complete_mapping(self, model, layer, source_param='mapping'):
         # inherit mapping from all neighbours (excluding static platform components)
-        model.add_step(InheritFromBothStep(layer, 'mapping', engines={StaticEngine(layer)}))
+        model.add_step(InheritFromBothStep(layer,
+                                           param=source_param,
+                                           target_param='mapping',
+                                           engines={StaticEngine(layer)}))
 
     def _map_functions(self, model, layer):
         fa = model.by_name[layer]
@@ -174,9 +177,9 @@ class MccBase:
         model.add_step_unsafe(NodeStep(Check(NetworkEngine(fc), name='network bandwith')))
 
         # copy mapping from slayer to dlayer
-        model.add_step(CopyMappingStep(fc, ca))
+        model.add_step(CopyMappingStep(fc, ca, 'tmp-mapping'))
 
-        self._complete_mapping(model, ca)
+        self._complete_mapping(model, ca, source_param='tmp-mapping')
 
         # check mapping
         model.add_step(NodeStep(Check(MappingEngine(ca, model.repo, model.platform), name='platform mapping is complete')))

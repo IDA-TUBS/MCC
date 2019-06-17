@@ -492,19 +492,20 @@ class StaticEngine(AnalysisEngine):
         assert candidates is not None
 
         exclude = set()
-        for o in candidates:
-            if o.static():
-                exclude.add(o)
+        if len(candidates) > 1:
+            for o in candidates:
+                if o.static():
+                    exclude.add(o)
 
-        candidates -= exclude
+            candidates -= exclude
 
         if len(candidates) > 1:
             logging.warning("Still cannot inherit mapping unambiguously.")
-        elif len(candidates) == 1 and len(exclude) > 0:
+        if len(exclude) > 0:
             logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" \
-                            % (obj.obj(self.layer), candidates-exclude))
+                            % (obj.obj(self.layer), candidates))
 
-        return candidates - exclude
+        return candidates
 
 class FunctionEngine(AnalysisEngine):
     class Dependency:
