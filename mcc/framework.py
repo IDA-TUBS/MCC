@@ -97,6 +97,9 @@ class DecisionGraph(Graph):
             return hash((self.layer, self.obj, self.operation))
 
         def __str__(self):
+            if self.operation is None:
+                return 'Root'
+
             param = ''
             if self.operation.param is not None:
                 param = " '%s'" % self.operation.param
@@ -208,6 +211,43 @@ class DecisionGraph(Graph):
 
         return node
 
+    def _root_path(self, u):
+        preds = self.predecessors(u)
+        reverse_path = [u]
+        while len(preds) != 0:
+            assert len(preds) == 1
+            p = list(preds)[0]
+#            assert p not in reverse_path
+            reverse_path.append(p)
+            preds = self.predecessors(p)
+
+        reverse_path.reverse()
+        return reverse_path
+
+    def _common_path(self, u, v):
+        assert u != v
+
+        path1 = self._root_path(u)
+        path2 = self._root_path(v)
+
+        i = 0
+        while path1[i] == path2[i]:
+            i += 1
+
+        return i, path1, path2
+
+    def _treeify(self, node, old_pred, new_pred):
+        # remove edge between old_pred and node
+        for e in self.in_edges(node):
+            if e.source == old_pred:
+                self.remove_edge(e)
+                break
+
+#        assert new_pred not in self.successors(node, recursive=True), "%s is reachable from %s, old predecessor was %s" % (new_pred, node, old_pred)
+
+        # add edge between new_pred and node
+        self.create_edge(new_pred, node)
+
     def add_dependencies(self, node, read, written):
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
@@ -224,15 +264,12 @@ class DecisionGraph(Graph):
             assert len(written) == 1
             for p in written:
                 tmp = self.find_writers(p.layer, p.obj, p.param)
-                assert tmp.map is not None
+                assert tmp.map is not None, "Cannot find map operation for %s" % p
                 writers.add(tmp.map)
 
         elif len(read_params) == 0 and len(written) > 0:
             read_params.add(self.root)
             self.create_edge(self.root, node)
-
-        for w in writers:
-            self.create_edge(w, node)
 
         for p in written:
             written_params.add(p)
@@ -241,6 +278,40 @@ class DecisionGraph(Graph):
                 self.param_store[p] = self.Writers()
 
             self.param_store[p].register(node)
+
+        if len(writers) == 0:
+            return
+
+        # SANITY CHECK
+#        for w in writers:
+#            assert len(self.roots(w)) == 1
+
+        # ignore writers that are predecessors of any other writer
+        blacklist = set()
+        for w in writers:
+            if len(self.successors(w, recursive=True) & writers) > 0:
+                blacklist.add(w)
+
+        dependencies = writers - blacklist
+        assert len(dependencies) > 0
+
+        # first, maintain tree structure
+        order = list(dependencies)
+        main = order.pop()
+        while len(order) > 0:
+            best_node  = None
+            best_level = 0
+            for n in order:
+                level, path1, path2 = self._common_path(main, n)
+                if level >= best_level:
+                    best_node  = n
+                    best_level = level
+
+            order.remove(best_node)
+            self._treeify(path1[best_level], path1[best_level-1], best_node)
+
+        # second, the only remaining dependency is main
+        self.create_edge(main, node)
 
     def remove(self, node):
         for p in self.written_params(node):
