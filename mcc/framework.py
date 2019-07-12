@@ -86,10 +86,11 @@ class DecisionGraph(Graph):
 
 
     class Node:
-        def __init__(self, layer, obj, operation):
+        def __init__(self, layer, obj, operation, iteration):
             self.layer     = layer
             self.obj       = obj
             self.operation = operation
+            self.iteration = iteration
 
         def __repr__(self):
             return self.__str__()
@@ -105,7 +106,7 @@ class DecisionGraph(Graph):
             if self.operation.param is not None:
                 param = " '%s'" % self.operation.param
 
-            return '[%s] %s%s (%s)' % (self.layer, type(self.operation).__name__, param, self.obj)
+            return '%d:[%s] %s%s (%s)' % (self.iteration,self.layer, type(self.operation).__name__, param, self.obj)
 
         def __eq__(self, rhs):
             return self.layer == rhs.layer and \
@@ -121,9 +122,13 @@ class DecisionGraph(Graph):
 
         self.param_store = dict()
 
+        self.iterations = 0
+
         # add root node
         self.root = self.add_node(None, None, None)
 
+    def next_iteration(self):
+        self.iterations += 1
 
     def candidates_exhausted(self, p):
         assert isinstance(p, self.Param)
@@ -139,6 +144,20 @@ class DecisionGraph(Graph):
             return False
 
         return True
+
+    def decisions(self, n):
+        assert isinstance(n, self.Node)
+
+        if not isinstance(n.operation, Assign):
+            return set()
+
+        decisions = set()
+
+        for p in self.written_params(n):
+            if len(p.layer.untracked_get_param_candidates(p.param, p.obj)) > 1:
+                decisions.add(p)
+
+        return decisions
 
     def initialize_tracking(self, layers):
         for layer in layers:
@@ -189,15 +208,6 @@ class DecisionGraph(Graph):
 
         return nodes
 
-    def lookup_decisions(self, layer, obj):
-        params = set()
-        for op in self.find_operations(layer, obj):
-            for p in self.written_params(op):
-                if len(p.layer.untracked_get_param_candidates(p.param, p.obj)):
-                    params.add(p)
-
-        return params
-
     def read_params(self, node):
         return self.node_attributes(node)['read']
 
@@ -206,13 +216,13 @@ class DecisionGraph(Graph):
 
     def add_node(self, layer, obj, operation):
 
-        node = super().add_node(self.Node(layer, obj, operation))
+        node = super().add_node(self.Node(layer, obj, operation, self.iterations))
         self.node_attributes(node)['written'] = set()
         self.node_attributes(node)['read']    = set()
 
         return node
 
-    def _root_path(self, u):
+    def root_path(self, u):
         preds = self.predecessors(u)
         reverse_path = [u]
         while len(preds) != 0:
@@ -228,8 +238,8 @@ class DecisionGraph(Graph):
     def _common_path(self, u, v):
         assert u != v
 
-        path1 = self._root_path(u)
-        path2 = self._root_path(v)
+        path1 = self.root_path(u)
+        path2 = self.root_path(v)
 
         i = 0
         while path1[i] == path2[i]:
@@ -237,10 +247,35 @@ class DecisionGraph(Graph):
 
         return i, path1, path2
 
-    def _treeify(self, node, old_pred, new_pred):
-        # remove edge between old_pred and node
+    def _treeify(self, common_pred, left_start, left_end, right_start, right_end):
+
+        # can we order left branch below the right branch
+        if left_start.iteration >= right_end.iteration:
+            node     = left_start
+            new_pred = right_end
+            leaf     = left_end
+        elif right_start.iteration >= left_end.iteration:
+            node     = right_start
+            new_pred = left_end
+            leaf     = right_end
+        else:
+            # Does this ever happen?
+            logging.error("Cannot merge the following branches:")
+            logging.error("  Left: %s -> %s (#%d to #%d)"  % (left_start, left_end,
+                                                              left_start.iteration,
+                                                              left_end.iteration))
+            logging.error("  Right: %s -> %s (#%d to #%d)" % (right_start, right_end,
+                                                             right_start.iteration,
+                                                             right_end.iteration))
+            self.write_dot("/tmp/merge-error.dot", highlight={left_start, left_end,
+                                                              right_start, right_end})
+            # FIXME we must split both branches into segments and
+            #       sort the segments by iteration number
+            raise NotImplementedError
+
+        # remove edge between common_pred and node
         for e in self.in_edges(node):
-            if e.source == old_pred:
+            if e.source == common_pred:
                 self.remove_edge(e)
                 break
 
@@ -248,6 +283,8 @@ class DecisionGraph(Graph):
 
         # add edge between new_pred and node
         self.create_edge(new_pred, node)
+
+        return leaf
 
     def add_dependencies(self, node, read, written):
         written_params = self.written_params(node)
@@ -276,7 +313,6 @@ class DecisionGraph(Graph):
                 writers.add(tmp.map)
 
         elif len(read_params) == 0 and len(written) > 0:
-            read_params.add(self.root)
             self.create_edge(self.root, node)
 
         for p in written:
@@ -290,10 +326,6 @@ class DecisionGraph(Graph):
         if len(writers) == 0:
             return
 
-        # SANITY CHECK
-#        for w in writers:
-#            assert len(self.roots(w)) == 1
-
         # ignore writers that are predecessors of any other writer
         blacklist = set()
         for w in writers:
@@ -304,22 +336,31 @@ class DecisionGraph(Graph):
         assert len(dependencies) > 0
 
         # first, maintain tree structure
-        order = list(dependencies)
+        order = sorted(dependencies, key=lambda x: x.iteration)
         main = order.pop()
         while len(order) > 0:
-            best_node  = None
             best_level = 0
+            best_path1 =  None
             for n in order:
                 level, path1, path2 = self._common_path(main, n)
-                if level >= best_level:
-                    best_node  = n
+                if best_path1 is None or path1[level-1].iteration >= best_path1[best_level-1].iteration:
+                    best_path1 = path1
+                    best_path2 = path2
                     best_level = level
 
-            order.remove(best_node)
-            self._treeify(path1[best_level], path1[best_level-1], best_node)
+            order.remove(best_path2[-1])
+            main = self._treeify(best_path1[best_level-1],
+                                 best_path1[best_level], main,
+                                 best_path2[best_level], best_path2[-1])
 
         # second, the only remaining dependency is main
         self.create_edge(main, node)
+
+#        # check iteration hierachry
+#        last = 0
+#        for n in self.root_path(node):
+#            assert n.iteration >= last
+#            last = n.iteration
 
     def remove(self, node):
         for p in self.written_params(node):
@@ -663,13 +704,6 @@ class Registry:
         logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
         return
 
-    def validate_model(self):
-        for layer in self.by_order[1:]:
-            for n in layer.graph.nodes() | layer.graph.edges():
-                prev_layer = self._prev_layer(layer)
-                for o in layer.associated_objects(prev_layer.name, n):
-                    assert o in prev_layer.graph.nodes() or o in prev_layer.graph.edges(), \
-                        "%s (associated with %s) not in layer %s" % (o, n, prev_layer)
 
 class Layer:
 
@@ -1874,7 +1908,7 @@ class Check(Operation):
                 self.source_layer.start_tracking(self)
 
                 result = ae.check(obj, first)
-                if isinstance(result, DecisionGraph.Node):
+                if isinstance(result, DecisionGraph.Param):
                     raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
                 elif not result:
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)

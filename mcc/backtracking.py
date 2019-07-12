@@ -21,6 +21,7 @@ class BacktrackRegistry(Registry):
     Layers and transformation steps are stored, managed, and executed by this class.
     Uses Backtracking to find a valid config instead of failing
     """
+
     def __init__(self):
         super().__init__()
         self.dec_graph = DecisionGraph()
@@ -29,6 +30,57 @@ class BacktrackRegistry(Registry):
 
         # stores state (completed) of operations
         self.operations = dict()
+
+#        self.variables = list()
+#        self.failed    = list()
+
+        self.stats = { 'iterations'             : 0,
+                       'rolled-back operations' : 0,
+                       'cut-off combinations'   : 0,
+                       'variables'              : 0,
+                       'combinations'           : 0 }
+
+    def _find_variables(self):
+        variables = set()
+        for n in self.decision_graph.nodes():
+            for p in self.decision_graph.decisions(n):
+                variables.add(p)
+
+        return variables
+
+#    def _check_variables(self):
+#        if len(self.variables) == 0:
+#            self.variables = list(self._find_variables())
+#        else:
+#            cur_variables = self._find_variables()
+#            assert len(cur_variables) == len(self.variables)
+#            for v in cur_variables:
+#                assert v in self.variables
+#
+#    def _record_failed(self):
+#        self._check_variables()
+#
+#        failed = list()
+#        for v in self.variables:
+#            failed.append(str(v.layer.untracked_get_param_value(v.param, v.obj)))
+#
+#        if failed in self.failed:
+#            logging.error("Already failed on the following set of parameters: ")
+#            for i in range(len(self.variables)):
+#                logging.error("%s: %s" % (self.variables[i], failed[i]))
+#
+#
+#            for f in self.failed:
+#                print(f)
+#
+#            assert False
+#
+#        self.failed.append(failed)
+#
+#        print("Problem has %d variables, failed on %d" % (len(self.variables), len(self.failed)))
+#        if len(self.failed) == 1:
+#            print(self.variables)
+#            print(self.failed)
 
     def complete_operation(self, operation):
         self.operations[operation] = True
@@ -55,9 +107,11 @@ class BacktrackRegistry(Registry):
         self.decision_graph.initialize_tracking(self.by_order)
 
         while not self._backtrack_execute(outpath):
+            self.decision_graph.next_iteration()
             pass
 
         print("Backtracking succeeded in try %s" % self.backtracking_try)
+        print(self.stats)
 
         self._output_layer(self.steps[-1].target_layer)
 
@@ -65,6 +119,7 @@ class BacktrackRegistry(Registry):
         print()
 
         self.backtracking_try += 1
+        self.stats['iterations'] = self.backtracking_try
 
         logging.info('Backtracking Try %s' % self.backtracking_try)
         for step in self.steps:
@@ -79,11 +134,13 @@ class BacktrackRegistry(Registry):
                 step.execute(self)
 
             except ConstraintNotSatisfied as cns:
+#                self._record_failed()
                 logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
 
                 # find branch point
                 culprit = self.find_culprit(cns)
                 if culprit is None:
+                    print("\n%s" % self.stats)
                     raise Exception('No config could be found')
 
                 print("\nRolling back to: %s" % (culprit))
@@ -101,8 +158,8 @@ class BacktrackRegistry(Registry):
                     path = outpath + name
                     leaves = self.decision_graph.successors(node, recursive=True)
                     highlight = set()
-                    for p in self._failed_params(cns):
-                        highlight.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+                    p = self._failed_param(cns)
+                    highlight.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
 
                     self.decision_graph.write_dot(path, leaves=None,
                                                   verbose=True,
@@ -110,6 +167,7 @@ class BacktrackRegistry(Registry):
                                                   highlight=highlight)
 
                     print(" rolling back %d operations" % len(leaves))
+                    self._update_stats(len(leaves))
 
                 if outpath is not None:
                     export = PickleExporter(self)
@@ -121,67 +179,86 @@ class BacktrackRegistry(Registry):
                     export = PickleExporter(self)
                     export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
 
-#                self.validate_model()
-
                 return False
 
             except Exception as ex:
                 self._output_layer(step.target_layer, suffix='-error')
+                print("\n%s" % self.stats)
                 import traceback
                 traceback.print_exc()
                 raise(ex)
         return True
 
+    def _update_stats(self, num_operations):
+        self.stats['rolled-back operations'] += num_operations
+        variables = self._find_variables()
+        if len(variables) > self.stats['variables']:
+            self.stats['variables'] = len(variables)
+
+        combinations = 1
+        for v in variables:
+            combinations = combinations * len(v.layer.untracked_get_param_candidates(v.param, v.obj))
+
+        if combinations > self.stats['combinations']:
+            self.stats['cut-off combinations'] += (self.backtracking_try-1) * \
+                                                  (combinations - self.stats['combinations'])
+            self.stats['combinations'] = combinations
+        else:
+            self.stats['cut-off combinations'] += self.stats['combinations'] - combinations
+
     def find_culprit(self, cns):
-        culprits = self._failed_params(cns)
+        culprit = self._failed_param(cns)
 
-        assert culprits is not None
-        assert len(culprits) == 1, "Cannot handle multiple culprits (not implemented)"
+        # can we change the culprit?
+        if not self.decision_graph.candidates_exhausted(culprit):
+            return culprit
 
-        if len(culprits) == 0:
-            raise NotImplementedError
-            # use leaves to find branching point
-            # FIXME we must linearise the leaves first
-            #       if there are brancheables below the common predecessor of all leaves
-            for n in self.decision_graph.nodes():
-                if len(self.decision_graph.out_edges(n)) == 0:
-                    culprits.add(n)
+        return self._find_brancheable(culprit)
 
-        return self._find_brancheable(culprits)
-
-    def _failed_params(self, cns):
+    def _failed_param(self, cns):
         if cns.param is None:
-            return self.decision_graph.lookup_decisions(layer=cns.layer,
-                                                        obj  =cns.obj)
+            cns.param = 'obj'
 
-        return {self.decision_graph.param(cns.layer, cns.obj, cns.param)}
+        return self.decision_graph.param(cns.layer, cns.obj, cns.param)
 
-    def _find_brancheable(self, params):
-        for p in params:
-            if not self.decision_graph.candidates_exhausted(p):
-                return p
+    def _dependencies(self, nodes):
+        result = set()
+        for n in nodes:
+            for p in self.decision_graph.read_params(n):
+                for op in self.decision_graph.find_writers(p.layer, p.obj, p.param).all():
+                    result.add(op)
+                    result.update(self._dependencies({op}))
 
-        nodes = set()
-        for p in params:
-            nodes.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+        return result
 
-        # FIXME sort writers by level in decision tree
+    def _find_brancheable(self, param):
+        # collect all corresponding operations
+        operations = self.decision_graph.find_writers(param.layer, param.obj, param.param).all()
 
-        # no candidates left => find previous decisions with candidates left
-        #  i.e. breadth-first search in reverse direction
-        # TODO reimplement graph._neightbours with a breadth-first search?
-        #      this way, we could use graph.predecessors with recursive=True
-        visited  = nodes
-        queue    = list(nodes)
-        while len(queue):
-            cur = queue.pop()
-            for n in self.decision_graph.predecessors(cur) - visited:
-                visited.add(n)
-                queue.append(n)
+        # find the latest operation
+        latest_path  = None
+        max_length   = 0
+        for op in operations:
+            path = self.decision_graph.root_path(op)
+            if len(path) > max_length:
+                latest_path = path
+                max_length = len(path)
 
-                for p in self.decision_graph.written_params(n):
-                    if not self.decision_graph.candidates_exhausted(p):
-                        return p
+        # only look at operations that affect the culprit
+        # we do this by first building the transitive set of
+        # read_params (i.e.\ their writers) and skipping all 
+        # ops in the path that are not in this set
+        dependencies = self._dependencies(operations)
+
+        # go backwards until we have found a changeable operation
+        while len(latest_path) > 0:
+            op = latest_path.pop()
+            for p in self.decision_graph.written_params(op):
+                if not self.decision_graph.candidates_exhausted(p):
+                    if op not in dependencies:
+                        logging.INFO("Skipping independent decision %s" % op)
+                        continue
+                    return p
 
         return None
 
