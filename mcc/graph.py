@@ -188,13 +188,20 @@ class Graph:
     def nodes(self):
         return self.graph.node.keys()
 
-    def subgraph(self, nodes):
+    def subgraph(self, nodes, keep_node_params=None):
         result = set()
         for n in nodes:
             assert n in self.graph.node.keys()
             attribs = self.node_attributes(n)
-            params = attribs['params'] if 'params' in attribs else None
-            result.add(GraphObj(n, None))
+            params = dict()
+            if keep_node_params is not None:
+                node_params = attribs['params'] if 'params' in attribs else None
+                if node_params is not None:
+                    for p in keep_node_params:
+                        if p in node_params and 'value' in node_params[p]:
+                            params[p] = node_params[p]['value']
+
+            result.add(GraphObj(n, params if len(params) > 0 else None))
 
         for e in self.edges():
             if e.source in nodes and e.target in nodes:

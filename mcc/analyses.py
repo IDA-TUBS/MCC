@@ -992,10 +992,12 @@ class MuxerEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, repo):
         acl = { layer : { 'reads' : set(['target-service',
                                          'source-service',
-                                         'mapping'])},
+                                         'mapping',
+                                         'pattern-config'])},
                 target_layer : { 'writes' : set(['mapping',
                                                  'source-service',
-                                                 'target-service'])}}
+                                                 'target-service',
+                                                 'pattern-config'])}}
         AnalysisEngine.__init__(self, layer, param='muxer', acl=acl)
         self.repo = repo
 
@@ -1077,7 +1079,10 @@ class MuxerEngine(AnalysisEngine):
         else:
             mapping = self.layer.get_param_value(self, 'mapping', obj)
             muxer   = self.layer.get_param_value(self, self.param, obj)
-            new_objs = {GraphObj(obj, params={'mapping':mapping})}
+            params = {'mapping' : mapping}
+            if self.layer.isset_param_value(self, 'pattern-config', obj):
+                params['pattern-config'] = self.layer.get_param_value(self, 'pattern-config', obj)
+            new_objs = {GraphObj(obj, params=params)}
             if muxer is not None:
                 new_objs.add(GraphObj(muxer.component_node))
                 new_objs.add(GraphObj(Edge(muxer.component_node, obj),
@@ -1164,8 +1169,8 @@ class EnvPatternEngine(AnalysisEngine):
 
 class PatternEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, source_param='component', envmodel=None):
-        acl = { layer        : { 'reads'  : set([source_param]) },
-                target_layer : { 'writes' : set(['pattern-config', 'source-service', 'target-service'])}}
+        acl = { layer        : { 'reads'  : set([source_param, 'mapping']) },
+                target_layer : { 'writes' : set(['pattern-config', 'mapping', 'source-service', 'target-service'])}}
         AnalysisEngine.__init__(self, layer, param='pattern', acl=acl)
         self.source_param = source_param
 
@@ -1176,7 +1181,7 @@ class PatternEngine(AnalysisEngine):
         if component is not None:
             return component.patterns()
         else:
-            return set([None])
+            return set(frozenset())
 
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
@@ -1210,7 +1215,10 @@ class PatternEngine(AnalysisEngine):
             # TODO implement
             raise NotImplementedError()
         else:
-            return self.layer.get_param_value(self, self.param, obj).flatten()
+            params = None
+            if self.layer.isset_param_value(self, 'mapping', obj):
+                params = { 'mapping' : self.layer.get_param_value(self, 'mapping', obj) }
+            return self.layer.get_param_value(self, self.param, obj).flatten(params)
 
     def target_types(self):
         return self.layer.node_types()

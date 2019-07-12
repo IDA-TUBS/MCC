@@ -317,11 +317,11 @@ class Repository(XMLParser):
             assert(service is None or len(self.requires_services(service)))
             return self, to_ref
 
-        def flatten(self):
+        def flatten(self, params=None):
             # for composites, we must select a pattern first
             assert(self.xml_node.tag != 'composite')
 
-            return set([Layer.Node(self)])
+            return {GraphObj(Layer.Node(self), params=params)}
 
         def _taskgraph_objects(self, root, expect, **kwargs):
             # return tasks and tasklinks within given node
@@ -516,7 +516,7 @@ class Repository(XMLParser):
         def config(self):
             return self.xml_node.find('config')
 
-        def flatten(self):
+        def flatten(self, default_params=None):
             # fill set with atomic components and their edges as specified in the pattern
             flattened = set()
 
@@ -533,6 +533,10 @@ class Repository(XMLParser):
                 child_lookup[c] = components[0]
                 node_lookup[components[0]]  = Layer.Node(components[0])
                 params = dict()
+                if default_params is not None:
+                    for (p,v) in default_params.items():
+                        params[p] = v
+
                 config = c.find('./config')
                 if config is not None:
                     params['pattern-config'] = Repository.ElementWrapper(config)

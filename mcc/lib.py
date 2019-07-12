@@ -66,7 +66,7 @@ class BaseModelQuery:
         arch = set()
         for name, comps in subsystems.items():
             instances = [c.untracked_obj() for c in comps]
-            arch.add(BaseChild('base', name, instances, self._components.graph.subgraph(comps)))
+            arch.add(BaseChild('base', name, instances, self._components.graph.subgraph(comps, {'mapping'})))
 
         return arch
 
@@ -177,9 +177,8 @@ class MccBase:
         model.add_step_unsafe(NodeStep(Check(NetworkEngine(fc), name='network bandwith')))
 
         # copy mapping from slayer to dlayer
-        model.add_step(CopyMappingStep(fc, ca, 'tmp-mapping'))
 
-        self._complete_mapping(model, ca, source_param='tmp-mapping')
+        self._complete_mapping(model, ca, source_param='mapping')
 
         # check mapping
         model.add_step(NodeStep(Check(MappingEngine(ca, model.repo, model.platform), name='platform mapping is complete')))
@@ -211,17 +210,12 @@ class MccBase:
         model.add_step(select)
 
         # copy nodes
-        model.add_step(CopyNodeStep(slayer, dlayer, {'mapping'}))
+        model.add_step(CopyNodeStep(slayer, dlayer, {'mapping', 'pattern-config'}))
 
         # copy or transform edges
         model.add_step(EdgeStep(Transform(pe, dlayer)))
         model.add_step(CopyServicesStep(slayer, dlayer))
 
-        # copy pattern-config
-        ce = CopyEngine(dlayer, 'pattern-config', slayer)
-        pcfg = NodeStep(Map(ce))
-        pcfg.add_operation(Assign(ce))
-        model.add_step(pcfg)
 
         # derive mapping
         self._complete_mapping(model, dlayer)
@@ -256,11 +250,6 @@ class MccBase:
         adapt_edges.add_operation(Transform(me, dlayer))
         model.add_step(adapt_edges)
 
-        # copy pattern-config
-        ce = CopyEngine(dlayer, 'pattern-config', slayer)
-        pcfg = NodeStep(Map(ce))
-        pcfg.add_operation(Assign(ce))
-        model.add_step(pcfg)
 
         # derive mapping
         self._complete_mapping(model, dlayer)

@@ -284,7 +284,7 @@ class BaseChild:
     # PatternComponent interface #
     ##############################
 
-    def flatten(self):
+    def flatten(self, params):
         return self._subgraph
 
 
@@ -589,6 +589,7 @@ class SystemModel(BacktrackRegistry):
             node = fa._add_node(Layer.Node(bcomp))
             pf_comp = self.platform.find_by_name(bcomp.subsystem())
             fa.untracked_set_param_candidates('mapping', node, set([pf_comp]))
+            fa.untracked_set_param_value('mapping', node, pf_comp)
 
     def from_query(self, query_model, name='func_query', base=None):
         fa = self.by_name[name]
@@ -628,8 +629,10 @@ class SystemModel(BacktrackRegistry):
         if hasattr(child, "platform_component"):
             if child.platform_component() is not None:
                 fa.untracked_set_param_candidates('mapping', node, set([child.platform_component()]))
+                fa.untracked_set_param_value('mapping', node, child.platform_component())
         elif child.subsystem() is not None:
             pf_comp = self.platform.find_by_name(child.subsystem())
             fa.untracked_set_param_candidates('mapping', node, set([pf_comp]))
+            fa.untracked_set_param_value('mapping', node, pf_comp)
 
         return node
