@@ -38,7 +38,7 @@ class BaseModelQuery:
 
         # new components are mapped to query
         for c in self._components.graph.nodes():
-            if self._components.untracked_get_param_value('query', c) is None:
+            if not self._components.untracked_isset_param_value('query', c):
                 self._components.untracked_set_param_value('query', c, query)
 
     def insert(self, name, query_graph, comp_inst, filename=None):

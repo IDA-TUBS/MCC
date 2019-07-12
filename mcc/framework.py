@@ -835,12 +835,13 @@ class Layer:
         interlayer = self._interlayer(obj)
 
         if target_layer not in interlayer:
-            return None
+            return set()
 
         return interlayer[target_layer]
 
     def _set_associated_objects(self, target_layer, obj, objects):
         assert isinstance(target_layer, str)
+        assert isinstance(objects, set) or isinstance(objects, frozenset), "objects %s are of type %s"  %(objects, type(objects))
         assert target_layer != self.name
 
         interlayer = self._interlayer(obj)
@@ -883,7 +884,7 @@ class Layer:
     def untracked_get_param_candidates(self, param, obj):
         params = self.untracked_get_params(obj)
 
-        if param in params:
+        if param in params and 'candidates' in params[param]:
             return params[param]['candidates']
         else:
             return set()
@@ -908,15 +909,35 @@ class Layer:
         params[param]['failed'].add(value)
 
     def untracked_clear_param_value(self, param, obj):
-        self.untracked_set_param_value(param, obj, None)
+        params = self.untracked_get_params(obj)
+
+        if param in params:
+            del params[param]['value']
 
     def untracked_clear_param_candidates(self, param, obj):
         params = self.untracked_get_params(obj)
-        if param in params:
-            params[param]['candidates'] = set()
 
-            if 'failed' in params[param]:
-                params[param]['failed'] = set()
+        del params[param]
+
+    def isset_param_value(self, ae, param, obj):
+        return self.untracked_isset_param_value(param, obj)
+
+    def untracked_isset_param_value(self, param, obj):
+        params = self.untracked_get_params(obj)
+        if param in params and 'value' in params[param]:
+            return True
+
+        return False
+
+    def isset_param_candidates(self, ae, param, obj):
+        return self.untracked_isset_param_candidates(param, obj)
+
+    def untracked_isset_param_candidates(self, param, obj):
+        params = self.untracked_get_params(obj)
+        if param in params and 'candidates' in params[param]:
+            return True
+
+        return False
 
     def set_param_candidates(self, ae, param, obj, candidates):
         """ Set candidate values for the given parameter and object.
@@ -942,7 +963,7 @@ class Layer:
         params = self.untracked_get_params(obj)
 
         if param not in params:
-            params[param] = { 'value' : None, 'candidates' : set() }
+            params[param] = dict()
 
         params[param]['candidates'] = candidates
 
@@ -979,10 +1000,10 @@ class Layer:
     def untracked_get_param_value(self, param, obj):
         params = self.untracked_get_params(obj)
 
-        if param in params:
-            return params[param]['value']
-        else:
-            return None
+        assert param in params, "%s not present for %s" % (param, obj)
+
+        assert 'value' in params[param], "value not assigned for %s on %s" % (param, obj)
+        return params[param]['value']
 
     def set_param_value(self, ae, param, obj, value):
         """ Set value for the given parameter and object.
@@ -1006,9 +1027,9 @@ class Layer:
         params = self.untracked_get_params(obj)
 
         if param not in params:
-            params[param] = { 'value' : None, 'candidates' : set() }
-
-        params[param]['value'] = value
+            params[param] = { 'value' : value, 'candidates' : set() }
+        else:
+            params[param]['value'] = value
 
 class AnalysisEngine:
     """ Base class for analysis engines.
@@ -1304,7 +1325,8 @@ class DummyEngine(AnalysisEngine):
 
         params = dict()
         for p in self.params:
-            params[p] = self.layer.get_param_value(self, p, obj)
+            if self.layer.isset_param_value(self, p, obj):
+                params[p] = self.layer.get_param_value(self, p, obj)
 
         return GraphObj(obj, params=params)
 
@@ -1338,8 +1360,9 @@ class CopyEngine(AnalysisEngine):
         self.source_param = source_param
 
     def map(self, obj, candidates):
-        src_obj = self.layer.associated_objects(self.source_layer.name, obj)
-        return set([self.source_layer.get_param_value(self, self.source_param, src_obj)])
+        src_objs = self.layer.associated_objects(self.source_layer.name, obj)
+        assert len(src_objs) == 1
+        return {self.source_layer.get_param_value(self, self.source_param, list(src_objs)[0])}
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -1373,25 +1396,22 @@ class InheritEngine(AnalysisEngine):
         candidates = set()
 
         if self.source_param != self.param:
-            value = self.layer.get_param_value(self, self.source_param, obj)
-            if value is not None:
-                candidates.add(value)
+            if self.layer.isset_param_value(self, self.source_param, obj):
+                candidates.add(self.layer.get_param_value(self, self.source_param, obj))
 
         if self.out_edges:
             edges = self.layer.graph.out_edges(obj)
 
             for e in edges:
-                value = self.layer.get_param_value(self, self.source_param, e.target)
-                if value is not None:
-                    candidates.add(value)
+                if self.layer.isset_param_value(self, self.source_param, e.target):
+                    candidates.add(self.layer.get_param_value(self, self.source_param, e.target))
 
         if self.in_edges:
             edges = self.layer.graph.in_edges(obj)
 
             for e in edges:
-                value = self.layer.get_param_value(self, self.source_param, e.source)
-                if value is not None:
-                    candidates.add(value)
+                if self.layer.isset_param_value(self, self.source_param, e.source):
+                    candidates.add(self.layer.get_param_value(self, self.source_param, e.source))
 
         if len(candidates) > 1:
             logging.warning("Cannot inherit '%s' from source/target node unambiguously" % (self.source_param))
@@ -1523,9 +1543,10 @@ class Map(Operation):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            # skip if parameter was already selected
-            param_value = self.source_layer.untracked_get_param_value(self.param, obj)
-            if param_value is not None:
+            # skip if candidates are already present
+            if self.source_layer.untracked_isset_param_candidates(self.param, obj):
+                logging.debug("skipping %s on %s, because candidates are already present: %s" \
+                        % (self, obj, self.source_layer.untracked_get_param_candidates(self.param,obj)))
                 continue
 
             # check if we can reuse old results
@@ -1579,7 +1600,7 @@ class BatchMap(Map):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            if self.source_layer.get_param_value(ae, self.param, obj) is not None:
+            if self.source_layer.untracked_isset_param_value(ae, self.param, obj):
                 continue
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
@@ -1647,7 +1668,7 @@ class Assign(Operation):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
+            if self.source_layer.untracked_isset_param_value(self.param, obj):
                 logging.debug("skipping %s for object %s" % (self, obj))
                 continue
 
@@ -1691,7 +1712,7 @@ class BatchAssign(Assign):
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
-            if self.source_layer.get_param_value(ae, self.param, obj) is not None:
+            if self.source_layer.untracked_isset_param_value(self.param, obj):
                 continue
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
@@ -1780,7 +1801,7 @@ class Transform(Operation):
         for (index ,obj) in enumerate(iterable):
 
             # skip if parameter was already selected
-            if self.source_layer.associated_objects(self.target_layer.name, obj) is not None:
+            if len(self.source_layer.associated_objects(self.target_layer.name, obj)) > 0:
                 logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
                 continue
 
@@ -1806,10 +1827,11 @@ class Transform(Operation):
                 for o in inserted:
                     src = self.target_layer.associated_objects(self.source_layer.name, o)
                     if src is None:
-                        src = obj
+                        src = { obj }
                     elif isinstance(src, set) or isinstance(src, frozenset):
                         src.add(obj)
                     else:
+                        # should never happen, because src must be a set
                         src = { src, obj }
                     self.target_layer._set_associated_objects(self.source_layer.name, o, src)
 

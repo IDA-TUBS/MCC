@@ -178,9 +178,9 @@ class BacktrackRegistry(Registry):
         op = node.operation
         if self.clear_layers:
             for node in op.source_layer.graph.nodes():
-                op.source_layer._set_associated_objects(op.target_layer.name, node, None)
+                op.source_layer._set_associated_objects(op.target_layer.name, node, set())
             for edge in op.source_layer.graph.edges():
-                op.source_layer._set_associated_objects(op.target_layer.name, edge, None)
+                op.source_layer._set_associated_objects(op.target_layer.name, edge, set())
             self.reset(op.target_layer)
 
             for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
@@ -189,14 +189,11 @@ class BacktrackRegistry(Registry):
                         self.operations[o] = False
         else:
             trg_nodes = op.source_layer.associated_objects(op.target_layer.name, node.obj)
-            if not isinstance(trg_nodes, set):
-                trg_nodes = {trg_nodes}
-
             for trg in trg_nodes:
                 self.delete_recursive(trg, op.target_layer)
 
             # clear source->target layer mapping
-            op.source_layer._set_associated_objects(op.target_layer.name, node.obj, None)
+            op.source_layer._set_associated_objects(op.target_layer.name, node.obj, set())
 
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
@@ -236,8 +233,6 @@ class BacktrackRegistry(Registry):
         nextlayer = self._next_layer(layer)
         if nextlayer is not None:
             nodes = layer.associated_objects(nextlayer.name, obj)
-            if not isinstance(nodes, set):
-                nodes = {nodes}
 
             for trg in nodes:
                 self.delete_recursive(trg, nextlayer)

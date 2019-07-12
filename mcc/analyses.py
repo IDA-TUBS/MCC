@@ -382,6 +382,9 @@ class NetworkEngine(AnalysisEngine):
 
     def _find_sink(self, obj, visited):
         # find 
+        if not self.layer.isset_param_value(self, 'mapping', obj):
+            return None
+
         pfc = self.layer.get_param_value(self, 'mapping', obj)
         comp = self.layer.get_param_value(self, 'component', obj)
 
@@ -390,9 +393,10 @@ class NetworkEngine(AnalysisEngine):
             if edge.source in visited:
                 continue
 
-            other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
-            if other_pfc is not None and pfc != other_pfc:
-                continue
+            if self.layer.isset_param_value(self, 'mapping', edge.source):
+                if self.layer.get_param_value(self, 'mapping', edge.source) != pfc:
+                    continue
+
             for con in self.layer.get_param_value(self, 'connections', edge):
                 service = con.source_service
                 if service.name() == 'ROM':
@@ -420,19 +424,21 @@ class NetworkEngine(AnalysisEngine):
         if first:
             self.state = dict()
 
-        pfc = self.layer.get_param_value(self, 'mapping', obj)
-        if pfc is None: # skip unmapped components (proxies)
+        if not self.layer.isset_param_value(self, 'mapping', obj):
+            # skip unmapped components (proxies)
             return True
 
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
         if pfc not in self.state:
             self.state[pfc] = 0
 
         # only evaluate and trace provided ROM services that have an out-traffic node
         comp = self.layer.get_param_value(self, 'component', obj)
         for edge in self.layer.graph.in_edges(obj):
-            other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
-            if other_pfc is not None and pfc != other_pfc:
-                continue
+            if self.layer.isset_param_value(self, 'mapping', edge.source):
+                other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
+                if pfc != other_pfc:
+                    continue
 
             for con in self.layer.get_param_value(self, 'connections', edge):
                 service = con.source_service
@@ -575,7 +581,7 @@ class FunctionEngine(AnalysisEngine):
         # aggregate dependencies
         functions = self._required_functions(obj)
         if len(functions) == 0:
-            return {None}
+            return {frozenset()}
 
         dependencies = dict()
         for f in functions:
@@ -606,6 +612,7 @@ class FunctionEngine(AnalysisEngine):
                 min_costs = costs
                 best      = cand
 
+        assert best is not None
         return best
 
     def transform(self, obj, target_layer):
@@ -615,10 +622,9 @@ class FunctionEngine(AnalysisEngine):
         graph_objs.add(GraphObj(obj, params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)}))
 
         dependencies = self.layer.get_param_value(self, self.param, obj)
-        if dependencies is not None:
-            for dep in dependencies:
-                graph_objs.add(GraphObj(Edge(obj, dep.provider),
-                                        params={'service' : model.ServiceConstraints(function=dep.function)}))
+        for dep in dependencies:
+            graph_objs.add(GraphObj(Edge(obj, dep.provider),
+                                    params={'service' : model.ServiceConstraints(function=dep.function)}))
 
         return graph_objs
 
@@ -1483,12 +1489,13 @@ class InstantiationEngine(AnalysisEngine):
 
             pfc = self.layer.get_param_value(self, 'mapping', obj)
 
-            ded    = self.factory.dedicated_instance(pfc.name(), component,
-                            self.layer.get_param_value(self, 'pattern-config', obj))
+            config = None
+            if self.layer.isset_param_value(self, 'pattern-config', obj):
+                config = self.layer.get_param_value(self, 'pattern-config', obj)
+            ded    = self.factory.dedicated_instance(pfc.name(), component, config)
 
             if not component.dedicated():
-                shared = self.factory.shared_instance   (pfc.name(), component,
-                                self.layer.get_param_value(self, 'pattern-config', obj))
+                shared = self.factory.shared_instance(pfc.name(), component, config)
             else:
                 # TODO if out edges have the same targets and constraints, we could still create a shared instance
                 return {ded}

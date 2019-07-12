@@ -282,15 +282,15 @@ class Page(Gtk.HPaned):
 
         return name, style
 
-    def _stylize(self, layer, param, candidates, value):
+    def _stylize(self, layer, param, isset_candidates, isset_value):
         style = dict()
         name = param
 
-        if len(candidates) == 0:
+        if not isset_candidates:
             # use normal font weight if there was no decision
             style['weight'] = 400
 
-        if value is None or value == 'None':
+        if not isset_value:
             # strikethrough if no value assigned
             style['strikethrough'] = True
 
@@ -349,10 +349,10 @@ class Page(Gtk.HPaned):
 
         for param, content in params.items():
 
-            value      = content['value']
-            candidates = content['candidates']
+            isset_value      = 'value' in content
+            isset_candidates = 'candidates' in content and len(content['candidates']) > 0
 
-            name, style = self._stylize(current_layer, param, candidates, value)
+            name, style = self._stylize(current_layer, param, isset_candidates, isset_value)
             node = self.paramview.add_treenode(parent,
                                                name,
                                                style,
@@ -373,21 +373,24 @@ class Page(Gtk.HPaned):
 
 
     def _expand_param(self, parent, layer, obj, param, style=None):
-        value      = layer.untracked_get_param_value(param, obj)
-        candidates = layer.untracked_get_param_candidates(param, obj)
+        isset_value      = layer.untracked_isset_param_value(param, obj)
+        isset_candidates = layer.untracked_isset_param_candidates(param, obj)
 
         if style is None:
-            tmp, style = self._stylize(layer, param, candidates, value)
+            tmp, style = self._stylize(layer, param, isset_candidates, isset_value)
 
         if param in self.model.by_name.keys():
             layer  = self.model.by_name[param]
 
-        self._add_value(parent, value, layer, style, {'weight' : 800})
+        if isset_value:
+            value = layer.untracked_get_param_value(param, obj)
+            self._add_value(parent, value, layer, style, {'weight' : 800})
 
-        for candidate in candidates:
-            if candidate == value:
-                continue
-            self._add_value(parent, candidate, layer, style)
+        if isset_candidates:
+            for candidate in layer.untracked_get_param_candidates(param, obj):
+                if isset_value and candidate == value:
+                    continue
+                self._add_value(parent, candidate, layer, style)
 
     def _expand_relation(self, parent, layer, obj, relation, style=None):
         objects    = layer.associated_objects(relation, obj)
