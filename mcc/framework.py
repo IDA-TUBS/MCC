@@ -40,10 +40,11 @@ class DecisionGraph(Graph):
 
         def register(self, node):
             if isinstance(node.operation, Assign):
-                assert self.assign is None
+                assert self.assign is None, "%s already registered where %s should go" % (self.assign, node)
                 self.assign = node
             elif isinstance(node.operation, Map):
-                assert self.map is None, "Multiple map operations are not supported"
+                assert self.map is None, "Multiple map operations are not supported (%s present, %s new)" \
+                    % (self.map, node)
                 self.map = node
             elif isinstance(node.operation, Transform):
                 self.transform.add(node)
@@ -323,7 +324,7 @@ class DecisionGraph(Graph):
 
         self.remove_node(node)
 
-    def _stylize_node(self, node):
+    def _stylize_node(self, node, reshape=False, highlight=False):
 
         all_no  = True
         choice  = False
@@ -335,7 +336,12 @@ class DecisionGraph(Graph):
                 choice = True
 
         style = "shape=box"
-        if choice:
+        if reshape:
+            style = "shape=ellipse"
+
+        if highlight:
+            style += ",style=\"filled,solid\",fillcolor=firebrick1"
+        elif choice:
             style += ",style=\"filled,solid\",fillcolor=coral"
         elif all_no:
             style += ",style=dashed"
@@ -344,7 +350,7 @@ class DecisionGraph(Graph):
 
         return style
 
-    def write_dot(self, filename, leaves=None, verbose=False):
+    def write_dot(self, filename, leaves=None, verbose=False, reshape=set(), highlight=set()):
         """
         Args:
             :param leaves: skip nodes which are not predecessors of the leaves
@@ -363,29 +369,24 @@ class DecisionGraph(Graph):
                     nodes |= self.predecessors(leaf, True)
                 nodes = list(nodes) #now, allow indexing
 
-            nodes.remove(self.root) #increase readability
+            #nodes.remove(self.root) #increase readability
 
             for node in nodes:
                 if node is None:
                     logging.info('Node is none')
 
-                style = self._stylize_node(node)
+                style = self._stylize_node(node, reshape=node in reshape, highlight=node in highlight)
 
                 label = str(node)
-#                if verbose:
-#                    def plist(data):
-#                        return ', '.join([str(o) for o in data])
-#
-#                    #TODO getting candidates fails sometimes with a KeyError
-#                    #     if leaves is None
-#                    data = {
-#                            'candidates': plist(l.untracked_get_param_candidates(*arg)),
-#                            'failed': plist(l.get_param_failed(*arg)),
-#                            'value': l.untracked_get_param_value(*arg),
-#                            'exhausted': self.candidates_exhausted(node),
-#                            }
-#                    data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
-#                    label += '\n' + data
+                if verbose:
+                    def plist(data):
+                        return '\n'.join([str(o) for o in data])
+
+                    data = { 'written' : plist(self.written_params(node)),
+                             'read'    : plist(self.read_params(node)) }
+
+                    data = '\n'.join(['%s: %s' % (l,r) for l,r in data.items()])
+                    label += '\n' + data
 
                 node_str = '"{0}" [label="{1}", {2}]\n'.format(nodes.index(node), label, style)
                 file.write(node_str)
@@ -1647,6 +1648,7 @@ class Assign(Operation):
 
             # skip if parameter was already selected
             if self.source_layer.get_param_value(self.analysis_engines[0], self.param, obj) is not None:
+                logging.debug("skipping %s for object %s" % (self, obj))
                 continue
 
             self.source_layer.start_tracking(self)
@@ -1661,7 +1663,7 @@ class Assign(Operation):
                 raise ConstraintNotSatisfied(self.analysis_engines[0].layer, self.param, obj)
 
             result = self.analysis_engines[0].assign(obj, candidates)
-            assert(result in candidates)
+            assert result in candidates
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
