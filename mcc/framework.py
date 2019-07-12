@@ -253,6 +253,13 @@ class DecisionGraph(Graph):
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
 
+        # if we wrote a parameter, there is an implicit read dependency to 'obj'
+        for p in written:
+            tmp = self.Param(p.layer, p.obj, 'obj')
+            if tmp not in written:
+                # if we haven't written 'obj' ourselves
+                read.add(tmp)
+
         writers = set()
         for p in read:
             tmp = self.find_writers(p.layer, p.obj, p.param)
@@ -656,6 +663,13 @@ class Registry:
         logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
         return
 
+    def validate_model(self):
+        for layer in self.by_order[1:]:
+            for n in layer.graph.nodes() | layer.graph.edges():
+                prev_layer = self._prev_layer(layer)
+                for o in layer.associated_objects(prev_layer.name, n):
+                    assert o in prev_layer.graph.nodes() or o in prev_layer.graph.edges(), \
+                        "%s (associated with %s) not in layer %s" % (o, n, prev_layer)
 
 class Layer:
 
@@ -711,6 +725,10 @@ class Layer:
         assert isinstance(obj, Edge)
         assert isinstance(obj.source, self.Node), '%s is not a Node' % obj.source
         assert isinstance(obj.target, self.Node), '%s is not a Node' % obj.target
+
+        self.track_written('obj', obj)
+        self.track_read('obj', obj.source)
+        self.track_read('obj', obj.target)
         return self.graph.add_edge(obj)
 
     def remove_node(self, obj):

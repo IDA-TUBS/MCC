@@ -10,6 +10,7 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
 
 """
 from  networkx import MultiDiGraph
+from collections import deque
 import logging
 
 class GraphObj:
@@ -123,6 +124,19 @@ class Graph:
             result.add(node)
 
         return result
+
+    def reversed_subtree(self, node):
+        reversed_result = list()
+
+        queue = deque([node])
+        while len(queue):
+            n = queue.popleft()
+            reversed_result.append(n)
+            succs = self.successors(n)
+            for s in succs:
+                queue.append(s)
+
+        return reversed(reversed_result)
 
     def predecessors(self, node, recursive=False):
         return self._neighbours(node, self.graph.predecessors, recursive)

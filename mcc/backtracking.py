@@ -37,6 +37,9 @@ class BacktrackRegistry(Registry):
         if operation not in self.operations:
             return False
 
+        # FIXME workaround: repeat all check operations
+        if isinstance(operation, Check):
+            return False
 
         if self.operations[operation] == True:
             logging.info("Skipping %s" % operation)
@@ -78,14 +81,6 @@ class BacktrackRegistry(Registry):
             except ConstraintNotSatisfied as cns:
                 logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
 
-                if outpath is not None:
-                    name = 'decision-try-%d.dot' % self.backtracking_try
-                    path = outpath + name
-                    leaves = set()
-                    for p in self._failed_params(cns):
-                        leaves.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
-                    self.decision_graph.write_dot(path, leaves, True)
-
                 # find branch point
                 culprit = self.find_culprit(cns)
                 if culprit is None:
@@ -100,11 +95,33 @@ class BacktrackRegistry(Registry):
                 # cut-off subtree
                 node = self.decision_graph.find_assign(culprit.layer, culprit.obj, culprit.param)
                 print("   assigned by operation: %s" % (node))
+
+                if outpath is not None:
+                    name = 'decision-try-%d.dot' % self.backtracking_try
+                    path = outpath + name
+                    leaves = self.decision_graph.successors(node, recursive=True)
+                    highlight = set()
+                    for p in self._failed_params(cns):
+                        highlight.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+
+                    self.decision_graph.write_dot(path, leaves=None,
+                                                  verbose=True,
+                                                  reshape=leaves,
+                                                  highlight=highlight)
+
+                    print(" rolling back %d operations" % len(leaves))
+
+                if outpath is not None:
+                    export = PickleExporter(self)
+                    export.write(outpath+'model-pretry-%d.pickle' % self.backtracking_try)
+
                 self.invalidate_subtree(node)
 
                 if outpath is not None:
                     export = PickleExporter(self)
                     export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
+
+#                self.validate_model()
 
                 return False
 
@@ -118,8 +135,14 @@ class BacktrackRegistry(Registry):
     def find_culprit(self, cns):
         culprits = self._failed_params(cns)
 
+        assert culprits is not None
+        assert len(culprits) == 1, "Cannot handle multiple culprits (not implemented)"
+
         if len(culprits) == 0:
+            raise NotImplementedError
             # use leaves to find branching point
+            # FIXME we must linearise the leaves first
+            #       if there are brancheables below the common predecessor of all leaves
             for n in self.decision_graph.nodes():
                 if len(self.decision_graph.out_edges(n)) == 0:
                     culprits.add(n)
@@ -141,6 +164,8 @@ class BacktrackRegistry(Registry):
         nodes = set()
         for p in params:
             nodes.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+
+        # FIXME sort writers by level in decision tree
 
         # no candidates left => find previous decisions with candidates left
         #  i.e. breadth-first search in reverse direction
@@ -198,33 +223,26 @@ class BacktrackRegistry(Registry):
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
 
-        # rollback assign completely
-        self._rollback_assign(start)
-        self.operations[start.operation] = False
-
-        for n in self.decision_graph.successors(start, recursive=True):
-            deleted = True
-            if n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges():
-                deleted = False
+        for n in self.decision_graph.reversed_subtree(start):
+            assert n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
 
             # invalidate layer depending on what operations were involved
             op = n.operation
-            if not deleted:
-                if isinstance(op, Assign):
-                    self._rollback_assign(n)
-                elif isinstance(op, Map):
-                    self._rollback_map(n)
-                elif isinstance(op, Transform):
-                    self._rollback_transform(n)
-                else:
-                    raise NotImplementedError
+            if isinstance(op, Assign):
+                self._rollback_assign(n)
+            elif isinstance(op, Map):
+                self._rollback_map(n)
+            elif isinstance(op, Transform):
+                self._rollback_transform(n)
+            else:
+                raise NotImplementedError
 
-            self.operations[op] = False
+            if op in self.operations and self.operations[op]:
+                logging.debug("Marking %s as to-be-repeated" % op)
+                self.operations[op] = False
 
             # remove node from decision graph
             self.decision_graph.remove(n)
-
-        self.decision_graph.remove(start)
 
     def delete_recursive(self, obj, layer):
         if obj not in layer.graph.nodes() and obj not in layer.graph.edges():
