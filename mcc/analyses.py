@@ -522,6 +522,11 @@ class FunctionEngine(AnalysisEngine):
         def __repr__(self):
             return "depends on %s from %s" % (self.function, self.provider)
 
+#        def __eq__(self, o):
+#            return self.function == o.function and self.provider == o.provider
+#
+#        def __hash__(self):
+#            return hash((self.function, self.provider))
 
     def __init__(self, layer, target_layer, repo):
         acl = { layer        : {'reads' : {'mapping', 'service'}},
@@ -665,7 +670,6 @@ class MappingEngine(AnalysisEngine):
                 if pfc.match_specs(c.requires_specs()):
                     candidates.add(pfc)
 
-        print("%s: %s" % (child, candidates))
         return candidates
 
     def assign(self, obj, candidates):
@@ -1478,6 +1482,8 @@ class InstantiationEngine(AnalysisEngine):
         if isinstance(obj, Edge):
             source_candidates = self.layer.get_param_candidates(self, 'instance', obj.source)
             source_value      = self.layer.get_param_value(self, 'instance', obj.source)
+#            target_candidates = self.layer.get_param_candidates(self, 'instance', obj.target)
+#            target_value      = self.layer.get_param_value(self, 'instance', obj.target)
 
             # TODO check that source and target service are the same
             #      best done by using the factory to create edges once and reference them here
@@ -1538,6 +1544,12 @@ class InstantiationEngine(AnalysisEngine):
                             'target-service': self.layer.get_param_value(self, 'target-service', obj)})
             else:
                 # FIXME return already-inserted object to correctly set inter-layer relations
+
+                #      nodes cannot be inserted multiple times, i.e. they are indexed by hash so that
+                #      returning the same obj (by transform()) multiple times will not create another
+                #      node but track that obj was written by multiple operations
+                #      in contrast, as we use a MultiDigraph, edges would be inserted multiple times
+                #      unless we use the same object (i.e. store the reference)
                 return set()
 
         else:
