@@ -1185,7 +1185,7 @@ class PatternEngine(AnalysisEngine):
         if component is not None:
             return component.patterns()
         else:
-            return set(frozenset())
+            return {None}
 
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
