@@ -379,8 +379,9 @@ class SimpleMcc(MccBase):
 
         source_layer = model.steps[-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, 'mapping', model, failure_rate, fail_times=fail_times)
+        bt = BacktrackingTestEngine(source_layer, None, model, failure_rate, fail_times=fail_times)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
+        return bt
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
             dot_ae=False, dot_layer=False, envmodel=None):
@@ -447,7 +448,7 @@ class SimpleMcc(MccBase):
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
-            self.insert_random_backtracking_engine(model, 0.05, 0)
+            bt = self.insert_random_backtracking_engine(model, 0.05, 10000)
 
 #        model.print_steps()
         if outpath is not None and dot_mcc:
@@ -469,6 +470,9 @@ class SimpleMcc(MccBase):
             decision_graph = model.decision_graph
 
         except Exception as e:
+            if self._test_backtracking:
+                print("Solutions found: %d\n" % (10000-bt.fail_times))
+
             print(e)
             export = PickleExporter(model)
             export.write(outpath+'model-error.pickle')

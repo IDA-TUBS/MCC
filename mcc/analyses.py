@@ -1447,10 +1447,11 @@ class BacktrackingTestEngine(AnalysisEngine):
             return True
 
         # check if for every assign node all the candidates have been used
-        for node in self.model.decision_graph.nodes():
-            if not self.model.decision_graph.candidates_exhausted(node):
-                self.fail_times -= 1
-                return node
+        for node in self.model.decision_graph.reversed_subtree(self.model.decision_graph.root):
+            for p in self.model.decision_graph.decisions(node):
+                if not self.model.decision_graph.candidates_exhausted(p):
+                    self.fail_times -= 1
+                    return p
 
         return True
 
