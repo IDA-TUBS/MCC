@@ -286,13 +286,9 @@ class Page(Gtk.HPaned):
         style = dict()
         name = param
 
-        if not isset_candidates:
+        if not isset_value:
             # use normal font weight if there was no decision
             style['weight'] = 400
-
-        if not isset_value:
-            # strikethrough if no value assigned
-            style['strikethrough'] = True
 
         return name, style
 
@@ -386,11 +382,15 @@ class Page(Gtk.HPaned):
             value = layer.untracked_get_param_value(param, obj)
             self._add_value(parent, value, layer, style, {'weight' : 800})
 
+        failed = layer.get_param_failed(param, obj)
         if isset_candidates:
             for candidate in layer.untracked_get_param_candidates(param, obj):
                 if isset_value and candidate == value:
                     continue
-                self._add_value(parent, candidate, layer, style)
+                if candidate in failed:
+                    self._add_value(parent, candidate, layer, style, {'strikethrough' : True })
+                else:
+                    self._add_value(parent, candidate, layer, style)
 
     def _expand_relation(self, parent, layer, obj, relation, style=None):
         objects    = layer.associated_objects(relation, obj)
