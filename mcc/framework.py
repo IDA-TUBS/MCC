@@ -247,7 +247,15 @@ class DecisionGraph(Graph):
 
         return i, path1, path2
 
-    def _treeify(self, common_pred, left_start, left_end, right_start, right_end):
+    def _treeify(self, level, left, right):
+        common_pred = left[level-1]
+        left_start  = left[level]
+        left_end    = left[-1]
+        right_start = right[level]
+        right_end   = right[-1]
+
+        node     = None
+        new_pred = None
 
         # can we order left branch below the right branch
         if left_start.iteration >= right_end.iteration:
@@ -259,30 +267,87 @@ class DecisionGraph(Graph):
             new_pred = left_end
             leaf     = right_end
         else:
-            # Does this ever happen?
-            logging.error("Cannot merge the following branches:")
-            logging.error("  Left: %s -> %s (#%d to #%d)"  % (left_start, left_end,
-                                                              left_start.iteration,
-                                                              left_end.iteration))
-            logging.error("  Right: %s -> %s (#%d to #%d)" % (right_start, right_end,
-                                                             right_start.iteration,
-                                                             right_end.iteration))
-            self.write_dot("/tmp/merge-error.dot", highlight={left_start, left_end,
-                                                              right_start, right_end})
-            # FIXME we must split both branches into segments and
-            #       sort the segments by iteration number
-            raise NotImplementedError
+            # sanity check: starting condition
+            if right[-1].iteration > left_end.iteration:
+                # both should be in the same iteration
+                raise NotImplementedError
 
-        # remove edge between common_pred and node
-        for e in self.in_edges(node):
-            if e.source == common_pred:
-                self.remove_edge(e)
-                break
+            # right will be merged into left as follows:
+            #   (example shows iteration numbers)
+            #####################################
+            #   Left        Merged        Right #
+            #-----------------------------------#
+            #                 0      <-     0   #
+            #                 0      <-     0   #
+            #    1    ->      1                 #
+            #    1    ->      1                 #
+            #                 2      <-     2   #
+            #    2    ->      2                 #
+            #    2    ->      2                 #
+            #                 3      <-     3   #
+            #                 4      <-     4   #
+            #    4    ->      4                 #
+            #####################################
+
+            leaf = left_end
+            common_pred = left[level-1]
+            while right_end != common_pred:
+                curr = right.pop()
+
+                # last node in right branch is equal or older than left branch
+                #  -> find node in left branch that is older than right branch
+                while left[-1].iteration >= curr.iteration:
+                    curl = left.pop()
+                    if left[-1] == common_pred:
+                        # stop at common predecessor
+                        break
+
+                # get everything that can be merged between left[-1] and curl
+                #  (if left is already at common predecessor, we want to get everything)
+                while right[-1].iteration >= curl.iteration or left[-1] == common_pred:
+                    if right[-1] == common_pred:
+                        # stop at common predecessor
+                        break
+                    curr = right.pop()
+
+                # remove left[-1] -> curl
+                for e in self.in_edges(curl):
+                    if e.source == left[-1]:
+                        self.remove_edge(e)
+                        break
+
+                # remove right[-1] -> curr
+                for e in self.in_edges(curr):
+                    if e.source == right[-1]:
+                        self.remove_edge(e)
+                        break
+
+                # create left[-1] -> curr
+                self.create_edge(left[-1], curr)
+
+                # create right_end -> curl
+                self.create_edge(right_end, curl)
+
+                # remember new right_end
+                right_end = right[-1]
+
+            # check iteration hierachry
+            last = 0
+            for n in self.root_path(leaf):
+                assert n.iteration >= last
+                last = n.iteration
+
+        if node and new_pred:
+            # remove edge between common_pred and node
+            for e in self.in_edges(node):
+                if e.source == common_pred:
+                    self.remove_edge(e)
+                    break
 
 #        assert new_pred not in self.successors(node, recursive=True), "%s is reachable from %s, old predecessor was %s" % (new_pred, node, old_pred)
 
-        # add edge between new_pred and node
-        self.create_edge(new_pred, node)
+            # add edge between new_pred and node
+            self.create_edge(new_pred, node)
 
         return leaf
 
@@ -349,9 +414,9 @@ class DecisionGraph(Graph):
                     best_level = level
 
             order.remove(best_path2[-1])
-            main = self._treeify(best_path1[best_level-1],
-                                 best_path1[best_level], main,
-                                 best_path2[best_level], best_path2[-1])
+            main = self._treeify(best_level,
+                                best_path1,
+                                best_path2)
 
         # second, the only remaining dependency is main
         self.create_edge(main, node)
