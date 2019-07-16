@@ -42,6 +42,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
+			<spec name="zynq" />
 		</requires>
 		<defaults>
 			<config>
@@ -58,6 +59,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
+			<spec name="zynq" />
 		</requires>
 	</component>
 
@@ -70,6 +72,7 @@
 			<ram quantum="1" />
 			<caps quantum="300" />
 			<service name="Timer" function="TIMER"/>
+			<spec name="zynq" />
 		</requires>
 		<defaults>
 			<config>
@@ -91,6 +94,7 @@
 			<ram quantum="1" />
 			<caps quantum="300" />
 			<service name="Timer" function="TIMER" />
+			<spec name="zynq" />
 		</requires>
 		<defaults>
 			<config>
@@ -114,6 +118,7 @@
 		</provides>
 		<requires>
 			<ram quantum="1"/>
+			<spec name="zynq" />
 		</requires>
 	</component>
 
@@ -518,6 +523,7 @@
 			<service name="GPIO" function="GPIO" ref="gpio"/>
 			<service name="Dpr" function="Dpr_or" ref="dpr"/>
 			<service name="Timer" function="TIMER" ref="timer" />
+			<spec name="zynq"/>
 		</requires>
 
 		<pattern>
