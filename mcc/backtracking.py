@@ -89,10 +89,6 @@ class BacktrackRegistry(Registry):
         if operation not in self.operations:
             return False
 
-        # FIXME workaround: repeat all check operations
-        if isinstance(operation, Check):
-            return False
-
         if self.operations[operation] == True:
             logging.info("Skipping %s" % operation)
 
@@ -300,7 +296,13 @@ class BacktrackRegistry(Registry):
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
 
+        # check operations can be present multiple times
+        visited_checks = set()
+
         for n in self.decision_graph.reversed_subtree(start):
+            if n.operation in visited_checks:
+                continue
+
             assert n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
 
             # invalidate layer depending on what operations were involved
@@ -311,6 +313,8 @@ class BacktrackRegistry(Registry):
                 self._rollback_map(n)
             elif isinstance(op, Transform):
                 self._rollback_transform(n)
+            elif isinstance(op, Check):
+                visited_checks.add(op)
             else:
                 raise NotImplementedError
 

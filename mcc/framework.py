@@ -168,6 +168,9 @@ class DecisionGraph(Graph):
         self.written = set()
 
     def stop_tracking(self, layer, obj, operation):
+        if isinstance(operation, Check):
+            self.check_tracking()
+
         node = self.add_node(layer, obj, operation)
         self.add_dependencies(node, self.read-self.written, self.written)
 
@@ -368,6 +371,8 @@ class DecisionGraph(Graph):
             if not tmp.empty():
                 read_params.add(p)
                 writers.update(tmp.all())
+            else:
+                logging.debug("no writer for read dependency %s from %s" % (p, node))
 
         # if node.operation is assign, add connection to map operation
         if isinstance(node.operation, Assign):
@@ -400,26 +405,30 @@ class DecisionGraph(Graph):
         dependencies = writers - blacklist
         assert len(dependencies) > 0
 
-        # first, maintain tree structure
-        order = sorted(dependencies, key=lambda x: x.iteration)
-        main = order.pop()
-        while len(order) > 0:
-            best_level = 0
-            best_path1 =  None
-            for n in order:
-                level, path1, path2 = self._common_path(main, n)
-                if best_path1 is None or path1[level-1].iteration >= best_path1[best_level-1].iteration:
-                    best_path1 = path1
-                    best_path2 = path2
-                    best_level = level
+        if isinstance(node.operation, Check):
+            for d in dependencies:
+                self.create_edge(d, node)
+        else:
+            # first, maintain tree structure
+            order = sorted(dependencies, key=lambda x: x.iteration)
+            main = order.pop()
+            while len(order) > 0:
+                best_level = 0
+                best_path1 =  None
+                for n in order:
+                    level, path1, path2 = self._common_path(main, n)
+                    if best_path1 is None or path1[level-1].iteration >= best_path1[best_level-1].iteration:
+                        best_path1 = path1
+                        best_path2 = path2
+                        best_level = level
 
-            order.remove(best_path2[-1])
-            main = self._treeify(best_level,
-                                best_path1,
-                                best_path2)
+                order.remove(best_path2[-1])
+                main = self._treeify(best_level,
+                                     best_path1,
+                                     best_path2)
 
-        # second, the only remaining dependency is main
-        self.create_edge(main, node)
+            # second, the only remaining dependency is main
+            self.create_edge(main, node)
 
 #        # check iteration hierachry
 #        last = 0
@@ -463,7 +472,7 @@ class DecisionGraph(Graph):
 
         return style
 
-    def write_dot(self, filename, leaves=None, verbose=False, reshape=set(), highlight=set()):
+    def write_dot(self, filename, leaves=None, verbose=False, reshape=set(), highlight=set(), skip_check=True):
         """
         Args:
             :param leaves: skip nodes which are not predecessors of the leaves
@@ -483,6 +492,10 @@ class DecisionGraph(Graph):
                 nodes = list(nodes) #now, allow indexing
 
             #nodes.remove(self.root) #increase readability
+            # Skip check nodes
+            if skip_check:
+                checks = {node for node in nodes if isinstance(node.operation, Check)}
+                nodes = list(set(nodes) - checks)
 
             for node in nodes:
                 if node is None:
@@ -859,15 +872,11 @@ class Layer:
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
-    def stop_tracking(self, obj, abort=False):
+    def stop_tracking(self, obj):
         if self.dependency_tracker is not None:
-            if abort:
-                self.dependency_tracker.check_tracking()
-                self.tracked_operation = None
-            else:
-                assert(self.tracked_operation is not None)
-                self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation)
-                self.tracked_operation = None
+            assert(self.tracked_operation is not None)
+            self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation)
+            self.tracked_operation = None
 
     def set_params(self, ae, obj, params):
         for name, value in params.items():
@@ -1965,22 +1974,22 @@ class Check(Operation):
     def execute(self, iterable):
         logging.info("Executing %s" % self)
 
-        for ae in self.analysis_engines:
-            first = True
-            for obj in iterable:
-                assert(self.check_source_type(obj))
+        first = True
+        for obj in iterable:
+            assert(self.check_source_type(obj))
 
-                self.source_layer.start_tracking(self)
+            self.source_layer.start_tracking(self)
 
+            for ae in self.analysis_engines:
                 result = ae.check(obj, first)
                 if isinstance(result, DecisionGraph.Param):
                     raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
                 elif not result:
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
-                self.source_layer.stop_tracking(obj, abort=True)
+            self.source_layer.stop_tracking(obj)
 
-                first = False
+            first = False
 
         return True
 
