@@ -174,7 +174,7 @@ class MccBase:
         model.add_step(connect)
 
         # check network bandwith
-        model.add_step_unsafe(NodeStep(Check(NetworkEngine(fc), name='network bandwith')))
+        model.add_step_unsafe(NodeStep(BatchCheck(NetworkEngine(fc), name='network bandwith')))
 
         # copy mapping from slayer to dlayer
 
@@ -321,10 +321,10 @@ class MccBase:
         #      whether they exceed any threshold
         ce = QuantumEngine(layer, name='caps')
 
-        resources = NodeStep(Check(ce, 'caps'))
+        resources = NodeStep(BatchCheck(ce, 'caps'))
 
         re = QuantumEngine(layer, name='ram')
-        resources.add_operation(Check(re, 'ram'))
+        resources.add_operation(BatchCheck(re, 'ram'))
 
         model.add_step(resources)
 

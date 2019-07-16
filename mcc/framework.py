@@ -1290,7 +1290,15 @@ class AnalysisEngine:
         """
         raise NotImplementedError()
 
-    def check(self, obj, first):
+    def check(self, obj):
+        """ Must be implemented by derived classes.
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError()
+
+    def batch_check(self, iterable):
         """ Must be implemented by derived classes.
 
         Raises:
@@ -1307,6 +1315,7 @@ class AnalysisEngine:
         """ Returns compatible target types, i.e. nodes of target layer expect an instance of this type or a subclass.
         """
         return tuple({object})
+
 
 class ExternalAnalysisEngine(AnalysisEngine):
 
@@ -1420,7 +1429,7 @@ class ExternalAnalysisEngine(AnalysisEngine):
 
         return self._parse_assign(obj)
 
-    def check(self, obj, first):
+    def check(self, obj):
         raise NotImplementedError()
 
     def transform(self, obj, target_layer):
@@ -1965,6 +1974,7 @@ class Transform(Operation):
 
         return True
 
+
 class Check(Operation):
     """ Implements the check operation, which is used for admission testing.
     """
@@ -1974,22 +1984,52 @@ class Check(Operation):
     def execute(self, iterable):
         logging.info("Executing %s" % self)
 
-        first = True
         for obj in iterable:
             assert(self.check_source_type(obj))
 
             self.source_layer.start_tracking(self)
 
             for ae in self.analysis_engines:
-                result = ae.check(obj, first)
+                result = ae.check(obj)
                 if isinstance(result, DecisionGraph.Param):
                     raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
                 elif not result:
+                    # FIXME we must stop tracking (to insert a new node) and
+                    #       fail on this node
+                    raise NotImplementedError
                     raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
 
             self.source_layer.stop_tracking(obj)
 
-            first = False
+        return True
+
+
+class BatchCheck(Check):
+    """ Implements the check operation, which is used for admission testing.
+    """
+    def __init__(self, ae, name=''):
+        Check.__init__(self, ae, name)
+
+    def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
+        self.source_layer.start_tracking(self)
+
+        for obj in iterable:
+            assert(self.check_source_type(obj))
+
+        for ae in self.analysis_engines:
+            result = ae.batch_check(iterable)
+
+            if isinstance(result, DecisionGraph.Param):
+                raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
+            elif not result:
+                # FIXME we must stop tracking (to insert a new node) and
+                #       fail on this node
+                raise NotImplementedError
+
+        # remark: the same operation should never be used in multiple steps
+        self.source_layer.stop_tracking(None)
 
         return True
 

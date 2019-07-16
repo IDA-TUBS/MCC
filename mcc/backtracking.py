@@ -303,7 +303,7 @@ class BacktrackRegistry(Registry):
             if n.operation in visited_checks:
                 continue
 
-            assert n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
+            assert n.obj is None or n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
 
             # invalidate layer depending on what operations were involved
             op = n.operation

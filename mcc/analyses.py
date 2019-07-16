@@ -317,7 +317,7 @@ class TaskgraphEngine(AnalysisEngine):
         assert len(candidates) == 1
         return list(candidates)[0]
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Check task graph consistency 
         """
         taskobjects = self.layer.get_param_value(self, self.param, obj)
@@ -419,14 +419,26 @@ class NetworkEngine(AnalysisEngine):
 
         return None
 
-    def check(self, obj, first):
-        # for each subsystem, sum up outbound network traffic
-        if first:
-            self.state = dict()
+    def batch_check(self, iterable):
+        self.state = dict()
 
+        for obj in iterable:
+            self._check(obj)
+
+        for (pfc, out_traffic) in self.state.items():
+            pfc.set_state('out_traffic', int(out_traffic))
+
+            if out_traffic > self.max_byte_s:
+                # FIXME we should return a set of
+                #       all obj and mapping params on this pfc
+                return False
+
+        return True
+
+    def _check(self, obj):
         if not self.layer.isset_param_value(self, 'mapping', obj):
             # skip unmapped components (proxies)
-            return True
+            return
 
         pfc = self.layer.get_param_value(self, 'mapping', obj)
         if pfc not in self.state:
@@ -459,11 +471,6 @@ class NetworkEngine(AnalysisEngine):
                     self.state[pfc] += size / (float(msec)/1000)
                     break
 
-        pfc.set_state('out_traffic', int(self.state[pfc]))
-
-        assert self.state[pfc] <= self.max_byte_s, "%s > %s" % (self.state[pfc], self.max_byte_s)
-        return self.state[pfc] <= self.max_byte_s
-
 
 class QuantumEngine(AnalysisEngine):
     def __init__(self, layer, name):
@@ -471,24 +478,31 @@ class QuantumEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
         self.name = name
 
-    def check(self, obj, first):
-        # for each subsystem, sum of caps must be below the specified threshold
-        if first:
-            self.state = dict()
+    def batch_check(self, iterable):
+        self.state = dict()
 
+        for obj in iterable:
+            self._check(obj)
+
+        for (pfc, remaining) in self.state.items():
+            if remaining < 0:
+                logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
+                                                                     pfc.quantum(self.name)))
+                # FIXME we should return a set of
+                #       all obj and mapping params on this pfc
+                return False
+
+            pfc.set_state('%s-remaining' % self.name, remaining)
+
+        return True
+
+    def _check(self, obj):
         pfc = self.layer.get_param_value(self, 'mapping', obj)
         if pfc not in self.state:
             self.state[pfc] = pfc.quantum(self.name)
 
         self.state[pfc] -= obj.obj(self.layer).component.requires_quantum(self.name)
 
-        if self.state[pfc] < 0:
-            logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
-                                                                 pfc.quantum(self.name)))
-
-        pfc.set_state('%s-remaining' % self.name, self.state[pfc])
-
-        return self.state[pfc] >= 0
 
 class StaticEngine(AnalysisEngine):
     def __init__(self, layer):
@@ -676,7 +690,7 @@ class MappingEngine(AnalysisEngine):
         # TODO here we call the constraint solver
         return list(candidates)[0]
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Checks whether a platform mapping is assigned to all nodes.
         """
         assert(not isinstance(obj, Edge))
@@ -703,7 +717,7 @@ class DependencyEngine(AnalysisEngine):
 
         return False
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Checks whether all functional dependencies are satisfied by the selected component.
         """
         assert(not isinstance(obj, Edge))
@@ -724,7 +738,7 @@ class ComponentDependencyEngine(AnalysisEngine):
         acl = { layer : { 'reads' : set(['mapping', 'source-service']) } }
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Checks that 
             a) all service requirements are satisfied once and (nodes)
             b) that service connections are local (edges).
@@ -804,7 +818,7 @@ class ServiceEngine(AnalysisEngine):
 
         return source_ports, target_ports
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Check ServiceConstraints object for compatibility with connected provider
         """
         assert(isinstance(obj, Edge))
@@ -1150,7 +1164,7 @@ class ComponentEngine(AnalysisEngine):
 
         return list(candidates)[0]
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Sanity check.
         """
         return self.layer.get_param_value(self, self.param, obj) is not None
@@ -1195,7 +1209,7 @@ class PatternEngine(AnalysisEngine):
 
         return sorted(candidates, reverse=True, key=lambda c: c.prio())[0]
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Checks whether a pattern was assigned.
         """
         if isinstance(obj, Edge):
@@ -1255,7 +1269,7 @@ class SpecEngine(AnalysisEngine):
 
         return keep
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Sanity check.
         """
         assert(not isinstance(obj, Edge))
@@ -1309,7 +1323,7 @@ class RteEngine(AnalysisEngine):
 
         return keep
 
-    def check(self, obj, first):
+    def check(self, obj):
         """ Sanity check
         """
         assert(not isinstance(obj, Edge))
@@ -1442,7 +1456,7 @@ class BacktrackingTestEngine(AnalysisEngine):
         self.failure_rate  = 0
         self.fail_times    = fail_times
 
-    def check(self, obj, first):
+    def check(self, obj):
         if self.fail_times == 0:
             return True
 
@@ -1570,7 +1584,7 @@ class SingletonEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
         self.pf_model = platform_model
 
-    def check(self, obj, first):
+    def check(self, obj):
         assert not isinstance(obj, Edge)
 
         instance = obj.obj(self.layer)
