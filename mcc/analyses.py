@@ -1465,7 +1465,7 @@ class BacktrackingTestEngine(AnalysisEngine):
             for p in self.model.decision_graph.decisions(node):
                 if not self.model.decision_graph.candidates_exhausted(p):
                     self.fail_times -= 1
-                    return p
+                    return node
 
         return True
 

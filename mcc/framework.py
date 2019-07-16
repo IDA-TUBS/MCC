@@ -167,15 +167,17 @@ class DecisionGraph(Graph):
         self.read    = set()
         self.written = set()
 
-    def stop_tracking(self, layer, obj, operation):
+    def stop_tracking(self, layer, obj, operation, error=False):
         if isinstance(operation, Check):
             self.check_tracking()
 
         node = self.add_node(layer, obj, operation)
-        self.add_dependencies(node, self.read-self.written, self.written)
+        self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
 
         self.read    = set()
         self.written = set()
+
+        return node
 
     def check_tracking(self):
         assert len(self.written) == 0, "check operation has written params: %s" % self.written
@@ -354,7 +356,7 @@ class DecisionGraph(Graph):
 
         return leaf
 
-    def add_dependencies(self, node, read, written):
+    def add_dependencies(self, node, read, written, force_sequential):
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
 
@@ -405,27 +407,31 @@ class DecisionGraph(Graph):
         dependencies = writers - blacklist
         assert len(dependencies) > 0
 
-        if isinstance(node.operation, Check):
+        if isinstance(node.operation, Check) and not force_sequential:
             for d in dependencies:
                 self.create_edge(d, node)
         else:
-            # first, maintain tree structure
-            order = sorted(dependencies, key=lambda x: x.iteration)
-            main = order.pop()
-            while len(order) > 0:
-                best_level = 0
-                best_path1 =  None
-                for n in order:
-                    level, path1, path2 = self._common_path(main, n)
-                    if best_path1 is None or path1[level-1].iteration >= best_path1[best_level-1].iteration:
-                        best_path1 = path1
-                        best_path2 = path2
-                        best_level = level
+            try:
+                # first, maintain tree structure
+                order = sorted(dependencies, key=lambda x: x.iteration)
+                main = order.pop()
+                while len(order) > 0:
+                    best_level = 0
+                    best_path1 =  None
+                    for n in order:
+                        level, path1, path2 = self._common_path(main, n)
+                        if best_path1 is None or path1[level-1].iteration >= best_path1[best_level-1].iteration:
+                            best_path1 = path1
+                            best_path2 = path2
+                            best_level = level
 
-                order.remove(best_path2[-1])
-                main = self._treeify(best_level,
-                                     best_path1,
-                                     best_path2)
+                    order.remove(best_path2[-1])
+                    main = self._treeify(best_level,
+                                         best_path1,
+                                         best_path2)
+            except:
+                self.write_dot("/tmp/merge-error.dot", highlight=dependencies)
+                raise Exception
 
             # second, the only remaining dependency is main
             self.create_edge(main, node)
@@ -494,7 +500,7 @@ class DecisionGraph(Graph):
             #nodes.remove(self.root) #increase readability
             # Skip check nodes
             if skip_check:
-                checks = {node for node in nodes if isinstance(node.operation, Check)}
+                checks = {node for node in nodes if isinstance(node.operation, Check)} - highlight
                 nodes = list(set(nodes) - checks)
 
             for node in nodes:
@@ -872,11 +878,14 @@ class Layer:
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
-    def stop_tracking(self, obj):
+    def stop_tracking(self, obj, error=False):
+        node = None
         if self.dependency_tracker is not None:
             assert(self.tracked_operation is not None)
-            self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation)
+            node = self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation, error=error)
             self.tracked_operation = None
+
+        return node
 
     def set_params(self, ae, obj, params):
         for name, value in params.items():
@@ -1038,7 +1047,8 @@ class Layer:
         params = self.untracked_get_params(obj)
 
         if param in params:
-            del params[param]['value']
+            if 'value' in params[param]:
+                del params[param]['value']
 
     def untracked_clear_param_candidates(self, param, obj):
         params = self.untracked_get_params(obj)
@@ -1814,9 +1824,11 @@ class Assign(Operation):
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s' of object %s." % (self.param, obj))
-                # TODO test case for testing that no candidates are left
-                # (e.g. add dummy component for a function with an additional unresolvable dependency)
-                raise ConstraintNotSatisfied(self.analysis_engines[0].layer, self.param, obj)
+                # simulate write access to param
+                self.source_layer.track_written(self.param, obj)
+                # insert operation into decision graph
+                node = self.source_layer.stop_tracking(obj, error=True)
+                raise ConstraintNotSatisfied(node)
 
             result = self.analysis_engines[0].assign(obj, candidates)
             assert result in candidates
@@ -1855,7 +1867,12 @@ class BatchAssign(Assign):
                 logging.error("No candidates left for param '%s'." % self.param)
                 # FIXME we need better feedback from the external analysis engine
                 #     idea: let ExternalAnalysisEngine raise exception containing culprits
-                raise ConstraintNotSatisfied(ae.layer, self.param, obj)
+
+                # simulate write access to param
+                self.source_layer.track_written(self.param, obj)
+                # insert operation into decision graph
+                node = self.source_layer.stop_tracking(obj, error=True)
+                raise ConstraintNotSatisfied(node)
 
             ae.prepare_assign(obj, candidates)
 
@@ -1991,13 +2008,14 @@ class Check(Operation):
 
             for ae in self.analysis_engines:
                 result = ae.check(obj)
-                if isinstance(result, DecisionGraph.Param):
-                    raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
+                if isinstance(result, DecisionGraph.Node):
+                    raise ConstraintNotSatisfied(result)
                 elif not result:
-                    # FIXME we must stop tracking (to insert a new node) and
-                    #       fail on this node
-                    raise NotImplementedError
-                    raise ConstraintNotSatisfied(ae.layer, ae.param, obj)
+                    # we must stop tracking (to insert a new node) and
+                    # fail on this node
+                    node = self.source_layer.stop_tracking(obj, error=True)
+                    logging.error("Check failed on object %s" % obj)
+                    raise ConstraintNotSatisfied(node)
 
             self.source_layer.stop_tracking(obj)
 
@@ -2021,12 +2039,13 @@ class BatchCheck(Check):
         for ae in self.analysis_engines:
             result = ae.batch_check(iterable)
 
-            if isinstance(result, DecisionGraph.Param):
-                raise ConstraintNotSatisfied(result.layer, result.param, result.obj)
+            if isinstance(result, DecisionGraph.Node):
+                raise ConstraintNotSatisfied(result)
             elif not result:
-                # FIXME we must stop tracking (to insert a new node) and
-                #       fail on this node
-                raise NotImplementedError
+                # we must stop tracking (to insert a new node) and
+                # fail on this node
+                node = self.source_layer.stop_tracking(None, error=True)
+                raise ConstraintNotSatisfied(node)
 
         # remark: the same operation should never be used in multiple steps
         self.source_layer.stop_tracking(None)
@@ -2034,11 +2053,17 @@ class BatchCheck(Check):
         return True
 
 class ConstraintNotSatisfied(Exception):
-    def __init__(self, layer, param, obj):
+    def __init__(self, operation):
         super().__init__()
-        self.layer    = layer
-        self.param    = param
-        self.obj      = obj
+        self.operation = operation
+
+        assert isinstance(operation, DecisionGraph.Node)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return self.operation.__repr__()
 
 class Step:
     """ Implements model transformation step.

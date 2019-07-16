@@ -131,7 +131,7 @@ class BacktrackRegistry(Registry):
 
             except ConstraintNotSatisfied as cns:
 #                self._record_failed()
-                logging.info('%s failed on layer %s in param %s:' % (cns.obj, cns.layer, cns.param))
+                logging.info('%s failed' % cns)
 
                 # find branch point
                 culprit = self.find_culprit(cns)
@@ -153,9 +153,7 @@ class BacktrackRegistry(Registry):
                     name = 'decision-try-%d.dot' % self.backtracking_try
                     path = outpath + name
                     leaves = self.decision_graph.successors(node, recursive=True)
-                    highlight = set()
-                    p = self._failed_param(cns)
-                    highlight.update(self.decision_graph.find_writers(p.layer, p.obj, p.param).all())
+                    highlight = {cns.operation}
 
                     self.decision_graph.write_dot(path, leaves=None,
                                                   verbose=True,
@@ -203,19 +201,7 @@ class BacktrackRegistry(Registry):
             self.stats['cut-off combinations'] += self.stats['combinations'] - combinations
 
     def find_culprit(self, cns):
-        culprit = self._failed_param(cns)
-
-        # can we change the culprit?
-        if not self.decision_graph.candidates_exhausted(culprit):
-            return culprit
-
-        return self._find_brancheable(culprit)
-
-    def _failed_param(self, cns):
-        if cns.param is None:
-            cns.param = 'obj'
-
-        return self.decision_graph.param(cns.layer, cns.obj, cns.param)
+        return self._find_brancheable({cns.operation})
 
     def _dependencies(self, nodes):
         result = set()
@@ -227,10 +213,7 @@ class BacktrackRegistry(Registry):
 
         return result
 
-    def _find_brancheable(self, param):
-        # collect all corresponding operations
-        operations = self.decision_graph.find_writers(param.layer, param.obj, param.param).all()
-
+    def _find_brancheable(self, operations):
         # find the latest operation
         latest_path  = None
         max_length   = 0
@@ -252,7 +235,7 @@ class BacktrackRegistry(Registry):
             for p in self.decision_graph.written_params(op):
                 if not self.decision_graph.candidates_exhausted(p):
                     if op not in dependencies:
-                        logging.INFO("Skipping independent decision %s" % op)
+                        logging.info("Skipping independent decision %s" % op)
                         continue
                     return p
 
