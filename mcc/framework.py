@@ -380,7 +380,7 @@ class DecisionGraph(Graph):
 
                 # get everything that can be merged between left[-1] and curl
                 #  (if left is already at common predecessor, we want to get everything)
-                while right[-1].iteration >= curl.iteration or left[-1] == common_pred:
+                while right[-1].iteration > left[-1].iteration or left[-1] == common_pred:
                     if right[-1] == common_pred:
                         # stop at common predecessor
                         break
