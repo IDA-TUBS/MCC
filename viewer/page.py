@@ -387,7 +387,7 @@ class Page(Gtk.HPaned):
             for candidate in layer.untracked_get_param_candidates(param, obj):
                 if isset_value and candidate == value:
                     continue
-                if candidate in failed:
+                if failed is not None and candidate in failed.bad_values():
                     self._add_value(parent, candidate, layer, style, {'strikethrough' : True })
                 else:
                     self._add_value(parent, candidate, layer, style)

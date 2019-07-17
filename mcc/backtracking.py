@@ -141,18 +141,13 @@ class BacktrackRegistry(Registry):
 
                 print("\nRolling back to: %s" % (culprit))
 
-                # mark value as bad if there are other candidates
-                bad = culprit.layer.untracked_get_param_value(culprit.param, culprit.obj)
-                culprit.layer.add_param_failed(culprit.param, culprit.obj, bad)
-
-                # cut-off subtree
-                node = self.decision_graph.find_assign(culprit.layer, culprit.obj, culprit.param)
-                print("   assigned by operation: %s" % (node))
+                # mark current value(s) as bad
+                self.decision_graph.mark_bad(culprit)
 
                 if outpath is not None:
                     name = 'decision-try-%d.dot' % self.backtracking_try
                     path = outpath + name
-                    leaves = self.decision_graph.successors(node, recursive=True)
+                    leaves = self.decision_graph.successors(culprit, recursive=True)
                     highlight = {cns.operation}
 
                     self.decision_graph.write_dot(path, leaves=None,
@@ -167,7 +162,7 @@ class BacktrackRegistry(Registry):
                     export = PickleExporter(self)
                     export.write(outpath+'model-pretry-%d.pickle' % self.backtracking_try)
 
-                self.invalidate_subtree(node)
+                self.invalidate_subtree(culprit)
 
                 if outpath is not None:
                     export = PickleExporter(self)
@@ -232,12 +227,10 @@ class BacktrackRegistry(Registry):
         # go backwards until we have found a changeable operation
         while len(latest_path) > 0:
             op = latest_path.pop()
-            for p in self.decision_graph.written_params(op):
-                if not self.decision_graph.candidates_exhausted(p):
-                    if op not in dependencies:
-                        logging.info("Skipping independent decision %s" % op)
-                        continue
-                    return p
+            if op not in dependencies:
+                continue
+            if self.decision_graph.revisable(op):
+                return op
 
         return None
 
@@ -254,6 +247,12 @@ class BacktrackRegistry(Registry):
         for ae in node.operation.analysis_engines:
             if hasattr(ae, 'reset'):
                 ae.reset(node)
+
+    def _clear_failed(self, node):
+        for p in self.decision_graph.written_params(node):
+            failed = p.layer.get_param_failed(p.param, p.obj)
+            if failed is not None:
+                failed.destroy()
 
     def _rollback_transform(self, node):
         op = node.operation
@@ -291,10 +290,19 @@ class BacktrackRegistry(Registry):
             # invalidate layer depending on what operations were involved
             op = n.operation
             if isinstance(op, Assign):
+                # clear failed field if we not revise op (i.e. n == start)
+                if n is not start:
+                    self._clear_failed(n)
                 self._rollback_assign(n)
             elif isinstance(op, Map):
+                # remark: no need to clear failed because a map operation
+                #         will always be succeeded by an assign, which
+                #         takes care of this (see above)
                 self._rollback_map(n)
             elif isinstance(op, Transform):
+                # remark: no need to clear failed because there must be
+                #         no Map/Assign operations that write the same
+                #         params
                 self._rollback_transform(n)
             elif isinstance(op, Check):
                 visited_checks.add(op)

@@ -114,6 +114,49 @@ class DecisionGraph(Graph):
                    self.operation == rhs.operation
 
 
+    class Failed:
+        def __init__(self, params):
+            self.params    = tuple(params)
+            self.blacklist = set()
+
+        def mark_current_bad(self):
+            if len(self.params) == 1:
+                p = self.params[0]
+                # add current value to blacklist
+                self.blacklist.add(p.layer.untracked_get_param_value(p.param, p.obj))
+            else:
+                # get current values, create a tuple and add it to blacklist
+                cur = list()
+                for p in self.params:
+                    cur.append(p.layer.untracked_get_param_value(p.param, p.obj))
+                self.blacklist.add(tuple(cur))
+
+        def bad_values(self):
+            if len(self.params) == 1:
+                return self.blacklist
+            else:
+                return set()
+
+        def bad_combinations(self):
+            assert len(self.params) > 1
+
+            objects = tuple([x.obj for x in self.params])
+            return objects, self.blacklist
+
+        def candidates_left(self):
+            if len(self.params) == 1:
+                p = self.params[0]
+                candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
+                value      = p.layer.untracked_get_param_value(p.param, p.obj)
+                return len(candidates - self.blacklist - {value}) > 0
+            else:
+                return True
+
+        def destroy(self):
+            for p in self.params:
+                p.layer.set_param_failed(p.param, p.obj, None)
+
+
     def __init__(self):
         super().__init__()
 
@@ -133,17 +176,55 @@ class DecisionGraph(Graph):
     def candidates_exhausted(self, p):
         assert isinstance(p, self.Param)
 
-        candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
-        if len(candidates) <= 1:
-            return True
-
         failed = p.layer.get_param_failed(p.param, p.obj)
-        value  = {p.layer.untracked_get_param_value(p.param, p.obj)}
+        if failed is None:
+            candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
+            return len(candidates) <= 1
 
-        if len(candidates-failed-value) > 0:
-            return False
+        return not failed.candidates_left()
 
-        return True
+    def revisable(self, n):
+        assert isinstance(n, self.Node)
+
+        # only Assign operations are revisable
+        # remark: BatchAssign inherits from Assign
+        if isinstance(n.operation, Assign):
+            for p in self.written_params(n):
+                if not self.candidates_exhausted(p):
+                    return True
+
+        return False
+
+    def mark_bad(self, n):
+        assert isinstance(n, self.Node)
+        assert isinstance(n.operation, Assign)
+        # remark: BatchAssign inherits from Assign
+
+        if isinstance(n.operation, BatchAssign):
+            # remark: all written params have the same Failed object
+            written = self.written_params(n)
+            p = list(written)[0]
+            failed = p.layer.get_param_failed(p.param, p.obj)
+
+            # create Failed object and add to all params
+            if failed is None:
+                failed = DecisionGraph.Failed(written)
+
+                for p in written:
+                    p.layer.set_param_failed(p.param, p.obj, failed)
+
+            failed.mark_current_bad()
+
+        elif isinstance(n.operation, Assign):
+            written = self.written_params(n)
+            assert len(written) == 1
+            p = list(written)[0]
+            failed = p.layer.get_param_failed(p.param, p.obj)
+            if failed is None:
+                failed = DecisionGraph.Failed([p])
+                p.layer.set_param_failed(p.param, p.obj, failed)
+
+            failed.mark_current_bad()
 
     def decisions(self, n):
         assert isinstance(n, self.Node)
@@ -194,16 +275,6 @@ class DecisionGraph(Graph):
             return self.Writers()
 
         return self.param_store[param_obj]
-
-    def find_assign(self, layer, obj, param):
-        w = self.find_writers(layer, obj, param)
-
-        assert w.assign is not None
-
-        return w.assign
-
-    def param(self, layer, obj, param):
-        return self.Param(layer, obj, param)
 
     def find_operations(self, layer, obj):
         nodes = set()
@@ -805,6 +876,7 @@ class Layer:
         def __repr__(self):
             return 'Node: %s' % self._obj
 
+
     """ Implementation of a single layer in the cross-layer model.
     """
     def __init__(self, name, nodetypes={object}):
@@ -1031,17 +1103,18 @@ class Layer:
             if 'failed' in params[param]:
                 return params[param]['failed']
 
-        return set()
+        return None
 
-    def add_param_failed(self, param, obj, value):
+    def set_param_failed(self, param, obj, failed):
+        assert failed is None or isinstance(failed, DecisionGraph.Failed)
         params = self.untracked_get_params(obj)
 
         assert param in params, "param %s not available on %s for %s" % (param,self,obj)
 
-        if 'failed' not in params[param]:
-            params[param]['failed'] = set()
-
-        params[param]['failed'].add(value)
+        if failed is None:
+            del params[param]['failed']
+        else:
+            params[param]['failed'] = failed
 
     def untracked_clear_param_value(self, param, obj):
         params = self.untracked_get_params(obj)
@@ -1820,7 +1893,12 @@ class Assign(Operation):
             self.source_layer.start_tracking(self)
 
             raw_cand   = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
-            candidates = raw_cand - self.source_layer.get_param_failed(self.param, obj)
+            failed     = self.source_layer.get_param_failed(self.param, obj)
+            bad_values = set()
+            if failed is not None:
+                bad_values = failed.bad_values()
+
+            candidates = raw_cand - bad_values
 
             if len(candidates) == 0:
                 logging.error("No candidates left for param '%s' of object %s." % (self.param, obj))
