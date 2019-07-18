@@ -119,6 +119,24 @@ class MccBase:
         model.add_step(deps)
         model.add_step(CopyEdgeStep(fq, fa, {'service'}))
 
+    def _map_and_connect_functions(self, model, slayer, dlayer):
+        fq = model.by_name[slayer]
+        fa = model.by_name[dlayer]
+
+        me = MappingEngine(fq, model.repo, model.platform)
+        fe = FunctionEngine(fq, fa, model.repo)
+
+        step = NodeStep(           Map(fe, 'dependencies'))
+        step.add_operation(        Map(me, 'map functions'))
+        step.add_operation(BatchAssign(me, 'map functions'))
+        step.add_operation( BatchCheck(me, 'map functions'))
+        step.add_operation(     Assign(fe, 'dependencies'))
+        step.add_operation(  Transform(fe, fa, 'dependencies'))
+
+        model.add_step(step)
+
+        model.add_step(CopyEdgeStep(fq, fa, {'service'}))
+
     def _select_components(self, model, slayer, dlayer, envmodel):
         """ Selects components for nodes in source layer and transforms into target layer.
 
@@ -157,12 +175,10 @@ class MccBase:
         patterns.register_ae(epe)
         patstep = NodeStep(patterns)
         patstep.add_operation(Assign(pe, 'pattern'))
-        model.add_step(patstep)
-
         # sanity check and transform
-        transform = NodeStep(Check(pe, name='pattern'))
-        transform.add_operation(Transform(pe, ca, 'pattern'))
-        model.add_step(transform)
+        patstep.add_operation(    Check(pe, name='pattern'))
+        patstep.add_operation(Transform(pe, ca, 'pattern'))
+        model.add_step(patstep)
 
         # select service connection and fix constraints
         #  remark: for the moment, we assume there is only one possible connection left
@@ -339,19 +355,15 @@ class MccBase:
         rpc  = TasksRPCEngine(slayer)
         ae   = TaskgraphEngine(slayer, tg)
 
-        coretasks = NodeStep(Map(core, 'get coretasks'))
-        coretasks.add_operation(Assign(core, 'get coretasks'))
-        model.add_step(coretasks)
-
-        rpctasks = NodeStep(Map(rpc, 'get rpctasks'))
-        rpctasks.add_operation(Assign(rpc, 'get rpctasks'))
-        model.add_step(rpctasks)
-
-        trafo = NodeStep(Map(ae, 'build taskgraph'))
-        trafo.add_operation(Assign(ae, 'build taskgraph'))
-        trafo.add_operation(Check(ae, 'build taskgraph'))
-        trafo.add_operation(Transform(ae, tg, 'build taskgraph'))
-        model.add_step(trafo)
+        tasks = NodeStep(         Map(core, 'get coretasks'))
+        tasks.add_operation(   Assign(core, 'get coretasks'))
+        tasks.add_operation(      Map(rpc, 'get rpctasks'))
+        tasks.add_operation(   Assign(rpc, 'get rpctasks'))
+        tasks.add_operation(      Map(ae, 'build taskgraph'))
+        tasks.add_operation(   Assign(ae, 'build taskgraph'))
+        tasks.add_operation(    Check(ae, 'build taskgraph'))
+        tasks.add_operation(Transform(ae, tg, 'build taskgraph'))
+        model.add_step(tasks)
 
         con = EdgeStep(Map(ae, 'connect tasks'))
         con.add_operation(Assign(ae, 'connect tasks'))
@@ -409,11 +421,10 @@ class SimpleMcc(MccBase):
         # 4a) create system model from query model and base
         model.from_query(query_model, 'func_query', base)
 
-        self._map_functions(model, 'func_query')
+        self._map_and_connect_functions(model, 'func_query', 'func_arch')
 
-        # currently, we assume that all functional dependencies
-        # are predefined in the query
-        self._connect_functions(model, 'func_query', 'func_arch')
+#        self._map_functions(model, 'func_query')
+#        self._connect_functions(model, 'func_query', 'func_arch')
 
         # solve reachability and transform into comm_arch
         self._insert_proxies(model, slayer='func_arch', dlayer='comm_arch')
