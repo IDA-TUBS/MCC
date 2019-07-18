@@ -1272,7 +1272,7 @@ class PatternEngine(AnalysisEngine):
             return self.layer.get_param_value(self, self.param, obj).flatten(params)
 
     def target_types(self):
-        return self.layer.node_types()
+        return tuple({parser.Repository.Component})
 
 class SpecEngine(AnalysisEngine):
     def __init__(self, layer, param='component'):

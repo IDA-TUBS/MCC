@@ -1737,9 +1737,8 @@ class Operation:
         """
         self.param = ae.param
         self.source_layer = ae.layer
-        self.target_layer = ae.layer
-        if hasattr(ae, 'target_layer'):
-            self.target_layer = ae.target_layer
+        if not hasattr(self, 'target_layer'):
+            self.target_layer = ae.layer
 
         self.name = name
 
@@ -2077,9 +2076,11 @@ class Transform(Operation):
         Raises:
             Exception: ae is not compatible
         """
-        Operation.__init__(self, ae, name)
+        if hasattr(ae, 'target_layer'):
+            assert target_layer == ae.target_layer
         self.target_layer = target_layer
-        self.source_layer = ae.layer
+
+        Operation.__init__(self, ae, name)
 
         if 'writes' not in ae.acl[self.source_layer]:
             ae.acl[self.source_layer]['writes'] = set()
@@ -2104,9 +2105,8 @@ class Transform(Operation):
                     break
 
         if not compatible:
-            print(ae.target_types())
-            raise Exception("Analysis engine %s does not have nodetypes %s of target layer" % (ae,
-                self.target_layer.node_types()))
+            raise Exception("Analysis engine %s does not have nodetypes %s of target layer: %s" % (ae,
+                self.target_layer.node_types(), ae.target_types()))
 
     def register_ae(self, ae):
         """
