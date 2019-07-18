@@ -103,7 +103,6 @@ class BacktrackRegistry(Registry):
         self.decision_graph.initialize_tracking(self.by_order)
 
         while not self._backtrack_execute(outpath):
-            self.decision_graph.next_iteration()
             pass
 
         print("Backtracking succeeded in try %s" % self.backtracking_try)
@@ -168,6 +167,7 @@ class BacktrackRegistry(Registry):
                     export = PickleExporter(self)
                     export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
 
+                self.decision_graph.next_iteration(culprit)
                 return False
 
             except Exception as ex:
@@ -313,8 +313,9 @@ class BacktrackRegistry(Registry):
                 logging.debug("Marking %s as to-be-repeated" % op)
                 self.operations[op] = False
 
-            # remove node from decision graph
-            self.decision_graph.remove(n)
+            if n is not start:
+                # remove node from decision graph
+                self.decision_graph.remove(n)
 
     def delete_recursive(self, obj, layer):
         if obj not in layer.graph.nodes() and obj not in layer.graph.edges():

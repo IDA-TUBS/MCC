@@ -165,13 +165,21 @@ class DecisionGraph(Graph):
 
         self.param_store = dict()
 
-        self.iterations = 0
+        self.iterations    = 0
+        self.revise_assign = None
 
         # add root node
         self.root = self.add_node(None, None, None)
 
-    def next_iteration(self):
+    def next_iteration(self, culprit):
         self.iterations += 1
+
+        # remember the (assign) operation to be revised
+        # because we keep this in the graph/tree to
+        # maintain the order (i.e. all assigns that
+        # were previously orderer below this operation
+        # shall be inserted below again)
+        self.revise_assign = culprit
 
     def candidates_exhausted(self, p):
         assert isinstance(p, self.Param)
@@ -252,8 +260,13 @@ class DecisionGraph(Graph):
         if isinstance(operation, Check):
             self.check_tracking()
 
-        node = self.add_node(layer, obj, operation)
-        self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
+        if self.revise_assign is not None and \
+           self.revise_assign == self.Node(layer, obj, operation, self.iterations-1):
+            node = self.revise_assign
+            self.revise_assign = None
+        else:
+            node = self.add_node(layer, obj, operation)
+            self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
 
         self.read    = set()
         self.written = set()
@@ -291,7 +304,6 @@ class DecisionGraph(Graph):
         return self.node_attributes(node)['written']
 
     def add_node(self, layer, obj, operation):
-
         node = super().add_node(self.Node(layer, obj, operation, self.iterations))
         self.node_attributes(node)['written'] = set()
         self.node_attributes(node)['read']    = set()
