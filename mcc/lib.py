@@ -103,8 +103,8 @@ class MccBase:
         me = MappingEngine(fa, model.repo, model.platform)
 
         pfmap = NodeStep(Map(me, 'map functions'))
-        pfmap.add_operation(Assign(me, 'map functions'))
-        pfmap.add_operation(Check(me, 'map functions'))
+        pfmap.add_operation(BatchAssign(me, 'map functions'))
+        pfmap.add_operation(BatchCheck(me, 'map functions'))
         model.add_step(pfmap)
 
     def _connect_functions(self, model, slayer, dlayer):

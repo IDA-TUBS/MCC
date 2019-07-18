@@ -449,7 +449,7 @@ class DecisionGraph(Graph):
 
         # if node.operation is assign, add connection to map operation
         if isinstance(node.operation, Assign):
-            assert len(written) == 1
+            assert len(written) == 1 or isinstance(node.operation, BatchAssign)
             for p in written:
                 tmp = self.find_writers(p.layer, p.obj, p.param)
                 assert tmp.map is not None, "Cannot find map operation for %s" % p
@@ -1341,6 +1341,21 @@ class AnalysisEngine:
         """
         raise NotImplementedError()
 
+    def batch_map(self, data):
+        """ Must be implemented by derived classes.
+
+        Args:
+            :param data: key = graph object, value = candidates
+            :type  data: dict
+
+        Returns:
+            dictionary with key = graph object, value = set of candidates values
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError()
+
     def assign(self, obj, candidates):
         """ Must be implemented by derived classes.
 
@@ -1351,6 +1366,25 @@ class AnalysisEngine:
 
         Returns:
             One value from candidates
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError()
+
+    def batch_assign(self, data, objects, blacklist):
+        """ Must be implemented by derived classes.
+
+        Args:
+            :param data: key = graph object, value = candidates
+            :type  data: dict
+            :param objects: ordered objects (correspond to entries in blacklist)
+            :type  objects: tuple
+            :param blacklist: blacklisted combinations of values
+            :type  blacklist: set of tuples
+
+        Returns:
+            dictionary with key = graph object, value = assigned value
 
         Raises:
             NotImplementedError
@@ -1486,12 +1520,12 @@ class ExternalAnalysisEngine(AnalysisEngine):
 
         assert(self.state == "WAITING")
 
-    def prepare_map(self, obj, candidates):
+    def _prepare_map(self, obj, candidates):
         self._state_check_EXPORTED()
 
         self._query_map(obj, candidates)
 
-    def prepare_assign(self, obj, candidates):
+    def _prepare_assign(self, obj, candidates):
         self._state_check_EXPORTED()
 
         self._query_assign(obj, candidates)
@@ -1502,12 +1536,12 @@ class ExternalAnalysisEngine(AnalysisEngine):
         if self._wait_for_result():
             self.state = "READY"
 
-    def map(self, obj):
+    def _map(self, obj):
         self._state_check_READY()
 
         return self._parse_map(obj)
 
-    def assign(self, obj):
+    def _assign(self, obj):
         self._state_check_READY()
 
         return self._parse_assign(obj)
@@ -1517,6 +1551,36 @@ class ExternalAnalysisEngine(AnalysisEngine):
 
     def transform(self, obj, target_layer):
         raise NotImplementedError()
+
+    def batch_assign(self, data, objects, blacklist):
+        # conservatively mark all nodes and edges accessed for the params in ACL
+        for layer in self.acl:
+            for param in self.acl[layer]['reads']:
+                layer._mark_all_params_read(param)
+
+        for obj, candidates in data.items():
+            self._prepare_assign(obj, candidates)
+
+        result = dict()
+        for obj, candidates in data.items():
+            result[obj] = self._assign(obj)
+
+        return result
+
+    def batch_map(self, data):
+        # conservatively mark all nodes and edges accessed for the params in ACL
+        for layer in self.acl:
+            for param in self.acl[layer]['reads']:
+                layer._mark_all_params_read(param)
+
+        for obj, candidates in data.items():
+            self._prepare_map(obj, candidates)
+
+        result = dict()
+        for obj, candidates in data.items():
+            result[obj] = self._map(obj)
+
+        return result
 
 
 class DummyEngine(AnalysisEngine):
@@ -1792,7 +1856,6 @@ class Map(Operation):
 
 class BatchMap(Map):
     def __init__(self, ae, name=''):
-        assert(isinstance(ae, ExternalAnalysisEngine))
         Map.__init__(self, ae, name)
 
     def register_ae(self, ae):
@@ -1804,16 +1867,14 @@ class BatchMap(Map):
         assert(False)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
         ae = self.analysis_engines[0]
 
         self.source_layer.start_tracking(self)
 
-        # conservatively mark all nodes and edges accessed for the params in ACL
-        for layer in ae.acl:
-            for param in ae.acl[layer]['reads']:
-                self.layer._mark_all_params_read(param)
-
-        # prepare
+        # prepare data
+        data = dict()
         for obj in iterable:
             assert(self.check_source_type(obj))
 
@@ -1826,29 +1887,32 @@ class BatchMap(Map):
                 candidates = None
 
             if candidates is None:
-                ae.prepare_map(obj, None)
+                data[obj] = None
             else:
-                ae.prepare_map(obj, set(candidates))
+                data[obj] = set(candidates)
 
-        # get results
-        for obj in iterable:
+        # execute batch map
+        result = ae.batch_map(data)
+        assert len(result) == len(data)
+
+        # insert results into layer
+        for obj, new_candidates in result.items():
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
             if candidates is None:
-                candidates = ae.map(obj)
+                candidates = new_candidates
             else:
-                new_candidates = ae.map(obj)
                 if new_candidates is not None:
-                    candidates &= new_candidates 
+                    candidates &= new_candidates
 
             # update candidates for this parameter in layer object
             assert(candidates is not None)
             self.source_layer.set_param_candidates(ae, self.param, obj, candidates)
 
-        self.source_layer.stop_tracking(obj)
+        self.source_layer.stop_tracking(None)
 
         return True
 
@@ -1879,8 +1943,6 @@ class Assign(Operation):
 
     def execute(self, iterable):
         logging.info("Executing %s" % self)
-
-        it = iter(iterable)
 
         for obj in iterable:
             assert(self.check_source_type(obj))
@@ -1919,52 +1981,69 @@ class Assign(Operation):
 
 class BatchAssign(Assign):
     def __init__(self, ae, name=''):
-        assert(isinstance(ae, ExternalAnalysisEngine))
         Assign.__init__(self, ae, name)
 
     def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
         ae = self.analysis_engines[0]
 
         self.source_layer.start_tracking(self)
 
-        # conservatively mark all nodes and edges accessed for the params in ACL
-        for layer in ae.acl:
-            for param in ae.acl[layer]['reads']:
-                self.layer._mark_all_params_read(param)
-
-        # prepare
+        # prepare data
+        failed = None
+        data = dict()
         for obj in iterable:
             assert(self.check_source_type(obj))
 
             # skip if parameter was already selected
             if self.source_layer.untracked_isset_param_value(self.param, obj):
+                logging.debug("skipping %s for object %s" % (self, obj))
                 continue
 
-            candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
-            if len(candidates) == 0:
-                logging.error("No candidates left for param '%s'." % self.param)
-                # FIXME we need better feedback from the external analysis engine
-                #     idea: let ExternalAnalysisEngine raise exception containing culprits
+            raw_cand   = self.source_layer.get_param_candidates(ae, self.param, obj)
+            failed     = self.source_layer.get_param_failed(self.param, obj)
+            bad_values = set()
+            if failed is not None:
+                bad_values = failed.bad_values()
 
+            candidates = raw_cand - bad_values
+
+            if len(candidates) == 0:
+                logging.error("No candidates left for param '%s' of object %s." % (self.param, obj))
                 # simulate write access to param
                 self.source_layer.track_written(self.param, obj)
                 # insert operation into decision graph
-                node = self.source_layer.stop_tracking(obj, error=True)
+                node = self.source_layer.stop_tracking(None, error=True)
                 raise ConstraintNotSatisfied(node)
 
-            ae.prepare_assign(obj, candidates)
+            data[obj] = candidates
 
-        # get results
-        for obj in iterable:
-            candidates = self.source_layer.get_param_candidates(self.analysis_engines[0], self.param, obj)
+        objects = None
+        bad_combinations = set()
+        if failed is not None:
+            objects, bad_combinations = failed.bad_combinations()
+            assert len(objects) == len(data), "Failed has %s objects but passing %s" % (objects, data.keys())
 
-            result = ae.assign(obj)
+        # execute batch assign
+        #  remark: we assume that data will not be modified by ae (can we enforce this?)
+        # FIXME we need better feedback from the external analysis engine
+        #     idea: let ExternalAnalysisEngine raise exception containing culprits
+        result = ae.batch_assign(data, objects, bad_combinations)
+        if not isinstance(result, dict) and result == False:
+            # simulate write access to param
+            for obj in data.keys():
+                self.source_layer.track_written(self.param, obj)
+            node = self.source_layer.stop_tracking(None, error=True)
+            raise ConstraintNotSatisfied(node)
 
-            assert(result in candidates)
+        assert len(result) == len(data)
 
-            self.source_layer.set_param_value(ae, self.param, obj, result)
+        for obj, value in result.items():
+            assert value in data[obj]
+            self.source_layer.set_param_value(ae, self.param, obj, value)
 
-        self.stop_tracking(obj)
+        self.source_layer.stop_tracking(None)
 
         return True
 

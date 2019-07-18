@@ -690,6 +690,26 @@ class MappingEngine(AnalysisEngine):
         # TODO here we call the constraint solver
         return list(candidates)[0]
 
+    def batch_assign(self, data, objects, bad_combinations):
+        # TODO here we call the constraint solver
+        sets   = list()
+        if objects is None:
+            assert len(bad_combinations) == 0
+            objects = data.keys()
+
+        for obj in objects:
+            sets.append(data[obj])
+
+        # TODO prefer combinations where connected obj are on the same resource
+        # TODO prefer combinations in which function dependencies can be locally satisfied (cf. FunctionEngine)
+
+        for combination in itertools.product(*sets):
+            if combination not in bad_combinations:
+                return dict(zip(objects, combination))
+
+        logging.error("Mapping candidates exhausted: %s\n%s" % (objects, bad_combinations))
+        return False
+
     def check(self, obj):
         """ Checks whether a platform mapping is assigned to all nodes.
         """
@@ -700,6 +720,19 @@ class MappingEngine(AnalysisEngine):
             logging.error("Node '%s' is not mapped to anything.", obj)
 
         return okay
+
+    def batch_check(self, iterable):
+        """ Checks whether a platform mapping is assigned to all nodes.
+        """
+        for obj in iterable:
+            assert(not isinstance(obj, Edge))
+
+            okay = self.layer.get_param_value(self, 'mapping', obj) is not None
+            if not okay:
+                logging.error("Node '%s' is not mapped to anything.", obj)
+                return False
+
+        return True
 
 class DependencyEngine(AnalysisEngine):
     def __init__(self, layer):
