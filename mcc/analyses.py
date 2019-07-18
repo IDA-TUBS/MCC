@@ -653,10 +653,40 @@ class FunctionEngine(AnalysisEngine):
 
 
 class MappingEngine(AnalysisEngine):
-    def __init__(self, layer, repo, pf_model):
-        AnalysisEngine.__init__(self, layer, param='mapping')
+    def __init__(self, layer, repo, pf_model, cost_sensitive=True):
+        acl = { layer : { 'reads' : set(['dependencies']) } }
+        AnalysisEngine.__init__(self, layer, param='mapping', acl=acl)
         self.pf_model = pf_model
         self.repo = repo
+        self.cost_sensitive = cost_sensitive
+
+    def _calculate_costs(self, combination):
+        cost = 0
+
+        for obj in combination.keys():
+
+            # directly connected objects on different sources will have cost 1
+            for dep in self.layer.graph.out_edges(obj):
+                if dep.target in combination:
+                    if combination[dep.target] != combination[obj]:
+                        cost += 1
+
+            # dependencies that cannot be satisfied in the same domains will also have cost 1
+            resolutions = self.layer.get_param_candidates(self, 'dependencies', obj)
+            best_local_cost = len(resolutions)
+            for resolution in resolutions:
+                local_cost = 0
+                for dep in resolution:
+                    if dep.provider in combination:
+                        if not combination[obj].in_native_domain(combination[dep.provider]):
+                            local_cost += 1
+
+                if local_cost < best_local_cost:
+                    best_local_cost = local_cost
+
+            cost += best_local_cost
+
+        return cost
 
     def map(self, obj, candidates):
         if candidates is not None and len(candidates) > 0:
@@ -700,12 +730,28 @@ class MappingEngine(AnalysisEngine):
         for obj in objects:
             sets.append(data[obj])
 
-        # TODO prefer combinations where connected obj are on the same resource
-        # TODO prefer combinations in which function dependencies can be locally satisfied (cf. FunctionEngine)
-
+        best_costs       = 0
+        best_combination = None
         for combination in itertools.product(*sets):
             if combination not in bad_combinations:
-                return dict(zip(objects, combination))
+                result = dict(zip(objects, combination))
+                if not self.cost_sensitive:
+                    return result
+
+                if best_combination is None:
+                    best_combination = result
+                    best_costs = self._calculate_costs(result)
+                else:
+                    costs = self._calculate_costs(result)
+                    if costs < best_costs:
+                        best_costs = costs
+                        best_combination = result
+
+                if best_costs == 0:
+                    return result
+
+        if best_combination is not None:
+            return best_combination
 
         logging.error("Mapping candidates exhausted: %s\n%s" % (objects, bad_combinations))
         return False

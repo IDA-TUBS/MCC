@@ -100,7 +100,7 @@ class MccBase:
     def _map_functions(self, model, layer):
         fa = model.by_name[layer]
 
-        me = MappingEngine(fa, model.repo, model.platform)
+        me = MappingEngine(fa, model.repo, model.platform, cost_sensitive=False)
 
         pfmap = NodeStep(Map(me, 'map functions'))
         pfmap.add_operation(BatchAssign(me, 'map functions'))
@@ -123,7 +123,7 @@ class MccBase:
         fq = model.by_name[slayer]
         fa = model.by_name[dlayer]
 
-        me = MappingEngine(fq, model.repo, model.platform)
+        me = MappingEngine(fq, model.repo, model.platform, cost_sensitive=False)
         fe = FunctionEngine(fq, fa, model.repo)
 
         step = NodeStep(           Map(fe, 'dependencies'))
