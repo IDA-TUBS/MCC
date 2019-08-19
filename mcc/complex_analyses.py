@@ -44,6 +44,14 @@ class CPMappingEngine(AnalysisEngine):
             return anded
 
     def __init__(self, layer, repo, pf_model, cost_priorities=None):
+        """
+        Args:
+            :param cost_priorities: Each list entry is higher prioritized than
+                                    each of the subsequent entries. If an entry
+                                    is a tuple, its elements are prioritized
+                                    equally.
+            :type cost_priorities: list of strings and tuples of strings
+        """
         acl = { layer : { 'reads' : set(['dependencies']) } }
         AnalysisEngine.__init__(self, layer, param='mapping', acl=acl)
         self.pf_model = pf_model
@@ -56,12 +64,15 @@ class CPMappingEngine(AnalysisEngine):
         #          the maximum possible value. Enforcing the bound to be the
         #          maximum might require extra code which would be redundant to
         #          already defined solution constraints.
-        self._cost_funcs = { #insertion order specifies default priorities
+        self._cost_funcs = {
                 'comm': self._gen_communication_cost_data,
                 }
         if cost_priorities is None:
-            cost_priorities = list(self._cost_funcs.keys())
-        self.cost_priorities = cost_priorities
+            cost_priorities = ['comm']
+        self.cost_priorities = []
+        for cats in cost_priorities:
+            normalized = cats if isinstance(cats, tuple) else (cats,)
+            self.cost_priorities.append(normalized)
 
     def _gen_cost_data(self, data):
         """ return the data required for setting and evaluating an objective
@@ -72,17 +83,23 @@ class CPMappingEngine(AnalysisEngine):
         values of the lower-prioritized objectives.
         """
         result = OrderedDict()
-        for category in reversed(self.cost_priorities):
-            #The expression of each objective is multiplied with a factor so
-            #that the objectives do not interfere with each other.
+        for categories in reversed(self.cost_priorities):
+            # The expression of each priority level is multiplied with a factor
+            # so that the expressions of other levels do not interfere with it.
             step_size = 1
             if len(result): #if not the lowest priority
                 previous = next(reversed(result.values()))
                 #guarantee growing step size even if the upper bound was <= 1
                 step_size = previous['step_size'] * max(2, previous['bound'])
 
-            expr, bound = self._cost_funcs[category](data)
-            result[category] = {
+            expr = bound = 0
+            assert isinstance(categories, tuple)
+            for category in categories:
+                texpr, tbound = self._cost_funcs[category](data)
+                expr += texpr
+                bound += tbound
+
+            result[categories] = {
                     'expr': step_size * expr,
                     'step_size': step_size,
                     'bound': bound,
@@ -92,13 +109,13 @@ class CPMappingEngine(AnalysisEngine):
     def _log_costs(self, cost_data, objective_value):
         remaining = objective_value
         #begin with the most-prioritized cost objective
-        for category, data in reversed(cost_data.items()):
+        for categories, data in reversed(cost_data.items()):
             current = remaining // data['step_size']
             remaining -= current * data['step_size']
             assert 0 <= current <= data['bound']
 
             msg = 'costs [%s]: %d/%d'
-            logging.info(msg % (category, current, data['bound']))
+            logging.info(msg % (', '.join(categories), current, data['bound']))
 
     def _gen_communication_cost_data(self, data):
         expr = bound = 0
