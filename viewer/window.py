@@ -192,6 +192,7 @@ class Window(Gtk.ApplicationWindow):
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="enable_popup">True</property>
+            <property name="scrollable">True</property>
             <child type="action-start">
               <object class="GtkToolButton" id="new">
                 <property name="stock_id">gtk-close</property>
