@@ -12,6 +12,7 @@ import logging
 from mcc.framework import *
 
 from collections import OrderedDict
+import itertools
 
 from ortools.sat.python import cp_model
 
@@ -66,9 +67,10 @@ class CPMappingEngine(AnalysisEngine):
         #          already defined solution constraints.
         self._cost_funcs = {
                 'comm': self._gen_communication_cost_data,
+                'dep_comm': self._gen_dep_communication_cost_data,
                 }
         if cost_priorities is None:
-            cost_priorities = ['comm']
+            cost_priorities = [('comm', 'dep_comm')]
         self.cost_priorities = []
         for cats in cost_priorities:
             normalized = cats if isinstance(cats, tuple) else (cats,)
@@ -118,9 +120,9 @@ class CPMappingEngine(AnalysisEngine):
             logging.info(msg % (', '.join(categories), current, data['bound']))
 
     def _gen_communication_cost_data(self, data):
+        """ directly connected objects on different sources will have cost 1 """
         expr = bound = 0
         for o in data.o:
-            # directly connected objects on different sources will have cost 1
             for dep in self.layer.graph.out_edges(o):
                 if dep.target not in data.o:
                     continue
@@ -128,6 +130,42 @@ class CPMappingEngine(AnalysisEngine):
                 bound += 1
                 for p in data.p:
                     expr += data.AND(data.m[o, p].Not(), data.m[dep.target, p])
+        return expr, bound
+
+    def _gen_dep_communication_cost_data(self, data):
+        """ deps that cannot be satisfied in the same domains will have cost 1
+        """
+        def _gen_dep_cost(o, deps):
+            """ generate cost data for an object and a set of dependencies
+
+            Returns:
+                tuple with IntVar for the cost value and an upper bound
+            """
+            providers = [d.provider for d in deps if d.provider in data.o]
+            p_combis = itertools.product(data.p, repeat=2)
+            p_combis = [(a,b) for a,b in p_combis if not a.in_native_domain(b)]
+
+            expr = 0
+            for provider, (p1, p2) in itertools.product(providers, p_combis):
+                expr += data.AND(data.m[o, p1], data.m[provider, p2])
+            bound = len(providers)
+            label = 'costs for dep candidate %s for object %s'
+            var = data.model.NewIntVar(0, bound, label % (deps, o))
+            data.model.Add(var == expr)
+            return var, bound
+
+        expr = bound = 0
+        for o in data.o:
+            cands = self.layer.get_param_candidates(self, 'dependencies', o)
+            assert len(cands)
+            cexpressions, cbounds = zip(*[_gen_dep_cost(o, c) for c in cands])
+
+            obound = max(cbounds)
+            best = data.model.NewIntVar(0, obound, 'best dep costs for %s' % o)
+            data.model.AddMinEquality(best, cexpressions)
+
+            expr += best
+            bound += obound
         return expr, bound
 
     def batch_assign(self, candidates, objects, bad_combinations):
