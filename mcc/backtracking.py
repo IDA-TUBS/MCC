@@ -200,12 +200,16 @@ class BacktrackRegistry(Registry):
 
     def _dependencies(self, nodes):
         result = set()
-        for n in nodes:
-            for p in self.decision_graph.read_params(n):
-                for op in self.decision_graph.find_writers(p.layer, p.obj, p.param).all():
+        queue = list(nodes)
+        while len(queue):
+            n = queue.pop(0)
+            dgraph = self.decision_graph
+            for p in dgraph.read_params(n):
+                writers = dgraph.find_writers(p.layer, p.obj, p.param)
+                # avoid infinite loops by excluding already processed nodes
+                for op in writers.all() - result:
+                    queue.append(op)
                     result.add(op)
-                    result.update(self._dependencies({op}))
-
         return result
 
     def _find_brancheable(self, operations):
