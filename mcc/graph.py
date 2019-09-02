@@ -85,11 +85,9 @@ class Graph:
 
     def add_edge(self, edge):
         assert(isinstance(edge, Edge))
-        if edge.source not in self.graph.nodes():
-            logging.warning("source node '%s' does not exist" % edge.source)
-
-        if edge.target not in self.graph.nodes():
-            logging.warning("target node '%s' does not exist" % edge.target)
+        for name, n in {'source': edge.source, 'target': edge.target}.items():
+            assert n in self.graph.nodes(), \
+                    "%s node '%s' does not exist" % (name, n)
 
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge

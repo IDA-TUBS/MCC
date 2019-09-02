@@ -916,17 +916,17 @@ class Layer:
     def _add_node(self, node):
         assert isinstance(node, self.Node)
         obj  = node.untracked_obj()
-
         assert isinstance(obj, self.node_types()), \
                "%s is does not match types %s" % (obj, self.node_types())
+
+        assert node not in self.graph.nodes(), '%s already inserted' % node
 
         self.track_written('obj', node)
         return self.graph.add_node(node)
 
     def _add_edge(self, obj):
         assert isinstance(obj, Edge)
-        assert isinstance(obj.source, self.Node), '%s is not a Node' % obj.source
-        assert isinstance(obj.target, self.Node), '%s is not a Node' % obj.target
+        assert obj not in self.graph.edges(), '%s already inserted' % obj
 
         self.track_written('obj', obj)
         self.track_read('obj', obj.source)
@@ -975,53 +975,43 @@ class Layer:
         for name, value in params.items():
             self.set_param_value(ae, name, obj, value)
 
-    def insert_obj(self, ae, obj, nodes_only=False):
+    def insert_obj(self, ae, obj):
         """ Inserts one or multiple objects into the layer.
 
         Args:
             :param obj: Object(s) to be inserted.
-            :type  obj: :class:`mcc.graph.Edge`, :class:`mcc.graph.GraphObj`, object (used as node), a list or set of these.
-            :param nodes_only: Only insert node objects (used internally for two-pass insertion)
-            :type  nodes_only: boolean
+            :type  obj: :class:`mcc.graph.Edge`, :class:`mcc.graph.GraphObj`, :class:`mcc.framework.Layer.Node`, a list or set of these.
 
         Returns:
-            set of inserted nodes and edges
+            set of actually inserted nodes and edges
         """
         inserted = set()
 
         if isinstance(obj, Edge):
-            if not nodes_only:
-                inserted.add(self._add_edge(obj))
+            missing = {obj.source, obj.target}.difference(self.graph.nodes())
+            for node in missing:
+                inserted.update(self.insert_obj(ae, node))
+            inserted.add(self._add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
-        elif isinstance(obj, set) or isinstance(obj, list) or isinstance(obj, frozenset):
-
-            # first add all nodes and remember edges
-            edges = set()
+        elif isinstance(obj, (set, list, frozenset)):
             for o in obj:
-                tmp = self.insert_obj(ae, o, nodes_only=True)
-                if len(tmp) == 0:
-                    edges.add(o)
-                else:
-                    inserted.update(tmp)
-
-            # now we add the remaining edges
-            for o in edges:
-                inserted.update(self.insert_obj(ae, o, nodes_only=False))
-            assert(len(obj) == len(inserted))
+                inserted.update(self.insert_obj(ae, o))
         elif isinstance(obj, GraphObj):
-            if obj.is_edge():
-                if not nodes_only:
-                    o = self._add_edge(obj.obj)
-                    self.set_params(ae, o, obj.params())
-                    inserted.add(o)
-            else:
-                o = self._add_node(obj.obj)
-                self.set_params(ae, o, obj.params())
-                inserted.add(o)
+            assert isinstance(obj.obj, (self.Node, Edge))
+            inserted.update(self.insert_obj(ae, obj.obj))
+            self.set_params(ae, obj.obj, obj.params())
+        elif isinstance(obj, self.Node):
+            if obj not in self.graph.nodes():
+                self._add_node(obj)
+            # If obj was already inserted, it was inserted during a
+            # transformation to an edge, maybe even during a transformation
+            # from another object. In order to track everything properly, we
+            # add a dependency to the actual writing operation.
+            self.track_read('obj', obj)
+            inserted.add(obj)
         else:
-            o = self._add_node(obj)
-            inserted.add(o)
+            raise Exception('invalid obj type')
 
         return inserted
 
