@@ -83,41 +83,34 @@ class CPMappingEngine(AnalysisEngine):
         the total objective is to be minimized, lower values of high-priority
         objectives are always preferred even if this leads to far greater
         values of the lower-prioritized objectives.
+
+        Returns:
+            The total expression and a dictionary with the seperated objective
+            expressions and their upper bounds.
         """
-        result = OrderedDict()
+        expr = 0
+        var_data = OrderedDict()
+        # The expression of each priority level is multiplied with a factor so
+        # that the expressions of other levels do not interfere with it.
+        step_size = 1
         for categories in reversed(self.cost_priorities):
-            # The expression of each priority level is multiplied with a factor
-            # so that the expressions of other levels do not interfere with it.
-            step_size = 1
-            if len(result): #if not the lowest priority
-                previous = next(reversed(result.values()))
+            if len(var_data): #if not the lowest priority
+                previous = next(reversed(var_data.values()))
                 #guarantee growing step size even if the upper bound was <= 1
-                step_size = previous['step_size'] * max(2, previous['bound'])
+                step_size *= max(2, sum(previous['bounds']))
 
-            expr = bound = 0
             assert isinstance(categories, tuple)
-            for category in categories:
-                texpr, tbound = self._cost_funcs[category](data)
-                expr += texpr
-                bound += tbound
+            exprs, ubs = zip(*[self._cost_funcs[c](data) for c in categories])
 
-            result[categories] = {
-                    'expr': step_size * expr,
-                    'step_size': step_size,
-                    'bound': bound,
-                    }
-        return result
+            expr += step_size * sum(exprs)
+            var_data[categories] = {'exprs': exprs, 'bounds': ubs}
+        return expr, dict(reversed(var_data.items())) # high priority first
 
-    def _log_costs(self, cost_data, objective_value):
-        remaining = objective_value
-        #begin with the most-prioritized cost objective
-        for categories, data in reversed(cost_data.items()):
-            current = remaining // data['step_size']
-            remaining -= current * data['step_size']
-            assert 0 <= current <= data['bound']
-
-            msg = 'costs [%s]: %d/%d'
-            logging.info(msg % (', '.join(categories), current, data['bound']))
+    def _log_costs(self, cost_var_data, solver):
+        for i, (categories, data) in enumerate(cost_var_data.items(), start=1):
+            for cat, e, ub in zip(categories, data['exprs'], data['bounds']):
+                msg = 'cost [%s] (priority: %d): %d/%d'
+                logging.info(msg % (cat, i, solver.Value(e), ub))
 
     def _gen_communication_cost_data(self, data):
         """ directly connected objects on different sources will have cost 1 """
@@ -182,15 +175,15 @@ class CPMappingEngine(AnalysisEngine):
             bad_values = len(bad_vars) * (1,)
             data.model.AddForbiddenAssignments(bad_vars, [bad_values])
 
-        cost_data = self._gen_cost_data(data)
-        data.model.Minimize(sum(d['expr'] for d in cost_data.values()))
+        cost_expr, cost_var_data = self._gen_cost_data(data)
+        data.model.Minimize(cost_expr)
 
         solver = cp_model.CpSolver()
         status = solver.Solve(data.model)
         logging.info('Solution status: ' + solver.StatusName(status))
         if status not in {cp_model.FEASIBLE, cp_model.OPTIMAL}:
             return False
-        self._log_costs(cost_data, solver.ObjectiveValue())
+        self._log_costs(cost_var_data, solver)
 
         result = dict()
         for o in objects:
