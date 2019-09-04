@@ -21,10 +21,13 @@ class CPMappingEngine(AnalysisEngine):
 
     class ModelData():
         """ helper class for easier access to all the CP model data """
-        def __init__(self, objects, platforms):
+        def __init__(self, ae, layer, unmapped_objects):
             self.model = cp_model.CpModel()
-            self.o = objects
-            self.p = platforms
+            self.o = set(layer.graph.nodes())
+            #set of all platforms
+            self.p = set()
+            for o in self.o:
+                self.p.update(layer.get_param_candidates(ae, 'mapping', o))
 
             #generate the variables which will contain the final solution
             self.m = dict()
@@ -35,6 +38,10 @@ class CPMappingEngine(AnalysisEngine):
                     o_vars.append(self.m[o, p])
                 #each object should only be mapped once
                 self.model.Add(1 == sum(o_vars))
+
+            for predefined in self.o - set(unmapped_objects):
+                platform = layer.get_param_value(ae, 'mapping', predefined)
+                self.model.Add(1 == self.m[predefined, platform])
 
         def AND(self, *literals):
             """ return a BoolVar which is true iff all literals are true """
@@ -165,13 +172,13 @@ class CPMappingEngine(AnalysisEngine):
         if objects is None:
             assert len(bad_combinations) == 0
             objects = list(candidates.keys())
-        data = self.ModelData(objects, list(set().union(*candidates.values())))
+        data = self.ModelData(self, self.layer, objects)
 
-        for o in data.o:
+        for o in objects:
             for p in candidates[o].symmetric_difference(data.p):
                 data.model.Add(0 == data.m[o, p])
         for bad_combination in bad_combinations:
-            bad_vars = [data.m[k] for k in zip(data.o, bad_combination)]
+            bad_vars = [data.m[k] for k in zip(objects, bad_combination)]
             bad_values = len(bad_vars) * (1,)
             data.model.AddForbiddenAssignments(bad_vars, [bad_values])
 

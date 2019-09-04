@@ -663,13 +663,16 @@ class MappingEngine(AnalysisEngine):
     def _calculate_costs(self, combination):
         cost = 0
 
-        for obj in combination.keys():
+        total_combi = dict(combination)
+        for n in set(self.layer.graph.nodes()).difference(combination):
+            total_combi[n] = self.layer.get_param_value(self, 'mapping', n)
+
+        for obj in total_combi.keys():
 
             # directly connected objects on different sources will have cost 1
             for dep in self.layer.graph.out_edges(obj):
-                if dep.target in combination:
-                    if combination[dep.target] != combination[obj]:
-                        cost += 1
+                if total_combi[dep.target] != total_combi[obj]:
+                    cost += 1
 
             # dependencies that cannot be satisfied in the same domains will also have cost 1
             resolutions = self.layer.get_param_candidates(self, 'dependencies', obj)
@@ -677,9 +680,8 @@ class MappingEngine(AnalysisEngine):
             for resolution in resolutions:
                 local_cost = 0
                 for dep in resolution:
-                    if dep.provider in combination:
-                        if not combination[obj].in_native_domain(combination[dep.provider]):
-                            local_cost += 1
+                    if not total_combi[obj].in_native_domain(total_combi[dep.provider]):
+                        local_cost += 1
 
                 if local_cost < best_local_cost:
                     best_local_cost = local_cost
@@ -717,11 +719,9 @@ class MappingEngine(AnalysisEngine):
         return candidates
 
     def assign(self, obj, candidates):
-        # TODO here we call the constraint solver
         return list(candidates)[0]
 
     def batch_assign(self, data, objects, bad_combinations):
-        # TODO here we call the constraint solver
         sets   = list()
         if objects is None:
             assert len(bad_combinations) == 0
