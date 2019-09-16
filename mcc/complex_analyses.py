@@ -183,7 +183,7 @@ class CPMappingEngine(AnalysisEngine):
             data.model.AddForbiddenAssignments(bad_vars, [bad_values])
 
         cost_expr, cost_var_data = self._gen_cost_data(data)
-        data.model.Minimize(cost_expr)
+        data.model.Maximize(cost_expr)
 
         solver = cp_model.CpSolver()
         status = solver.Solve(data.model)

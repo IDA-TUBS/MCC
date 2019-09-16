@@ -313,7 +313,12 @@ class DecisionGraph(Graph):
     def root_path(self, u):
         preds = self.predecessors(u)
         reverse_path = [u]
+        cnt = 0
         while len(preds) != 0:
+            cnt += 1
+            if len(preds) != 1:
+                print('cnt: %d, u: %s, op: %s, preds: %s' % (cnt, u, u.operation, preds))
+                print('GOTCHA nontree!')
             assert len(preds) == 1
             p = list(preds)[0]
 #            assert p not in reverse_path
