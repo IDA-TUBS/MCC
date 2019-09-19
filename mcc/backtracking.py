@@ -260,6 +260,7 @@ class BacktrackRegistry(Registry):
 
     def _rollback_transform(self, node):
         op = node.operation
+        src_layer, trg_layer = op.source_layer, op.target_layer
         if self.clear_layers:
             for node in op.source_layer.graph.nodes():
                 op.source_layer._set_associated_objects(op.target_layer.name, node, set())
@@ -272,12 +273,30 @@ class BacktrackRegistry(Registry):
                     if o.target_layer == self.by_order[i]:
                         self.operations[o] = False
         else:
-            trg_nodes = op.source_layer.associated_objects(op.target_layer.name, node.obj)
-            for trg in trg_nodes:
-                self.delete_recursive(trg, op.target_layer)
+            # first, remove layer mapping to source obj from each target obj
+            for trg in src_layer.associated_objects(trg_layer.name, node.obj):
+                src_objs = trg_layer.associated_objects(src_layer.name, trg)
+                new = src_objs - {node.obj}
+                trg_layer._set_associated_objects(src_layer.name, trg, new)
+            # now, clear source->target layer mapping completely
+            src_layer._set_associated_objects(trg_layer.name, node.obj, set())
 
-            # clear source->target layer mapping
-            op.source_layer._set_associated_objects(op.target_layer.name, node.obj, set())
+            created = set() # actually created objects
+            for p in self.decision_graph.written_params(node):
+                if 'obj' == p.param:
+                    created.add(p.obj)
+                p.layer.untracked_clear_param_value(p.param, p.obj)
+
+            # by deleting edges first, we can log each deletion
+            created_edges = {o for o in created if isinstance(o, Edge)}
+            for o in list(created_edges) + list(created - created_edges):
+                # Other transform op's which tried to create the already
+                # existing 'o' object should have been backrolled earlier due
+                # to their automatically added read access record. Thus, the
+                # remaining set of associated objects should be empty now.
+                assert not len(trg_layer.associated_objects(src_layer.name, o))
+
+                self.delete_recursive(o, trg_layer)
 
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
