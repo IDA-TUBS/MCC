@@ -265,8 +265,26 @@ class DecisionGraph(Graph):
             node = self.revise_assign
             self.revise_assign = None
         else:
-            node = self.add_node(layer, obj, operation)
-            self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
+            debug = False
+            node = self.Node(layer, obj, operation, 0)
+            if node in self.nodes():
+                assert isinstance(operation, Check), "%s already in dependency graph" % node
+                print("%s already exists" % (node))
+                for r in self.read-self.written:
+                    if r not in self.read_params(node):
+                        debug = True
+                        print("read param %s not in %s: %s" % (r, node, self.read_params(node)))
+                for w in self.written:
+                    if w not in self.written_params(node):
+                        debug = True
+                        print("written param %s not in %s: %s" % (w, node, self.written_params(node)))
+
+
+                assert not debug
+
+            else:
+                node = self.add_node(layer, obj, operation)
+                self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
 
         self.read    = set()
         self.written = set()
@@ -2169,6 +2187,16 @@ class Check(Operation):
             assert(self.check_source_type(obj))
 
             self.source_layer.start_tracking(self)
+
+            # Note: We also re-run checks for nodes have not been
+            #       rolled back properly. An entire check operation
+            #       is marked invalidated if at least one of its nodes
+            #       was removed from the dependency graph. Other nodes
+            #       may still persist but we re-run the check anyway.
+            #       This could be omitted by checking whether there
+            #       is already a node in the graph.
+            #       For the moment, however, we re-run the check to
+            #       see whether its dependencies changed.
 
             for ae in self.analysis_engines:
                 result = ae.check(obj)
