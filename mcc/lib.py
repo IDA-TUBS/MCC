@@ -116,7 +116,7 @@ class MccBase:
         fe = FunctionEngine(fq, fa, model.repo)
         deps = NodeStep(Map(fe, 'dependencies'))
         deps.add_operation(Assign(fe, 'dependencies'))
-        deps.add_operation(Transform(fe, fa, 'dependencies'))
+        deps.add_operation(BatchTransform(fe, fa, 'dependencies'))
 
         model.add_step(deps)
         model.add_step(CopyEdgeStep(fq, fa, {'service'}))
@@ -129,12 +129,12 @@ class MccBase:
         cpme = CPMappingEngine(fq, model.repo, model.platform)
         fe = FunctionEngine(fq, fa, model.repo)
 
-        step = NodeStep(           Map(fe, 'dependencies'))
-        step.add_operation(        Map(me, 'map functions'))
-        step.add_operation(BatchAssign(cpme, 'map functions'))
-        step.add_operation( BatchCheck(me, 'map functions'))
-        step.add_operation(     Assign(fe, 'dependencies'))
-        step.add_operation(  Transform(fe, fa, 'dependencies'))
+        step = NodeStep(              Map(fe, 'dependencies'))
+        step.add_operation(           Map(me, 'map functions'))
+        step.add_operation(   BatchAssign(cpme, 'map functions'))
+        step.add_operation(    BatchCheck(me, 'map functions'))
+        step.add_operation(        Assign(fe, 'dependencies'))
+        step.add_operation(BatchTransform(fe, fa, 'dependencies'))
 
         model.add_step(step)
 
@@ -300,7 +300,7 @@ class MccBase:
         model.add_step(CopyNodeStep(fa, fc, {'mapping'}))
 
         # perform arc split
-        model.add_step(EdgeStep(Transform(re, fc, 'arc split')))
+        model.add_step(EdgeStep(BatchTransform(re, fc, 'arc split')))
 
     def _merge_components(self, model, slayer, dlayer, factory, pf_model):
         """ Merge components into component instantiations.

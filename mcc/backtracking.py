@@ -26,7 +26,6 @@ class BacktrackRegistry(Registry):
         super().__init__()
         self.dec_graph = DecisionGraph()
         self.backtracking_try = 0
-        self.clear_layers = False
 
         # stores state (completed) of operations
         self.operations = dict()
@@ -268,42 +267,39 @@ class BacktrackRegistry(Registry):
     def _rollback_transform(self, node):
         op = node.operation
         src_layer, trg_layer = op.source_layer, op.target_layer
-        if self.clear_layers:
-            for node in op.source_layer.graph.nodes():
-                op.source_layer._set_associated_objects(op.target_layer.name, node, set())
-            for edge in op.source_layer.graph.edges():
-                op.source_layer._set_associated_objects(op.target_layer.name, edge, set())
-            self.reset(op.target_layer)
-
-            for i in range(self.by_order.index(op.target_layer), len(self.by_order)):
-                for o in self.operations.keys():
-                    if o.target_layer == self.by_order[i]:
-                        self.operations[o] = False
+        objects = set()
+        if isinstance(op, BatchTransform):
+            assert isinstance(node.obj, set) or isinstance(node.obj, frozenset)
+            objects.update(node.obj)
         else:
+            objects.add(node.obj)
+
+        for obj in objects:
             # first, remove layer mapping to source obj from each target obj
-            for trg in src_layer.associated_objects(trg_layer.name, node.obj):
+            for trg in src_layer.associated_objects(trg_layer.name, obj):
                 src_objs = trg_layer.associated_objects(src_layer.name, trg)
-                new = src_objs - {node.obj}
+                new = src_objs - {obj}
                 trg_layer._set_associated_objects(src_layer.name, trg, new)
             # now, clear source->target layer mapping completely
-            src_layer._set_associated_objects(trg_layer.name, node.obj, set())
+            src_layer._set_associated_objects(trg_layer.name, obj, set())
 
-            created = set() # actually created objects
-            for p in self.decision_graph.written_params(node):
-                if 'obj' == p.param:
-                    created.add(p.obj)
+        created = set() # actually created objects
+        for p in self.decision_graph.written_params(node):
+            if 'obj' == p.param:
+                created.add(p.obj)
+            if p.obj is not None:
                 p.layer.untracked_clear_param_value(p.param, p.obj)
 
-            # by deleting edges first, we can log each deletion
-            created_edges = {o for o in created if isinstance(o, Edge)}
-            for o in list(created_edges) + list(created - created_edges):
-                # Other transform op's which tried to create the already
-                # existing 'o' object should have been backrolled earlier due
-                # to their automatically added read access record. Thus, the
-                # remaining set of associated objects should be empty now.
-                assert not len(trg_layer.associated_objects(src_layer.name, o))
+        # by deleting edges first, we can log each deletion
+        created_edges = {o for o in created if isinstance(o, Edge)}
+        for o in list(created_edges) + list(created - created_edges):
+            # Other transform op's which tried to create the already
+            # existing 'o' object should have been backrolled earlier due
+            # to their automatically added read access record. Thus, the
+            # remaining set of associated objects should be empty now.
+            assert not len(trg_layer.associated_objects(src_layer.name, o))
 
-                self.delete_recursive(o, trg_layer)
+            self.delete_recursive(o, trg_layer)
 
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
@@ -315,7 +311,7 @@ class BacktrackRegistry(Registry):
             if n in visited_checks:
                 continue
 
-            assert n.obj is None or n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
+            assert n.obj is None or isinstance(n.obj, frozenset) or n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
 
             # invalidate layer depending on what operations were involved
             op = n.operation

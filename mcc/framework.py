@@ -2268,6 +2268,63 @@ class Transform(Operation):
         return True
 
 
+class BatchTransform(Transform):
+    """ Implements the transform operation as a batch operation.
+
+        The batch operation will only insert a single node into the dependency graph.
+        It is required for operations that insert non-local edges.
+    """
+    def __init__(self, ae, target_layer, name=''):
+        Transform.__init__(self, ae, target_layer, name)
+
+    def execute(self, iterable):
+        logging.info("Executing %s" % self)
+
+        self.source_layer.start_tracking(self)
+
+        objects = set()
+        for (index ,obj) in enumerate(iterable):
+
+            # skip if parameter was already selected
+            if len(self.source_layer.associated_objects(self.target_layer.name, obj)) > 0:
+                logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
+                continue
+
+            objects.add(obj)
+
+            new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
+            if not new_objs:
+                logging.warning("transform() did not return any object (returned: %s)" % new_objs)
+            else:
+                # remark: also returns already existing objects
+                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs, parent=obj, local=False)
+                assert len(inserted) > 0
+
+                for o in inserted:
+                    if not isinstance(o, Edge):
+                        assert isinstance(o.untracked_obj(),
+                                          self.target_layer.node_types()), \
+                               "%s does not match types %s" \
+                                    % (o.untracked_obj(), self.target_layer.node_types())
+
+                self.source_layer._set_associated_objects(self.target_layer.name, obj, inserted)
+
+                for o in inserted:
+                    src = self.target_layer.associated_objects(self.source_layer.name, o)
+                    if src is None:
+                        src = { obj }
+                    elif isinstance(src, set) or isinstance(src, frozenset):
+                        src.add(obj)
+                    else:
+                        # should never happen, because src must be a set
+                        src = { src, obj }
+                    self.target_layer._set_associated_objects(self.source_layer.name, o, src)
+
+        self.source_layer.stop_tracking(frozenset(objects))
+
+        return True
+
+
 class Check(Operation):
     """ Implements the check operation, which is used for admission testing.
     """
