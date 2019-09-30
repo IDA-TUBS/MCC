@@ -62,12 +62,12 @@ class TasksCoreEngine(AnalysisEngine):
 
         # for each incoming connection (see if incoming signal exists)
         signals = set()
-        for e in self.layer.graph.in_edges(obj):
+        for e in self.layer.in_edges(obj):
             serv = self.layer.get_param_value(self, 'target-service', e)
             signals.add(serv.ref())
 
         # for each outgoing connection (see if incoming signal exists)
-        for e in self.layer.graph.out_edges(obj):
+        for e in self.layer.out_edges(obj):
             serv = self.layer.get_param_value(self, 'source-service', e)
             signals.add(serv.ref())
 
@@ -127,7 +127,7 @@ class TasksRPCEngine(AnalysisEngine):
         to_ref = call.expect_out_args['to_ref']
         method = call.expect_out_args('method')
         server = None
-        for e in self.layer.graph.out_edges(obj):
+        for e in self.layer.out_edges(obj):
             src = self.layer.get_param_value(self, 'source-service', e)
             if src.ref() == to_ref:
                 server = e.target
@@ -389,7 +389,7 @@ class NetworkEngine(AnalysisEngine):
         comp = self.layer.get_param_value(self, 'component', obj)
 
         # trace ROM services
-        for edge in self.layer.graph.in_edges(obj):
+        for edge in self.layer.in_edges(obj):
             if edge.source in visited:
                 continue
 
@@ -412,7 +412,7 @@ class NetworkEngine(AnalysisEngine):
                             return sink
 
         # trace Network services
-        for edge in self.layer.graph.out_edges(obj):
+        for edge in self.layer.out_edges(obj):
             service = self.layer.get_param_value(self, 'service', edge)
             if service.function == 'Network':
                 return edge.target
@@ -446,7 +446,7 @@ class NetworkEngine(AnalysisEngine):
 
         # only evaluate and trace provided ROM services that have an out-traffic node
         comp = self.layer.get_param_value(self, 'component', obj)
-        for edge in self.layer.graph.in_edges(obj):
+        for edge in self.layer.in_edges(obj):
             if self.layer.isset_param_value(self, 'mapping', edge.source):
                 other_pfc = self.layer.get_param_value(self, 'mapping', edge.source)
                 if pfc != other_pfc:
@@ -556,7 +556,7 @@ class FunctionEngine(AnalysisEngine):
             depfunc = dep['function']
             # edge exists?
             satisfied = False
-            for e in self.layer.graph.out_edges(obj):
+            for e in self.layer.out_edges(obj):
                 sc = self.layer.get_param_value(self, 'service', e)
                 if sc.function == depfunc:
                     satisfied = True
@@ -606,7 +606,7 @@ class FunctionEngine(AnalysisEngine):
         for f in functions:
             # find function provider(s)
             dependencies[f] = set()
-            for node in self.layer.graph.nodes():
+            for node in self.layer.nodes():
                 if node is obj:
                     continue
 
@@ -664,13 +664,13 @@ class MappingEngine(AnalysisEngine):
         cost = 0
 
         total_combi = dict(combination)
-        for n in set(self.layer.graph.nodes()).difference(combination):
+        for n in set(self.layer.nodes()).difference(combination):
             total_combi[n] = self.layer.get_param_value(self, 'mapping', n)
 
         for obj in total_combi.keys():
 
             # directly connected objects on different sources will have cost 1
-            for dep in self.layer.graph.out_edges(obj):
+            for dep in self.layer.out_edges(obj):
                 if total_combi[dep.target] != total_combi[obj]:
                     cost += 1
 
@@ -786,7 +786,7 @@ class DependencyEngine(AnalysisEngine):
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
     def _find_provider_recursive(self, node, function):
-        for con in self.layer.graph.out_edges(node):
+        for con in self.layer.out_edges(node):
             comp2 = self.layer.get_param_value(self, 'component', con.target)
             if function in comp2.functions():
                 return True
@@ -835,7 +835,7 @@ class ComponentDependencyEngine(AnalysisEngine):
             for s in obj.obj(self.layer).requires_services():
                 # find provider among connected nodes
                 found = 0
-                for con in self.layer.graph.out_edges(obj):
+                for con in self.layer.out_edges(obj):
                     src_serv = self.layer.get_param_value(self, 'source-service', con)
                     assert(src_serv is not None)
                     if s == src_serv:
@@ -1124,7 +1124,7 @@ class MuxerEngine(AnalysisEngine):
                 return {None}
 
             affected_edges = set()
-            for e in self.layer.graph.in_edges(obj):
+            for e in self.layer.in_edges(obj):
                 if self.layer.get_param_value(self, 'target-service', e).matches(restricted_service):
                     affected_edges.add(e)
 
@@ -1304,8 +1304,8 @@ class PatternEngine(AnalysisEngine):
         if self.layer.get_param_value(self, self.param, obj) is None:
             # no protocol stack was selected
             if isinstance(obj, Edge):
-                assert obj.source in target_layer.graph.nodes(), "%s is not in %s" % (obj.source, target_layer)
-                assert obj.target in target_layer.graph.nodes(), "%s is not in %s" % (obj.target, target_layer)
+                assert obj.source in target_layer.nodes(), "%s is not in %s" % (obj.source, target_layer)
+                assert obj.target in target_layer.nodes(), "%s is not in %s" % (obj.target, target_layer)
 
             return obj
         elif isinstance(obj, Edge):
@@ -1498,7 +1498,7 @@ class ReachabilityEngine(AnalysisEngine):
 
             # add dependencies to pcomp
             found = False
-            for n in self.layer.graph.nodes():
+            for n in self.layer.nodes():
                 comp = n.obj(self.layer)
                 if pcomp in comp.functions():
                     pfc  = self.layer.get_param_value(self, 'mapping', n)
@@ -1670,7 +1670,7 @@ class SingletonEngine(AnalysisEngine):
         # first, every node, which is a singleton component, must only be present once per PfComponent
         subsys = self.layer.get_param_value(self, 'mapping', obj)
         if instance.component.singleton():
-            for n in self.layer.graph.nodes() - {obj}:
+            for n in self.layer.nodes() - {obj}:
                 if n.obj(self.layer).is_component(instance.component):
                     other_subsys = self.layer.get_param_value(self, 'mapping', n)
                     if subsys.same_singleton_domain(other_subsys):
@@ -1687,7 +1687,7 @@ class SingletonEngine(AnalysisEngine):
         if len(restrictions) == 0:
             return True
 
-        for e in self.layer.graph.in_edges(obj):
+        for e in self.layer.in_edges(obj):
             s = self.layer.get_param_value(self, 'target-service', e)
             if s in restrictions:
                 restrictions[s]['cur'] += 1

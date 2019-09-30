@@ -23,7 +23,7 @@ class CPMappingEngine(AnalysisEngine):
         """ helper class for easier access to all the CP model data """
         def __init__(self, ae, layer, unmapped_objects):
             self.model = cp_model.CpModel()
-            self.o = set(layer.graph.nodes())
+            self.o = set(layer.nodes())
             #set of all platforms
             self.p = set()
             for o in self.o:
@@ -123,7 +123,7 @@ class CPMappingEngine(AnalysisEngine):
         """ directly connected objects on different sources will have cost 1 """
         expr = bound = 0
         for o in data.o:
-            for dep in self.layer.graph.out_edges(o):
+            for dep in self.layer.out_edges(o):
                 if dep.target not in data.o:
                     continue
 

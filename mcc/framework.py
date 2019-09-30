@@ -583,6 +583,8 @@ class DecisionGraph(Graph):
         all_no  = True
         choice  = False
         for p in self.written_params(node):
+            if p.obj is None:
+                continue
             ncands = len(p.layer.untracked_get_param_candidates(p.param, p.obj))
             if ncands != 0:
                 all_no = False
@@ -965,6 +967,9 @@ class Layer:
         assert node not in self.graph.nodes(), '%s already inserted' % node
 
         self.track_written('obj', node)
+        self.track_written('outedges', node)
+        self.track_written('inedges',  node)
+        self.track_written('nodes',  None)
         return self.graph.add_node(node)
 
     def _add_edge(self, obj):
@@ -974,7 +979,26 @@ class Layer:
         self.track_written('obj', obj)
         self.track_read('obj', obj.source)
         self.track_read('obj', obj.target)
+        self.track_written('outedges', obj.source)
+        self.track_written('inedges',  obj.target)
+        self.track_written('edges',  None)
         return self.graph.add_edge(obj)
+
+    def out_edges(self, node):
+        self.track_read('outedges', node)
+        return self.graph.out_edges(node)
+
+    def in_edges(self, node):
+        self.track_read('inedges', node)
+        return self.graph.in_edges(node)
+
+    def nodes(self):
+        self.track_read('nodes', None)
+        return self.graph.nodes()
+
+    def edges(self):
+        self.track_read('edges', None)
+        return self.graph.edges()
 
     def remove_node(self, obj):
         return self.graph.remove_node(obj)
