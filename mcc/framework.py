@@ -2217,17 +2217,17 @@ class BatchCheck(Check):
         return True
 
 class ConstraintNotSatisfied(Exception):
-    def __init__(self, operation):
+    def __init__(self, node):
         super().__init__()
-        self.operation = operation
+        self.node = node
 
-        assert isinstance(operation, DecisionGraph.Node)
+        assert isinstance(node, DecisionGraph.Node)
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        return self.operation.__repr__()
+        return self.node.__repr__()
 
 class Step:
     """ Implements model transformation step.

@@ -38,7 +38,8 @@ class BacktrackRegistry(Registry):
                        'rolled-back operations' : 0,
                        'cut-off combinations'   : 0,
                        'variables'              : 0,
-                       'combinations'           : 0 }
+                       'combinations'           : 0,
+                       'failed_ops'             : dict()}
 
     def _find_variables(self):
         variables = set()
@@ -147,7 +148,7 @@ class BacktrackRegistry(Registry):
                     name = 'decision-try-%d.dot' % self.backtracking_try
                     path = outpath + name
                     leaves = self.decision_graph.successors(culprit, recursive=True)
-                    highlight = {cns.operation}
+                    highlight = {cns.node}
 
                     self.decision_graph.write_dot(path, leaves=None,
                                                   verbose=True,
@@ -155,7 +156,8 @@ class BacktrackRegistry(Registry):
                                                   highlight=highlight)
 
                     print(" rolling back %d operations" % len(leaves))
-                    self._update_stats(len(leaves))
+                    self._update_stats(len(leaves), cns.node.operation)
+                    print("\n%s" % self.stats)
 
                 if outpath is not None:
                     export = PickleExporter(self)
@@ -178,7 +180,7 @@ class BacktrackRegistry(Registry):
                 raise(ex)
         return True
 
-    def _update_stats(self, num_operations):
+    def _update_stats(self, num_operations, failed_operation):
         self.stats['rolled-back operations'] += num_operations
         variables = self._find_variables()
         if len(variables) > self.stats['variables']:
@@ -195,8 +197,13 @@ class BacktrackRegistry(Registry):
         else:
             self.stats['cut-off combinations'] += self.stats['combinations'] - combinations
 
+        if isinstance(failed_operation, Operation):
+            if failed_operation not in self.stats['failed_ops']:
+                self.stats['failed_ops'][failed_operation] = 0
+            self.stats['failed_ops'][failed_operation] += 1
+
     def find_culprit(self, cns):
-        return self._find_brancheable({cns.operation})
+        return self._find_brancheable({cns.node})
 
     def _dependencies(self, nodes):
         result = set()
