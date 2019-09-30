@@ -493,13 +493,22 @@ class DecisionGraph(Graph):
         elif len(read_params) == 0 and len(written) > 0:
             self.create_edge(self.root, node)
 
+        old_transforms = dict()
         for p in written:
             written_params.add(p)
 
             if p not in self.param_store:
                 self.param_store[p] = self.Writers()
 
+            if isinstance(node.operation, Transform):
+                # if there are already writers (only possible if Transform), remember them for later check
+                old_transforms[p] = set()
+                old_transforms[p].update(self.param_store[p].transform)
             self.param_store[p].register(node)
+
+        # add old writers as dependencies
+        for p,trafos in old_transforms.items():
+            writers.update(trafos)
 
         if len(writers) == 0:
             return
@@ -542,11 +551,22 @@ class DecisionGraph(Graph):
             # second, the only remaining dependency is main
             self.create_edge(main, node)
 
-#        # check iteration hierachry
-#        last = 0
-#        for n in self.root_path(node):
-#            assert n.iteration >= last
-#            last = n.iteration
+        # ensure that all nodes that already depend on this writer are transitively dependent on the new node
+        for p,trafos in old_transforms.items():
+            # assemble readers
+            readers = set()
+            for t in trafos:
+                for s in self.successors(t, recursive=True):
+                    if p in self.read_params(s):
+                        readers.add(s)
+
+            for r in readers:
+                # node must not depend on this or any of its successors
+                assert node not in self.successors(r, recursive=True)
+                # remove edge to predecessor and redirect it to 'node'
+                for e in self.in_edges(r):
+                    self.remove_edge(e)
+                    self.create_edge(node, r)
 
     def remove(self, node):
         for p in self.written_params(node):
@@ -1031,6 +1051,7 @@ class Layer:
             # transformation to an edge, maybe even during a transformation
             # from another object. In order to track everything properly, we
             # add a dependency to the actual writing operation.
+            # FIXME the multiple writer issue should be handled by the dependency graph
             self.track_read('obj', obj)
             inserted.add(obj)
         else:
