@@ -1042,7 +1042,7 @@ class Layer:
         for name, value in params.items():
             self.set_param_value(ae, name, obj, value)
 
-    def insert_obj(self, ae, obj):
+    def insert_obj(self, ae, obj, parent, local=True):
         """ Inserts one or multiple objects into the layer.
 
         Args:
@@ -1055,18 +1055,67 @@ class Layer:
         inserted = set()
 
         if isinstance(obj, Edge):
+            # FIXME implement two-pass transform to insert nodes first
             missing = {obj.source, obj.target}.difference(self.graph.nodes())
             for node in missing:
-                inserted.update(self.insert_obj(ae, node))
+                if local:
+                    logging.warning("Implicit edge creation may render locality check ineffective.")
+                inserted.update(self.insert_obj(ae, node, parent=parent, local=local))
+
+            # local insertions are restricted to edges between nodes whose parents
+            # are already connected (or have the same parent)
+            if local:
+                if isinstance(parent, Edge):
+                    # check that connected nodes either belong to one of
+                    # the parents or are newly inserted
+                    source_parents = self.associated_objects(ae.layer.name, obj.source)
+                    target_parents = self.associated_objects(ae.layer.name, obj.target)
+
+                    if len(source_parents) == 0:
+                        source_parents = {parent}
+
+                    if len(target_parents) == 0:
+                        target_parents = {parent}
+
+                    if len(source_parents & target_parents) == 0:
+                        if parent in target_parents:
+                            assert parent.source in source_parents, \
+                                "Locality not given when inserting edge %s, unexpected source. Please use BatchTransform instead." \
+                                % (obj)
+                        if parent in source_parents:
+                            assert parent.target in target_parents, \
+                                "Locality not given when inserting edge %s, unexpexted target. Please use BatchTransform instead." \
+                                % (obj)
+                else:
+                    # check that there is an edge between parent objects
+                    source_parents = self.associated_objects(ae.layer.name, obj.source)
+                    target_parents = self.associated_objects(ae.layer.name, obj.target)
+
+                    if len(source_parents) == 0:
+                        source_parents = {parent}
+
+                    if len(target_parents) == 0:
+                        target_parents = {parent}
+
+                    if len(source_parents & target_parents) == 0:
+                        found = False
+                        for p in source_parents:
+                            for e in ae.layer.graph.out_edges(p):
+                                if e.target in target_parents:
+                                    found = True
+                                    break
+
+                        assert found, "Locality not given when inserting edge %s. Please use BatchTransform instead." % (obj)
+
             inserted.add(self._add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
         elif isinstance(obj, (set, list, frozenset)):
             for o in obj:
-                inserted.update(self.insert_obj(ae, o))
+                inserted.update(self.insert_obj(ae, o, parent=parent, local=local))
         elif isinstance(obj, GraphObj):
             assert isinstance(obj.obj, (self.Node, Edge))
-            inserted.update(self.insert_obj(ae, obj.obj))
+            inserted.update(self.insert_obj(ae, obj.obj, parent=parent, local=local))
             self.set_params(ae, obj.obj, obj.params())
         elif isinstance(obj, self.Node):
             if obj not in self.graph.nodes():
@@ -2191,7 +2240,7 @@ class Transform(Operation):
                 logging.warning("transform() did not return any object (returned: %s)" % new_objs)
             else:
                 # remark: also returns already existing objects
-                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs)
+                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs, parent=obj)
                 assert len(inserted) > 0
 
                 for o in inserted:
