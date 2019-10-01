@@ -1042,7 +1042,7 @@ class Layer:
         for name, value in params.items():
             self.set_param_value(ae, name, obj, value)
 
-    def insert_obj(self, ae, obj, parent, local=True):
+    def insert_obj(self, ae, obj, parent, local=True, nodes=True, edges=True):
         """ Inserts one or multiple objects into the layer.
 
         Args:
@@ -1054,13 +1054,13 @@ class Layer:
         """
         inserted = set()
 
-        if isinstance(obj, Edge):
-            # FIXME implement two-pass transform to insert nodes first
+        if isinstance(obj, Edge) and edges:
             missing = {obj.source, obj.target}.difference(self.graph.nodes())
-            for node in missing:
-                if local:
-                    logging.warning("Implicit edge creation may render locality check ineffective.")
-                inserted.update(self.insert_obj(ae, node, parent=parent, local=local))
+            assert len(missing) == 0, "Missing nodes detected during edge creation: %s.\n" \
+                                      "Please consider creating the edge %s by " \
+                                      "transforming edges and not during node transformation. " \
+                                      "Alternatively use a BatchTransform." \
+                                      % (missing, obj)
 
             # local insertions are restricted to edges between nodes whose parents
             # are already connected (or have the same parent)
@@ -1080,11 +1080,13 @@ class Layer:
                     if len(source_parents & target_parents) == 0:
                         if parent in target_parents:
                             assert parent.source in source_parents, \
-                                "Locality not given when inserting edge %s, unexpected source. Please use BatchTransform instead." \
+                                "Locality not given when inserting edge %s, " \
+                                "unexpected source. Please use BatchTransform instead." \
                                 % (obj)
                         if parent in source_parents:
                             assert parent.target in target_parents, \
-                                "Locality not given when inserting edge %s, unexpexted target. Please use BatchTransform instead." \
+                                "Locality not given when inserting edge %s, " \
+                                "unexpected target. Please use BatchTransform instead." \
                                 % (obj)
                 else:
                     # check that there is an edge between parent objects
@@ -1105,19 +1107,28 @@ class Layer:
                                     found = True
                                     break
 
-                        assert found, "Locality not given when inserting edge %s. Please use BatchTransform instead." % (obj)
+                        assert found, "Locality not given when inserting edge %s. " \
+                                      "Please use BatchTransform instead." % (obj)
 
             inserted.add(self._add_edge(obj))
         elif isinstance(obj, Graph):
             raise NotImplementedError()
         elif isinstance(obj, (set, list, frozenset)):
             for o in obj:
-                inserted.update(self.insert_obj(ae, o, parent=parent, local=local))
+                inserted.update(self.insert_obj(ae, o, parent=parent,
+                                                       local=local,
+                                                       nodes=nodes,
+                                                       edges=edges))
         elif isinstance(obj, GraphObj):
             assert isinstance(obj.obj, (self.Node, Edge))
-            inserted.update(self.insert_obj(ae, obj.obj, parent=parent, local=local))
-            self.set_params(ae, obj.obj, obj.params())
-        elif isinstance(obj, self.Node):
+            tmp = self.insert_obj(ae, obj.obj, parent=parent,
+                                               local=local,
+                                               nodes=nodes,
+                                               edges=edges)
+            if len(tmp):
+                self.set_params(ae, obj.obj, obj.params())
+            inserted.update(tmp)
+        elif isinstance(obj, self.Node) and nodes:
             if obj not in self.graph.nodes():
                 self._add_node(obj)
             # If obj was already inserted, it was inserted during a
@@ -1127,8 +1138,6 @@ class Layer:
             # FIXME the multiple writer issue should be handled by the dependency graph
             self.track_read('obj', obj)
             inserted.add(obj)
-        else:
-            raise Exception('invalid obj type')
 
         return inserted
 
@@ -2240,7 +2249,15 @@ class Transform(Operation):
                 logging.warning("transform() did not return any object (returned: %s)" % new_objs)
             else:
                 # remark: also returns already existing objects
-                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs, parent=obj)
+                inserted_nodes = self.target_layer.insert_obj(self.analysis_engines[0],
+                                                              new_objs,
+                                                              parent=obj,
+                                                              edges=False)
+                inserted_edges = self.target_layer.insert_obj(self.analysis_engines[0],
+                                                              new_objs,
+                                                              parent=obj,
+                                                              nodes=False)
+                inserted = inserted_nodes | inserted_edges
                 assert len(inserted) > 0
 
                 for o in inserted:
@@ -2282,7 +2299,11 @@ class BatchTransform(Transform):
 
         self.source_layer.start_tracking(self)
 
-        objects = set()
+        objects  = set()
+        new_objs = dict()
+        inserted_nodes = dict()
+
+        # first pass: call transform() on all objects and fill new_objs and insert nodes
         for (index ,obj) in enumerate(iterable):
 
             # skip if parameter was already selected
@@ -2292,33 +2313,45 @@ class BatchTransform(Transform):
 
             objects.add(obj)
 
-            new_objs = self.analysis_engines[0].transform(obj, self.target_layer)
-            if not new_objs:
-                logging.warning("transform() did not return any object (returned: %s)" % new_objs)
+            new_objs[obj] = self.analysis_engines[0].transform(obj, self.target_layer)
+            if not new_objs[obj]:
+                logging.warning("transform() did not return any object (returned: %s)" % new_objs[obj])
             else:
                 # remark: also returns already existing objects
-                inserted = self.target_layer.insert_obj(self.analysis_engines[0], new_objs, parent=obj, local=False)
-                assert len(inserted) > 0
+                inserted_nodes[obj] = self.target_layer.insert_obj(self.analysis_engines[0],
+                                                                   new_objs[obj],
+                                                                   parent=obj,
+                                                                   local=False,
+                                                                   edges=False)
+        # second pass: insert edges into target_layer
+        for obj, new in new_objs.items():
+            inserted_edges = self.target_layer.insert_obj(self.analysis_engines[0],
+                                                          new,
+                                                          parent=obj,
+                                                          local=False,
+                                                          nodes=False)
+            inserted = inserted_nodes[obj] | inserted_edges
+            assert len(inserted) > 0
 
-                for o in inserted:
-                    if not isinstance(o, Edge):
-                        assert isinstance(o.untracked_obj(),
-                                          self.target_layer.node_types()), \
-                               "%s does not match types %s" \
-                                    % (o.untracked_obj(), self.target_layer.node_types())
+            for o in inserted:
+                if not isinstance(o, Edge):
+                    assert isinstance(o.untracked_obj(),
+                                      self.target_layer.node_types()), \
+                           "%s does not match types %s" \
+                                % (o.untracked_obj(), self.target_layer.node_types())
 
-                self.source_layer._set_associated_objects(self.target_layer.name, obj, inserted)
+            self.source_layer._set_associated_objects(self.target_layer.name, obj, inserted)
 
-                for o in inserted:
-                    src = self.target_layer.associated_objects(self.source_layer.name, o)
-                    if src is None:
-                        src = { obj }
-                    elif isinstance(src, set) or isinstance(src, frozenset):
-                        src.add(obj)
-                    else:
-                        # should never happen, because src must be a set
-                        src = { src, obj }
-                    self.target_layer._set_associated_objects(self.source_layer.name, o, src)
+            for o in inserted:
+                src = self.target_layer.associated_objects(self.source_layer.name, o)
+                if src is None:
+                    src = { obj }
+                elif isinstance(src, set) or isinstance(src, frozenset):
+                    src.add(obj)
+                else:
+                    # should never happen, because src must be a set
+                    src = { src, obj }
+                self.target_layer._set_associated_objects(self.source_layer.name, o, src)
 
         self.source_layer.stop_tracking(frozenset(objects))
 
