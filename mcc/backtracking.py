@@ -13,6 +13,7 @@ Implements backtracking-related data structures.
 from mcc.framework import *
 from mcc.graph import *
 from mcc.importexport import *
+from mcc.tracking import DecisionTree as Tracker
 
 
 class BacktrackRegistry(Registry):
@@ -24,7 +25,7 @@ class BacktrackRegistry(Registry):
 
     def __init__(self):
         super().__init__()
-        self.dec_graph = DecisionGraph()
+        self.dec_graph = Tracker()
         self.backtracking_try = 0
 
         # stores state (completed) of operations
@@ -99,7 +100,7 @@ class BacktrackRegistry(Registry):
         """ Executes the registered steps sequentially.
         """
 
-        self.decision_graph = DecisionGraph()
+        self.decision_graph = Tracker()
         self.decision_graph.initialize_tracking(self.by_order)
 
         while not self._backtrack_execute(outpath):
