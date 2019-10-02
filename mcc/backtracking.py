@@ -31,8 +31,8 @@ class BacktrackRegistry(Registry):
         # stores state (completed) of operations
         self.operations = dict()
 
-#        self.variables = list()
-#        self.failed    = list()
+        self.variables = list()
+        self.failed    = list()
 
         self.stats = { 'iterations'             : 0,
                        'rolled-back operations' : 0,
@@ -49,39 +49,39 @@ class BacktrackRegistry(Registry):
 
         return variables
 
-#    def _check_variables(self):
-#        if len(self.variables) == 0:
-#            self.variables = list(self._find_variables())
-#        else:
-#            cur_variables = self._find_variables()
-#            assert len(cur_variables) == len(self.variables)
-#            for v in cur_variables:
-#                assert v in self.variables
-#
-#    def _record_failed(self):
-#        self._check_variables()
-#
-#        failed = list()
-#        for v in self.variables:
-#            failed.append(str(v.layer.untracked_get_param_value(v.param, v.obj)))
-#
-#        if failed in self.failed:
-#            logging.error("Already failed on the following set of parameters: ")
-#            for i in range(len(self.variables)):
-#                logging.error("%s: %s" % (self.variables[i], failed[i]))
-#
-#
-#            for f in self.failed:
-#                print(f)
-#
-#            assert False
-#
-#        self.failed.append(failed)
-#
-#        print("Problem has %d variables, failed on %d" % (len(self.variables), len(self.failed)))
-#        if len(self.failed) == 1:
-#            print(self.variables)
-#            print(self.failed)
+    def _check_variables(self):
+        if len(self.variables) == 0:
+            self.variables = list(self._find_variables())
+        else:
+            cur_variables = self._find_variables()
+            assert len(cur_variables) == len(self.variables)
+            for v in cur_variables:
+                assert v in self.variables
+
+    def _record_failed(self):
+        self._check_variables()
+
+        failed = list()
+        for v in self.variables:
+            failed.append(str(v.layer.untracked_get_param_value(v.param, v.obj)))
+
+        if failed in self.failed:
+            logging.error("Already failed on the following set of parameters: ")
+            for i in range(len(self.variables)):
+                logging.error("%s: %s" % (self.variables[i], failed[i]))
+
+
+            for f in self.failed:
+                print(f)
+
+            assert False
+
+        self.failed.append(failed)
+
+        print("Problem has %d variables, failed on %d" % (len(self.variables), len(self.failed)))
+        if len(self.failed) == 1:
+            print(self.variables)
+            print(self.failed)
 
     def complete_operation(self, operation):
         self.operations[operation] = True
@@ -130,7 +130,9 @@ class BacktrackRegistry(Registry):
                 step.execute(self)
 
             except ConstraintNotSatisfied as cns:
-#                self._record_failed()
+                if __debug__:
+                    self._record_failed()
+
                 logging.info('%s failed' % cns)
 
                 # find branch point
