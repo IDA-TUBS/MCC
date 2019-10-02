@@ -13,7 +13,7 @@ Implements backtracking-related data structures.
 from mcc.framework import *
 from mcc.graph import *
 from mcc.importexport import *
-from mcc.tracking import DecisionTree as Tracker
+from mcc.tracking import TopologicalGraph as Tracker
 
 
 class BacktrackRegistry(Registry):

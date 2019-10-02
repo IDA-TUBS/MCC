@@ -113,6 +113,13 @@ class DecisionGraph(Graph):
                    self.obj   == rhs.obj   and \
                    self.operation == rhs.operation
 
+        def __lt__(self, rhs):
+            if self.iteration == rhs.iteration:
+                if hasattr(self, 'rank') and hasattr(rhs, 'rank'):
+                    return self.rank < rhs.rank
+
+            return self.iteration < rhs.iteration
+
 
     class Failed:
         def __init__(self, params):

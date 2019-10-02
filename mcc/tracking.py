@@ -10,6 +10,117 @@ Implements dependency tracking.
 """
 
 from mcc.framework import *
+from  networkx.algorithms import dag
+from  networkx.algorithms import shortest_paths
+
+class TopologicalGraph(DecisionGraph):
+    """ Stores dependencies between decisions as graph which is
+        sequentialising on demand by performing topological sort
+        on the relevant subgraph.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def sort(self, node, calculate_ranks=True):
+        """ execute topological sort for ordering
+            all predecessors of 'node' ensuring that
+            old nodes come before younger nodes.
+            We also try to rate what nodes should come first. Nodes with
+            dependencies unrelated to 'node' should come first so that they
+            do not need to be rolled back. Actual decisions should come later.
+        """
+
+        # get subgraph to be sorted
+        nodes = self.predecessors(node, recursive=True) | {node}
+        subgraph = self.graph.subgraph(nodes)
+
+        if calculate_ranks:
+            ranks = {self.root : 0}
+
+            # calculate ranks
+            for n, length in shortest_paths.generic.shortest_path_length(subgraph, source=self.root).items():
+                ranks[n] = length
+
+            # propagate the biggest rank to every direct neighbour
+            for n in nodes:
+                for e in self.out_edges(n):
+                    # iterate only neighbours that are not in subgraph
+                    if e.target in nodes:
+                        continue
+
+                    if e.target not in ranks or ranks[e.target] < ranks[n]:
+                        ranks[e.target] = ranks[n]
+
+            # set node ranks to the difference between their rank and the neighbours ranks
+            for n in nodes:
+                rank = 0  # store minimum rank among all neighbours
+                for e in self.out_edges(n):
+                    # iterate only neighbours that are not in subgraph
+                    if e.target in nodes:
+                        continue
+
+                    if rank > ranks[e.target]:
+                        rank = ranks[e.target]
+
+                # rank is always bigger or equal than ranks[n]
+                #   n.rank = 0 means there is a direct neighbour (not in subgraph)
+                #     that has no other downstream dependencies
+                n.rank = rank - ranks[n]
+
+        # FIXME key option is not working, will be fixed in networkx 2.4
+        #       (see https://github.com/networkx/networkx/issues/3493)
+        order = list(dag.lexicographical_topological_sort(subgraph,
+                                                          key=None))
+        for u,v in zip(order,order[1:]):
+            for e in set(self.in_edges(v)):
+                self.remove_edge(e)
+
+            self.create_edge(u,v)
+
+    def add_dependencies(self, node, read, written, force_sequential):
+        writers = self._raw_dependencies(node, read, written)
+
+        old_transforms = dict()
+        for p in written:
+            if isinstance(node.operation, Transform):
+                # if there are already writers (only possible if Transform), remember them for later check
+                old_transforms[p] = self.param_store[p].transform - {node}
+
+        # add old writers as dependencies
+        for p,trafos in old_transforms.items():
+            writers.update(trafos)
+
+        # return early if there are no dependencies
+        if len(writers) == 0:
+            if len(written) > 0:
+                self.create_edge(self.root, node)
+            return
+
+        # ignore writers that are predecessors of any other writer
+        # in order to create a transitive reduction of dependencies
+        blacklist = set()
+        for w in writers:
+            if len(self.successors(w, recursive=True) & writers) > 0:
+                blacklist.add(w)
+
+        dependencies = writers - blacklist
+        assert len(dependencies) > 0
+
+        for d in dependencies:
+            self.create_edge(d, node)
+
+        if force_sequential:
+            assert dag.is_directed_acyclic_graph(self.graph)
+            if __debug__:
+                self.write_dot('/tmp/toposort_pre.dot', highlight={node})
+                subgraph = self.predecessors(node, recursive=True)
+
+            self.sort(node)
+
+            if __debug__:
+                self.write_dot('/tmp/toposort_post.dot', reshape=subgraph, highlight={node})
+
 
 class DecisionTree(DecisionGraph):
     """ Stores dependencies between decisions as a tree.
