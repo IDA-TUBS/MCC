@@ -10,8 +10,11 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
 
 """
 from  networkx import MultiDiGraph
+from  networkx.algorithms import dag
+from  networkx.algorithms import shortest_paths
 from collections import deque
 import logging
+import itertools
 
 class GraphObj:
     """ Captures dangling graph objects, i.e. Edge or Node, and its parameters.
@@ -92,17 +95,6 @@ class Graph:
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge
 
-    def _neighbours(self, node, aggregator, recursive):
-        result = set(aggregator(node))
-
-        if recursive:
-            tmp = set()
-            for n in result:
-                tmp.update(self._neighbours(n, aggregator, recursive))
-            result.update(tmp)
-
-        return result
-
     def leaves(self, node):
         result = set()
         for n in self.graph.successors(node):
@@ -123,45 +115,41 @@ class Graph:
 
         return result
 
+    def sorted(self):
+        return dag.topological_sort(self.graph)
+
     def reversed_subtree(self, node):
-        reversed_result = list()
+        # return reverse topological sort but stop at start node and
+        #  also return it as the last element
+        return itertools.chain(
+                itertools.takewhile(
+                    lambda x: x != node,
+                    reversed(list(dag.topological_sort(self.graph)))),
+                {node})
 
-        queue = deque([node])
-        while len(queue):
-            n = queue.popleft()
-            reversed_result.append(n)
-            succs = self.successors(n)
-            for s in succs:
-                queue.append(s)
-
-        return reversed(reversed_result)
+    def paths(self, source, target):
+        return shortest_paths.generic.all_shortest_paths(self.graph, source=source, target=target)
 
     def predecessors(self, node, recursive=False):
-        return self._neighbours(node, self.graph.predecessors, recursive)
+        if recursive:
+            return dag.ancestors(self.graph, node)
+
+        return self.graph.predecessors(node)
 
     def successors(self, node, recursive=False):
-        return self._neighbours(node, self.graph.successors, recursive)
+        if recursive:
+            return dag.descendants(self.graph, node)
+
+        return self.graph.successors(node)
 
     def in_edges(self, node):
-        edges = set()
-        for (s, t, e) in self.graph.in_edges(node, keys=True):
-            edges.add(e)
-
-        return edges
+        return (e for (s,t,e) in self.graph.in_edges(node, keys=True))
 
     def out_edges(self, node):
-        edges = set()
-        for (s, t, e) in self.graph.out_edges(node, keys=True):
-            edges.add(e)
-
-        return edges
+        return (e for (s,t,e) in self.graph.out_edges(node, keys=True))
 
     def edges(self):
-        edges = set()
-        for (s, t, e) in self.graph.edges(keys=True):
-            edges.add(e)
-
-        return edges
+        return (e for (s,t,e) in self.graph.edges(keys=True))
 
     def node_attributes(self, node, params=None):
         if params is None:

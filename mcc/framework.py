@@ -377,22 +377,14 @@ class DecisionGraph(Graph):
         self.remove_node(node)
 
     def root_path(self, u):
-        preds = self.predecessors(u)
-        reverse_path = [u]
-        cnt = 0
-        while len(preds) != 0:
-            cnt += 1
-            if len(preds) != 1:
-                print('cnt: %d, u: %s, op: %s, preds: %s' % (cnt, u, u.operation, preds))
-                print('GOTCHA nontree!')
-            assert len(preds) == 1
-            p = list(preds)[0]
-#            assert p not in reverse_path
-            reverse_path.append(p)
-            preds = self.predecessors(p)
+        paths = list(self.paths(self.root, u))
+        if __debug__ and len(paths) > 1:
+            print('GOTCHA nontree!')
+            self.write_dot("/tmp/doublecheck-postmerge.dot", highlight={u})
 
-        reverse_path.reverse()
-        return reverse_path
+        assert len(paths) > 0, "No path found between %s and %s" % (self.root, u)
+
+        return paths[0]
 
     def _stylize_node(self, node, reshape=False, highlight=False):
 

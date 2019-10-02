@@ -1540,7 +1540,7 @@ class BacktrackingTestEngine(AnalysisEngine):
             return True
 
         # check if for every assign node all the candidates have been used
-        for node in self.model.decision_graph.reversed_subtree(self.model.decision_graph.root):
+        for node in reversed(list(self.model.decision_graph.sorted())):
             if self.model.decision_graph.revisable(node):
                 self.fail_times -= 1
                 return node

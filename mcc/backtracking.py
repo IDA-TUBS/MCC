@@ -305,13 +305,7 @@ class BacktrackRegistry(Registry):
     def invalidate_subtree(self, start):
         assert isinstance(start.operation, Assign)
 
-        # check operations can be reached multiple times
-        visited_checks = set()
-
         for n in self.decision_graph.reversed_subtree(start):
-            if n in visited_checks:
-                continue
-
             assert n.obj is None or isinstance(n.obj, frozenset) or n.obj in n.layer.graph.nodes() or n.obj in n.layer.graph.edges(), "CANNOT REVERSE %s: already deleted" % n
 
             # invalidate layer depending on what operations were involved
@@ -332,7 +326,7 @@ class BacktrackRegistry(Registry):
                 #         params
                 self._rollback_transform(n)
             elif isinstance(op, Check):
-                visited_checks.add(n)
+                pass
             else:
                 raise NotImplementedError
 
