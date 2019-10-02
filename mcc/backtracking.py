@@ -78,10 +78,10 @@ class BacktrackRegistry(Registry):
 
         self.failed.append(failed)
 
-        print("Problem has %d variables, failed on %d" % (len(self.variables), len(self.failed)))
-        if len(self.failed) == 1:
-            print(self.variables)
-            print(self.failed)
+        logging.info("Problem has %d variables, failed on %d" % (len(self.variables), len(self.failed)))
+        if __debug__ and len(self.failed) == 1:
+            logging.info(self.variables)
+            logging.info(self.failed)
 
     def complete_operation(self, operation):
         self.operations[operation] = True
@@ -141,15 +141,18 @@ class BacktrackRegistry(Registry):
                     print("\n%s" % self.stats)
                     raise Exception('No config could be found')
 
-                print("\nRolling back to: %s" % (culprit))
+                logging.info("\nRolling back to: %s" % (culprit))
 
                 # mark current value(s) as bad
                 self.decision_graph.mark_bad(culprit)
 
-                if outpath is not None:
+                leaves = self.decision_graph.successors(culprit, recursive=True)
+                self._update_stats(len(leaves), cns.node.operation)
+                logging.info("\n%s" % self.stats)
+
+                if __debug__ and outpath is not None:
                     name = 'decision-try-%d.dot' % self.backtracking_try
                     path = outpath + name
-                    leaves = self.decision_graph.successors(culprit, recursive=True)
                     highlight = {cns.node}
 
                     self.decision_graph.write_dot(path, leaves=None,
@@ -157,17 +160,14 @@ class BacktrackRegistry(Registry):
                                                   reshape=leaves,
                                                   highlight=highlight)
 
-                    print(" rolling back %d operations" % len(leaves))
-                    self._update_stats(len(leaves), cns.node.operation)
-                    print("\n%s" % self.stats)
+                    logging.info(" rolling back %d operations" % len(leaves))
 
-                if outpath is not None:
                     export = PickleExporter(self)
                     export.write(outpath+'model-pretry-%d.pickle' % self.backtracking_try)
 
                 self.invalidate_subtree(culprit)
 
-                if outpath is not None:
+                if __debug__ and outpath is not None:
                     export = PickleExporter(self)
                     export.write(outpath+'model-try-%d.pickle' % self.backtracking_try)
 
@@ -180,6 +180,7 @@ class BacktrackRegistry(Registry):
                 import traceback
                 traceback.print_exc()
                 raise(ex)
+
         return True
 
     def _update_stats(self, num_operations, failed_operation):

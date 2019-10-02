@@ -1037,7 +1037,7 @@ class ProtocolStackEngine(AnalysisEngine):
                           query={ 'from_service' : source_service.name(),
                                   'to_service'   : target_service.name()})
             if len(comps) == 0:
-                logging.error("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
+                logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
                 return set()
 
             return comps
