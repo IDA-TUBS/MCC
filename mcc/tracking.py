@@ -13,6 +13,34 @@ from mcc.framework import *
 from  networkx.algorithms import dag
 from  networkx.algorithms import shortest_paths
 
+class LinearGraph(DecisionGraph):
+    """ Discards dependencies and and pushes each operation to a stack """
+
+    def __init__(self):
+        super().__init__()
+        self.latest = None
+
+    def add_dependencies(self, node, read, written, force_sequential):
+        for p in written:
+            if p not in self.param_store:
+                self.param_store[p] = self.Writers()
+            self.param_store[p].register(node)
+        self.written_params(node).update(written)
+
+        # avoid iterating though the graph if we already know the latest node
+        if self.latest not in self.nodes(): # this may happen after a rollback
+            self.latest = next(self.filter_leaves(self.nodes()))
+        self.create_edge(self.latest, node)
+        self.latest = node
+
+        # Enforce stack backtracking by inserting a fake dependency to the
+        # latest writer.
+        writer = next(self.predecessors(node))
+        while self.root != writer and not len(self.written_params(writer)):
+            writer = next(self.predecessors(writer))
+        self.read_params(node).update(self.written_params(writer))
+
+
 class TopologicalGraph(DecisionGraph):
     """ Stores dependencies between decisions as graph which is
         sequentialising on demand by performing topological sort

@@ -95,15 +95,12 @@ class Graph:
         self.graph.add_edge(edge.source, edge.target, key=edge)
         return edge
 
+    def filter_leaves(self, nodes):
+        return itertools.filterfalse(self.graph.out_degree, nodes)
+
     def leaves(self, node):
-        result = set()
-        for n in self.graph.successors(node):
-            result.update(self.leaves(n))
-
-        if len(result) == 0:
-            result.add(node)
-
-        return result
+        successors = itertools.chain([node], self.successors(node, True))
+        return self.filter_leaves(successors)
 
     def roots(self, node):
         result = set()
