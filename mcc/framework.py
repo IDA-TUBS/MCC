@@ -165,7 +165,7 @@ class DecisionGraph(Graph):
 
 
     def __init__(self):
-        super().__init__()
+        super().__init__(graphtype=DiGraph)
 
         self.read    = set()
         self.written = set()

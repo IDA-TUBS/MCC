@@ -9,7 +9,7 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
     - Johannes Schlatow
 
 """
-from  networkx import MultiDiGraph
+from  networkx import MultiDiGraph, DiGraph
 from  networkx.algorithms import dag
 from  networkx.algorithms import shortest_paths
 from collections import deque
@@ -69,8 +69,8 @@ class Edge:
 class Graph:
     """ Wrapper for :class:`networkx.MultiDiGraph`.
     """
-    def __init__(self):
-        self.graph = MultiDiGraph()
+    def __init__(self, graphtype = MultiDiGraph):
+        self.graph = graphtype()
 
     def add_node(self, obj):
         self.graph.add_node(obj)
@@ -80,7 +80,10 @@ class Graph:
         return self.graph.remove_node(obj)
 
     def remove_edge(self, obj):
-        return self.graph.remove_edge(obj.source, obj.target, obj)
+        if isinstance(self.graph, MultiDiGraph):
+            return self.graph.remove_edge(obj.source, obj.target, obj)
+        else:
+            return self.graph.remove_edge(obj.source, obj.target)
 
     def create_edge(self, source, target):
         e = Edge(source, target)
@@ -140,13 +143,23 @@ class Graph:
         return self.graph.successors(node)
 
     def in_edges(self, node):
-        return (e for (s,t,e) in self.graph.in_edges(node, keys=True))
+        if isinstance(self.graph, MultiDiGraph):
+            return (e for (s,t,e) in self.graph.in_edges(node, keys=True))
+        else:
+            return (Edge(s,t) for (s,t) in self.graph.in_edges(node))
+
 
     def out_edges(self, node):
-        return (e for (s,t,e) in self.graph.out_edges(node, keys=True))
+        if isinstance(self.graph, MultiDiGraph):
+            return (e for (s,t,e) in self.graph.out_edges(node, keys=True))
+        else:
+            return (Edge(s,t) for (s,t) in self.graph.out_edges(node))
 
     def edges(self):
-        return (e for (s,t,e) in self.graph.edges(keys=True))
+        if isinstance(self.graph, MultiDiGraph):
+            return (e for (s,t,e) in self.graph.edges(keys=True))
+        else:
+            return (Edge(s,t) for (s,t) in self.graph.edges())
 
     def node_attributes(self, node, params=None):
         if params is None:
