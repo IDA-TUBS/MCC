@@ -206,45 +206,17 @@ class BacktrackRegistry(Registry):
             self.stats['failed_ops'][failed_operation] += 1
 
     def find_culprit(self, cns):
-        return self._find_brancheable({cns.node})
+        return self._find_brancheable(cns.node)
 
-    def _dependencies(self, nodes):
-        result = set()
-        queue = list(nodes)
-        while len(queue):
-            n = queue.pop(0)
-            dgraph = self.decision_graph
-            for p in dgraph.read_params(n):
-                writers = dgraph.find_writers(p.layer, p.obj, p.param)
-                # avoid infinite loops by excluding already processed nodes
-                for op in writers.all() - result:
-                    queue.append(op)
-                    result.add(op)
-        return result
-
-    def _find_brancheable(self, operations):
+    def _find_brancheable(self, node):
         # find the latest operation
-        latest_path  = None
-        max_length   = 0
-        for op in operations:
-            path = self.decision_graph.root_path(op)
-            if len(path) > max_length:
-                latest_path = path
-                max_length = len(path)
-
-        # only look at operations that affect the culprit
-        # we do this by first building the transitive set of
-        # read_params (i.e.\ their writers) and skipping all 
-        # ops in the path that are not in this set
-        dependencies = self._dependencies(operations)
+        path = self.decision_graph.root_path(node)
 
         # go backwards until we have found a changeable operation
-        while len(latest_path) > 0:
-            op = latest_path.pop()
-            if op not in dependencies:
-                continue
-            if self.decision_graph.revisable(op):
-                return op
+        while len(path) > 0:
+            n = path.pop()
+            if self.decision_graph.revisable(n):
+                return n
 
         return None
 

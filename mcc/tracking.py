@@ -33,13 +33,6 @@ class LinearGraph(DecisionGraph):
         self.create_edge(self.latest, node)
         self.latest = node
 
-        # Enforce stack backtracking by inserting a fake dependency to the
-        # latest writer.
-        writer = next(self.predecessors(node))
-        while self.root != writer and not len(self.written_params(writer)):
-            writer = next(self.predecessors(writer))
-        self.read_params(node).update(self.written_params(writer))
-
 
 class TopologicalGraph(DecisionGraph):
     """ Stores dependencies between decisions as graph which is
