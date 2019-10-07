@@ -273,24 +273,23 @@ class DecisionGraph(Graph):
             self.revise_assign = None
         else:
             node = self.Node(layer, obj, operation, 0)
-            if node in self.nodes():
+            if __debug__ and node in self.nodes():
                 assert isinstance(operation, Check), "%s already in dependency graph" % node
-                if __debug__:
-                    print("%s already exists" % (node))
-                    changed = False
-                    for r in self.read-self.written:
-                        if r not in self.read_params(node):
-                            changed = True
-                            print("read param %s not in %s: %s" % (r, node, self.read_params(node)))
-                    for w in self.written:
-                        if w not in self.written_params(node):
-                            changed = True
-                            print("written param %s not in %s: %s" % (w, node, self.written_params(node)))
+                print("%s already exists" % (node))
+                changed = False
+                for r in self.read-self.written:
+                    if r not in self.read_params(node):
+                        changed = True
+                        print("read param %s not in %s: %s" % (r, node, self.read_params(node)))
+                for w in self.written:
+                    if w not in self.written_params(node):
+                        changed = True
+                        print("written param %s not in %s: %s" % (w, node, self.written_params(node)))
 
-                    if changed:
-                        self.write_dot("/tmp/doublecheck-pre.dot", highlight={node})
+                if changed:
+                    self.write_dot("/tmp/doublecheck-pre.dot", highlight={node})
 
-                    assert not changed
+                assert not changed
 
             else:
                 node = self.add_node(layer, obj, operation)
