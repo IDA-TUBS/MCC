@@ -43,7 +43,7 @@ class TopologicalGraph(DecisionGraph):
     def __init__(self):
         super().__init__()
 
-    def sort(self, node, calculate_ranks=True):
+    def sort(self, node, calculate_ranks=False):
         """ execute topological sort for ordering
             all predecessors of 'node' ensuring that
             old nodes come before younger nodes.
