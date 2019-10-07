@@ -399,7 +399,7 @@ class SimpleMcc(MccBase):
         return bt
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
-            dot_ae=False, dot_layer=False, envmodel=None):
+            dot_ae=False, dot_layer=False, envmodel=None, constrmodel=None):
         """ Searches a system configuration for the given query.
 
         Args:
@@ -423,6 +423,10 @@ class SimpleMcc(MccBase):
 
         # 4a) create system model from query model and base
         model.from_query(query_model, 'func_query', base)
+
+        # parse constraints
+        if constrmodel is not None:
+            constrmodel.parse(model)
 
         self._map_and_connect_functions(model, 'func_query', 'func_arch')
 

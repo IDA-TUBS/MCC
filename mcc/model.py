@@ -204,6 +204,9 @@ class BaseChild:
     # ChildQuery interface #
     ########################
 
+    def identifier(self):
+        return self._name
+
     def subsystem(self):
         return self._subsystem
 

@@ -63,7 +63,7 @@
 		</dependency>
 	</child>
 	
-	<child subsystem="pc" >
+	<child name="POSE" subsystem="pc" >
 		<component name="pose_estimation" />
 		<dependency>
 			<function name="POINTCLOUD" />
