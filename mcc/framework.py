@@ -705,13 +705,19 @@ class Registry:
             decision_graph.initialize_tracking(self.by_order)
 
         print()
+        created_layer = set()
         for step in self.steps:
 
             previous_step = self._previous_step(step)
             if not Registry._same_layers(previous_step, step):
-                logging.info("Creating layer %s" % step.target_layer)
-                if previous_step is not None:
-                    self._output_layer(previous_step.target_layer)
+                if step.target_layer in created_layer:
+                    logging.info("Refining layer %s" % step.target_layer)
+                else:
+                    created_layer.add(step.target_layer)
+                    logging.info("Creating layer %s" % step.target_layer)
+
+                    if previous_step is not None:
+                        self._output_layer(previous_step.target_layer)
 
             try:
                 step.execute(self)

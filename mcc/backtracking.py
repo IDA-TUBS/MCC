@@ -118,13 +118,18 @@ class BacktrackRegistry(Registry):
         self.stats['iterations'] = self.backtracking_try
 
         logging.info('Backtracking Try %s' % self.backtracking_try)
+        created_layers = set()
         for step in self.steps:
 
             previous_step = self._previous_step(step)
             if not Registry._same_layers(previous_step, step):
-                logging.info("Creating layer %s" % step.target_layer)
-                if previous_step is not None:
-                    self._output_layer(previous_step.target_layer)
+                if step.target_layer in created_layers:
+                    logging.info("Refining layer %s" % step.target_layer)
+                else:
+                    created_layers.add(step.target_layer)
+                    logging.info("Creating layer %s" % step.target_layer)
+                    if previous_step is not None:
+                        self._output_layer(previous_step.target_layer)
 
             try:
                 step.execute(self)
