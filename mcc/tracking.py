@@ -121,9 +121,33 @@ class TopologicalGraph(DecisionGraph):
         # ignore writers that are predecessors of any other writer
         # in order to create a transitive reduction of dependencies
         blacklist = set()
-        for w in writers:
-            if len(self.successors(w, recursive=True) & writers) > 0:
-                blacklist.add(w)
+        w = list(writers)[0]
+        remaining = writers
+        leaves = set()
+
+        while w is not None:
+            if self.graph.out_degree(w) == 0:
+                leaves.add(w)
+                remaining = remaining - {w}
+            else:
+                reachable = shortest_paths.generic.shortest_path(self.graph, source=w)
+                reachable_writers = reachable.keys() & writers
+                # remember nodes that can reach no other writer, i.e. that are in no other path
+                is_leaf = True
+                for c in reachable_writers:
+                    for r in reachable_writers - {c}:
+                        if c in reachable[r]:
+                            is_leaf = False
+                    if is_leaf:
+                        leaves.add(c)
+
+                # every node that was reachable does not need to be checked anymore
+                remaining = remaining - reachable_writers - {w}
+
+            if len(remaining):
+                w = list(remaining)[0]
+
+            w = None
 
         dependencies = writers - blacklist
         assert len(dependencies) > 0
