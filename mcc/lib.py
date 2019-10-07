@@ -347,6 +347,14 @@ class MccBase:
 
         model.add_step(resources)
 
+    def _reliability_check(self, model, layer, constrmodel):
+        """ perform reliability checks
+        """
+
+        layer = model.by_name[layer]
+        re   = ReliabilityEngine(layer, model.by_order[1:], constrmodel)
+        model.add_step_unsafe(NodeStep(BatchCheck(re, 'check reliability')))
+
     def _timing_check(self, model, slayer, dlayer):
         """ Build taskgraph layer and perform timing checks
         """
@@ -463,6 +471,9 @@ class SimpleMcc(MccBase):
         self._assign_resources(model, layer='comp_inst')
 
         self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
+
+        if constrmodel is not None:
+            self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:

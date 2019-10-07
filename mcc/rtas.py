@@ -62,6 +62,7 @@ class ConstraintsModel:
 
         self._latency_constraints = list()
         self._reliability_constraints = list()
+        self._unreliable_components = set()
 
     def parse(self, model):
         for c in self._parse_latencies():
@@ -83,6 +84,8 @@ class ConstraintsModel:
             c['source'] = srcnode
             c['sink']   = snknode
             self._reliability_constraints.append(c)
+
+        self._unreliable_components = self._parse_unrealiable()
 
     def _find_name_in_model(self, model, name):
         for n in model.by_order[0].graph.nodes():
@@ -117,11 +120,23 @@ class ConstraintsModel:
 
         return constraints
 
-    def latency_constraints():
+    def _parse_unrealiable(self):
+        comps = set()
+        for pf in self.control._xml_node.findall('./platform_component'):
+            rel = pf.get('reliability')
+            if rel is not None and rel == 'low':
+                comps.add(pf.get('name'))
+
+        return comps
+
+    def latency_constraints(self):
         return self._latency_constraints
 
-    def reliability_constraints():
+    def reliability_constraints(self):
         return self._reliability_constraints
+
+    def unreliable_pf_components(self):
+        return self._unreliable_components
 
 
 class Mcc:

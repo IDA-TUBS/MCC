@@ -18,6 +18,63 @@ from mcc.taskmodel import *
 import itertools
 import copy
 
+class ReliabilityEngine(AnalysisEngine):
+    def __init__(self, layer, layers, constrmodel):
+        """ Dummy implementation for excluding task graphs that
+            do not achieve a certain reliability.
+        """
+        acl = { layer        : {'reads' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+
+        self.constrmodel  = constrmodel
+        self.layers       = layers
+
+    def _get_objects_on_layer(self, source, sink, target_layer):
+        objects = set()
+        for path in self.layers[0].graph.paths(source, sink):
+            last = None
+            for n in path:
+                # add node
+                objects.add(n)
+                # add edge to last node
+                if last is not None:
+                    for e in self.layers[0].in_edges(n):
+                        if e.source == last:
+                            objects.add(e)
+                            break
+                last = n
+
+        for l1,l2 in zip(self.layers, self.layers[1:]):
+            if l1 == target_layer:
+                break
+            next_objects = set()
+            for obj in objects:
+                next_objects.update(l1.associated_objects(l2.name, obj))
+            objects = next_objects
+
+        return objects
+
+    def batch_check(self, iterable):
+
+        # iterate constraints from constrmodel
+        for constraint in self.constrmodel.reliability_constraints():
+            if constraint['value'] != 'high':
+                logging.info("Ignoring reliability constraint %s" % constraint)
+                continue
+
+            objects = self._get_objects_on_layer(constraint['source'], constraint['sink'], self.layer)
+
+        result = True
+        for obj in objects:
+            if isinstance(obj, Edge):
+                continue
+            mapping = self.layer.get_param_value(self, 'mapping', obj)
+            if mapping.name() in self.constrmodel.unreliable_pf_components():
+                result = False
+
+        return result
+
+
 class TasksCoreEngine(AnalysisEngine):
     def __init__(self, layer):
         """ Gets task objects (core) from repo
@@ -57,7 +114,7 @@ class TasksCoreEngine(AnalysisEngine):
         try:
             objects = component.taskgraph_objects()
         except Exception as e:
-           print("Could not get taskgraph objects for %s" % obj) 
+           logging.error("Could not get taskgraph objects for %s" % obj) 
            raise e
 
         # for each incoming connection (see if incoming signal exists)
