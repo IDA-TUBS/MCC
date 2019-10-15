@@ -1617,7 +1617,12 @@ class InstantiationEngine(AnalysisEngine):
 
     def reset(self, obj):
         if isinstance(obj, Layer.Node):
-            self.factory.remove_instance(self.layer.untracked_get_param_value(self, 'instance', obj))
+            pfc = self.layer.untracked_get_param_value('mapping', obj)
+
+            cands = self.layer.untracked_get_param_candidates('instance', obj)
+            for c in cands:
+                if not c.shared():
+                    self.factory.remove_instance(pfc.name(), c)
 
     def _find_node(self, obj, instance):
         for n in self.layer.associated_objects(self.target_layer.name, obj):

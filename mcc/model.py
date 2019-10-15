@@ -94,7 +94,7 @@ class Instance:
         self.replaces.add(instance)
 
     def remove_replacement(self, instance):
-        self.replaces.remove(instance)
+        self.replaces.discard(instance)
 
     def replaces(self):
         return self.replaces
@@ -164,7 +164,7 @@ class InstanceFactory:
 
             self.instances[subsystem]['dedicated'][component] = new_inst
 
-            # insert new_inst as shared instance is there is none yet
+            # insert new_inst as shared instance if there is none yet
             if new_inst.component_uid() not in self.instances[subsystem]['shared']:
                 self.instances[subsystem]['shared'][new_inst.component_uid()] = new_inst
             else: # register new_inst at shared instance

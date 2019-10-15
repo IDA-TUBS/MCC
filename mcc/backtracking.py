@@ -231,14 +231,14 @@ class BacktrackRegistry(Registry):
             p.layer.untracked_clear_param_value(p.param, p.obj)
 
     def _rollback_map(self, node):
-        for p in self.decision_graph.written_params(node):
-            p.layer.untracked_clear_param_candidates(p.param, p.obj)
-
         # reset state partially, if map is rolled back
         # (we assume that state is only modified by Map operations)
         for ae in node.operation.analysis_engines:
             if hasattr(ae, 'reset'):
-                ae.reset(node)
+                ae.reset(node.obj)
+
+        for p in self.decision_graph.written_params(node):
+            p.layer.untracked_clear_param_candidates(p.param, p.obj)
 
     def _clear_failed(self, node):
         for p in self.decision_graph.written_params(node):
