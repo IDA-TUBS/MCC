@@ -11,6 +11,7 @@ def get_args():
     parser.add_argument('--basepath', default='models/')
     parser.add_argument('-o', '--outpath', default='./run/rtas-')
     parser.add_argument('-e', '--explore', action='store_true', default=False)
+    parser.add_argument('--chronological', action='store_true', default=False)
     return parser.parse_args()
 
 if __name__ == '__main__':
@@ -21,4 +22,4 @@ if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
 
     mcc = Mcc(args.filename, basepath=args.basepath, outpath=args.outpath)
-    mcc.execute(explore=args.explore)
+    mcc.execute(explore=args.explore, chronological=args.chronological)

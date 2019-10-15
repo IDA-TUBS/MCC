@@ -391,9 +391,10 @@ class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
 
-    def __init__(self, repo, test_backtracking=False):
+    def __init__(self, repo, test_backtracking=False, chronologicaltracking=False):
         MccBase.__init__(self, repo)
         self._test_backtracking = test_backtracking
+        self._nonchronological  = not chronologicaltracking
 
     def insert_random_backtracking_engine(self, model, failure_rate=0.0, fail_times=0):
         # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
@@ -495,7 +496,7 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            model.execute(outpath)
+            model.execute(outpath, nonchronological=self._nonchronological)
             decision_graph = model.decision_graph
 
         except Exception as e:

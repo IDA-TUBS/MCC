@@ -151,7 +151,7 @@ class Mcc:
             name = dev.name()
             self._devices[name] = dev
 
-    def execute(self, explore=False):
+    def execute(self, explore=False, chronological=False):
         results = dict()
         failed  = False
 
@@ -169,7 +169,8 @@ class Mcc:
             repos.append(cfgparser.Repository(device.repo_filename()))
 
             cfg = cfgparser.AggregateRepository(repos)
-            mcc = lib.SimpleMcc(repo=cfg, test_backtracking=explore)
+            mcc = lib.SimpleMcc(repo=cfg, test_backtracking=explore,
+                                          chronologicaltracking=chronological)
 
             base = lib.BaseModelQuery()
 

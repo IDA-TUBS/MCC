@@ -13,7 +13,8 @@ Implements backtracking-related data structures.
 from mcc.framework import *
 from mcc.graph import *
 from mcc.importexport import *
-from mcc.tracking import TopologicalGraph as Tracker
+from mcc.tracking import TopologicalGraph as NonchronologicalTracker
+from mcc.tracking import LinearGraph as ChronologicalTracker
 
 
 class BacktrackRegistry(Registry):
@@ -25,7 +26,6 @@ class BacktrackRegistry(Registry):
 
     def __init__(self):
         super().__init__()
-        self.dec_graph = Tracker()
         self.backtracking_try = 0
 
         # stores state (completed) of operations
@@ -96,11 +96,12 @@ class BacktrackRegistry(Registry):
         # skip operation if marked True
         return self.operations[operation]
 
-    def execute(self, outpath=None):
+    def execute(self, outpath=None, nonchronological=True):
         """ Executes the registered steps sequentially.
         """
 
-        self.decision_graph = Tracker()
+        self.decision_graph = NonchronologicalTracker() \
+                if nonchronological else ChronologicalTracker()
         self.decision_graph.initialize_tracking(self.by_order)
 
         while not self._backtrack_execute(outpath):
