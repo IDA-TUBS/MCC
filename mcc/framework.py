@@ -293,6 +293,14 @@ class DecisionGraph(Graph):
 
             else:
                 node = self.add_node(layer, obj, operation)
+
+                # track read access to object
+                if isinstance(obj, frozenset):
+                    for o in obj:
+                        self.track_read(layer, o, 'obj')
+                else:
+                    self.track_read(layer, obj, 'obj')
+
                 self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
 
         self.read    = set()
@@ -304,12 +312,6 @@ class DecisionGraph(Graph):
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
 
-        # if we wrote a parameter, there is an implicit read dependency to 'obj'
-        for p in written:
-            tmp = self.Param(p.layer, p.obj, 'obj')
-            if tmp not in written:
-                # if we haven't written 'obj' ourselves
-                read.add(tmp)
 
         writers = set()
         for p in read:
@@ -1828,9 +1830,7 @@ class BatchMap(Map):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            # skip if parameter was already selected
-            if self.source_layer.untracked_isset_param_value(ae, self.param, obj):
-                continue
+            assert not self.source_layer.untracked_isset_param_value(ae, self.param, obj), 'partial BatchMap detected'
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
             if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
@@ -1862,7 +1862,7 @@ class BatchMap(Map):
             assert(candidates is not None)
             self.source_layer.set_param_candidates(ae, self.param, obj, candidates)
 
-        self.source_layer.stop_tracking(None)
+        self.source_layer.stop_tracking(frozenset(data.keys()))
 
         return True
 
@@ -1964,7 +1964,7 @@ class BatchAssign(Assign):
                 # simulate write access to param
                 self.source_layer.track_written(self.param, obj)
                 # insert operation into decision graph
-                node = self.source_layer.stop_tracking(None, error=True)
+                node = self.source_layer.stop_tracking(frozenset(iterable), error=True)
                 raise ConstraintNotSatisfied(node)
 
             data[obj] = candidates
@@ -1984,7 +1984,7 @@ class BatchAssign(Assign):
             # simulate write access to param
             for obj in data.keys():
                 self.source_layer.track_written(self.param, obj)
-            node = self.source_layer.stop_tracking(None, error=True)
+            node = self.source_layer.stop_tracking(frozenset(iterable), error=True)
             raise ConstraintNotSatisfied(node)
 
         assert len(result) == len(data)
@@ -1993,7 +1993,7 @@ class BatchAssign(Assign):
             assert value in data[obj]
             self.source_layer.set_param_value(ae, self.param, obj, value)
 
-        self.source_layer.stop_tracking(None)
+        self.source_layer.stop_tracking(frozenset(iterable))
 
         return True
 
@@ -2129,10 +2129,7 @@ class BatchTransform(Transform):
         # first pass: call transform() on all objects and fill new_objs and insert nodes
         for (index ,obj) in enumerate(iterable):
 
-            # skip if parameter was already selected
-            if len(self.source_layer.associated_objects(self.target_layer.name, obj)) > 0:
-                logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
-                continue
+            assert not self.source_layer.associated_objects(self.target_layer.name, obj), 'partial BatchTransform detected'
 
             objects.add(obj)
 
@@ -2243,11 +2240,11 @@ class BatchCheck(Check):
             elif not result:
                 # we must stop tracking (to insert a new node) and
                 # fail on this node
-                node = self.source_layer.stop_tracking(None, error=True)
+                node = self.source_layer.stop_tracking(frozenset(iterable), error=True)
                 raise ConstraintNotSatisfied(node)
 
         # remark: the same operation should never be used in multiple steps
-        self.source_layer.stop_tracking(None)
+        self.source_layer.stop_tracking(frozenset(iterable))
 
         return True
 
