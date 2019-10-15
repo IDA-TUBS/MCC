@@ -80,6 +80,7 @@ class Instance:
         self.component  = component
         self.config     = config
         self.replaces = set()
+        self._static    = False
 
     def is_component(self, rhs):
         return self.component.uid() == rhs.uid()
@@ -101,6 +102,9 @@ class Instance:
 
     def shared(self):
         return len(self.replaces) > 0
+
+    def static(self):
+        return self._static
 
     def label(self):
         return self.identifier
@@ -138,8 +142,14 @@ class InstanceFactory:
         if subsystem not in self.instances:
             return
 
+        if inst.static():
+            return
+
         del self.instances[subsystem]['dedicated'][inst.component]
-        self.instances[subsystem]['shared'][inst.component_uid()].remove_replacement(inst)
+        if not self.instances[subsystem]['shared'][inst.component_uid()].shared():
+            del self.instances[subsystem]['shared'][inst.component_uid()]
+        else:
+            self.instances[subsystem]['shared'][inst.component_uid()].remove_replacement(inst)
 
     def insert_existing_instances(self, subsystem, existing):
         if subsystem not in self.instances:

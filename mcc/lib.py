@@ -76,7 +76,9 @@ class BaseModelQuery:
         instances = set()
         for c in self._components.graph.nodes():
             if subsystem == self._components.untracked_get_param_value('mapping', c).name():
-                instances.add(c.untracked_obj())
+                inst = c.untracked_obj()
+                inst._static = True
+                instances.add(inst)
 
         return instances
 
