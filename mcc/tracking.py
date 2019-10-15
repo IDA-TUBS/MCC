@@ -156,6 +156,17 @@ class TopologicalGraph(DecisionGraph):
 
         return writers - blacklist
 
+    def reduceall(self):
+        TR = dag.transitive_reduction(self.graph)
+
+        for u, nbrsdict in self.graph.adjacency():
+            # remove all edges
+            for v in set(nbrsdict.keys()):
+                self.graph.remove_edge(u,v)
+            # re-add from TR
+            for v in TR.successors(u):
+                self.graph.add_edge(u,v)
+
     def remove(self, node):
         super().remove(node)
         self.pm_cached = None
@@ -178,11 +189,12 @@ class TopologicalGraph(DecisionGraph):
             if written:
                 self.create_edge(self.root, node)
 
-            self.update_path_matrix(node, set())
+#            self.update_path_matrix(node, set())
             return
 
-        dependencies = self.reduce(writers)
-        self.update_path_matrix(node, dependencies)
+#        PATH-MATRIX IMPLEMENTATION
+#        dependencies = self.reduce(writers)
+#        self.update_path_matrix(node, dependencies)
 
 #        if __debug__:
 #            blacklist = set()
@@ -194,12 +206,23 @@ class TopologicalGraph(DecisionGraph):
 #            for d in writers-blacklist:
 #                assert d in dependencies
 
+#        TRIVIAL IMPLEMENTATION
+#        blacklist = set()
+#        for w in writers:
+#            if self.successors(w, recursive=True) & writers:
+#                blacklist.add(w)
+#        dependencies = writers - blacklist
+
+        dependencies = writers
         assert dependencies
 
         for d in dependencies:
             self.create_edge(d, node)
 
         if force_sequential:
+#           CREATE TRANSITIVE REDUCTION ON DEMAND
+            self.reduceall()
+
             assert dag.is_directed_acyclic_graph(self.graph)
             if __debug__:
                 self.write_dot('/tmp/toposort_pre.dot', highlight={node})
