@@ -42,6 +42,7 @@ class TopologicalGraph(DecisionGraph):
 
     def __init__(self):
         super().__init__()
+        self.pm_cached = None
 
     def sort(self, node, calculate_ranks=False):
         """ execute topological sort for ordering
@@ -51,6 +52,8 @@ class TopologicalGraph(DecisionGraph):
             dependencies unrelated to 'node' should come first so that they
             do not need to be rolled back. Actual decisions should come later.
         """
+
+        self.pm_cached = None
 
         # get subgraph to be sorted
         nodes = self.predecessors(node, recursive=True) | {node}
@@ -99,6 +102,64 @@ class TopologicalGraph(DecisionGraph):
 
             self.create_edge(u,v)
 
+    def path_matrix(self):
+
+        if self.pm_cached is None:
+            self.pm_cached = dict()
+
+            # initialise with adjacency matrix
+            for u, nbrsdict in self.graph.adjacency():
+                self.pm_cached[u] = dict()
+                for v in self.nodes():
+                    self.pm_cached[u][v] = 0
+                for v in nbrsdict.keys():
+                    self.pm_cached[u][v] = 1
+
+            for u in self.nodes():
+                for v in self.nodes():
+                    if u == v:
+                        continue
+                    if self.pm_cached[v][u]:
+                        for i in self.nodes():
+                            if self.pm_cached[v][i] == 0:
+                                self.pm_cached[v][i] = self.pm_cached[u][i]
+
+        return self.pm_cached
+
+    def update_path_matrix(self, n, adj):
+        pm = self.path_matrix()
+
+        # initialise new row/column with zeros
+        pm[n] = dict()
+        for u in self.nodes():
+            pm[n][u] = 0
+            pm[u][n] = 0
+
+        # add adjacency
+        for v in adj:
+            pm[v][n] = 1
+
+            # add path information
+            for u in self.nodes():
+                if pm[u][v]:
+                    pm[u][n] = 1
+
+
+    def reduce(self, writers):
+        pm = self.path_matrix()
+        blacklist = set()
+        for u in writers:
+            for v in writers - {u}:
+                if pm[u][v] == 1:
+                    blacklist.add(u)
+                    break
+
+        return writers - blacklist
+
+    def remove(self, node):
+        super().remove(node)
+        self.pm_cached = None
+
     def add_dependencies(self, node, read, written, force_sequential):
         writers = self._raw_dependencies(node, read, written)
 
@@ -116,41 +177,24 @@ class TopologicalGraph(DecisionGraph):
         if len(writers) == 0:
             if len(written) > 0:
                 self.create_edge(self.root, node)
+
+            self.update_path_matrix(node, set())
             return
 
-        # ignore writers that are predecessors of any other writer
-        # in order to create a transitive reduction of dependencies
-        blacklist = set()
-        w = list(writers)[0]
-        remaining = writers
-        leaves = set()
+        dependencies = self.reduce(writers)
+        self.update_path_matrix(node, dependencies)
 
-        while w is not None:
-            if self.graph.out_degree(w) == 0:
-                leaves.add(w)
-                remaining = remaining - {w}
-            else:
-                reachable = shortest_paths.generic.shortest_path(self.graph, source=w)
-                reachable_writers = reachable.keys() & writers
-                # remember nodes that can reach no other writer, i.e. that are in no other path
-                is_leaf = True
-                for c in reachable_writers:
-                    for r in reachable_writers - {c}:
-                        if c in reachable[r]:
-                            is_leaf = False
-                    if is_leaf:
-                        leaves.add(c)
+#        if __debug__:
+#            blacklist = set()
+#            for w in writers:
+#                if self.successors(w, recursive=True) & writers:
+#                    blacklist.add(w)
+#
+#            assert len(dependencies) == len(writers-blacklist)
+#            for d in writers-blacklist:
+#                assert d in dependencies
 
-                # every node that was reachable does not need to be checked anymore
-                remaining = remaining - reachable_writers - {w}
-
-            if len(remaining):
-                w = list(remaining)[0]
-
-            w = None
-
-        dependencies = writers - blacklist
-        assert len(dependencies) > 0
+        assert dependencies
 
         for d in dependencies:
             self.create_edge(d, node)
