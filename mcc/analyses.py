@@ -198,7 +198,7 @@ class TasksRPCEngine(AnalysisEngine):
         else:
             rpc_objects = server.taskgraph_objects(rpc=server_ref, method=method)
 
-        assert len(rpc_objects), 'No task objects found for RPC'
+        assert rpc_objects, 'No task objects found for RPC'
 
         # check rpcobjects for any calls
         rpcs = set()
@@ -385,7 +385,7 @@ class TaskgraphEngine(AnalysisEngine):
         # but not necessarily an error
         if taskobjects is None:
             logging.warning("No tasks found for component %s" % component)
-        elif len(taskobjects) == 0:
+        elif not taskobjects:
             logging.warning("No tasks found for component %s" % component)
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
@@ -578,7 +578,7 @@ class StaticEngine(AnalysisEngine):
 
         if len(candidates) > 1:
             logging.warning("Still cannot inherit mapping unambiguously.")
-        if len(exclude) > 0:
+        if exclude:
             logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" \
                             % (obj.obj(self.layer), candidates))
 
@@ -656,7 +656,7 @@ class FunctionEngine(AnalysisEngine):
     def map(self, obj, candidates):
         # aggregate dependencies
         functions = self._required_functions(obj)
-        if len(functions) == 0:
+        if not functions:
             return {frozenset()}
 
         dependencies = dict()
@@ -748,7 +748,7 @@ class MappingEngine(AnalysisEngine):
         return cost
 
     def map(self, obj, candidates):
-        if candidates is not None and len(candidates) > 0:
+        if candidates is not None and candidates:
             return candidates
 
         assert not isinstance(obj, Edge)
@@ -757,7 +757,7 @@ class MappingEngine(AnalysisEngine):
 
         components = self.repo.find_components_by_type(child.query(), child.type())
 
-        if len(components) == 0:
+        if not components:
             logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
             return set()
 
@@ -781,7 +781,7 @@ class MappingEngine(AnalysisEngine):
     def batch_assign(self, data, objects, bad_combinations):
         sets   = list()
         if objects is None:
-            assert len(bad_combinations) == 0
+            assert not bad_combinations
             objects = data.keys()
 
         for obj in objects:
@@ -970,13 +970,13 @@ class ServiceEngine(AnalysisEngine):
         if len(target_ports) > 1:
             logging.warning("Service provision is under constrained for %s by %s: %s" % (target_comp, constraints, target_ports))
 
-        if len(source_ports) == 0:
+        if not source_ports:
             logging.error("Service requirement is over constrained for %s by %s" % ( source_comp, constraints))
 
-        if len(target_ports) == 0:
+        if not target_ports:
             logging.error("Service provision is over constrained for %s by %s" % ( target_comp, constraints))
 
-        return len(source_ports) > 0 and len(target_ports) > 0
+        return source_ports and target_ports
 
     def map(self, obj, candidates):
         assert(isinstance(obj, Edge))
@@ -1061,7 +1061,7 @@ class ServiceEngine(AnalysisEngine):
             obj = GraphObj(Edge(src_node, dst_node), params={ 'source-service' : source_service, 'target-service' : target_service })
             graph_objs.add(obj)
 
-        assert(len(graph_objs) > 0)
+        assert graph_objs
 
         return graph_objs
 
@@ -1093,7 +1093,7 @@ class ProtocolStackEngine(AnalysisEngine):
             comps = self.repo.find_components_by_type(querytype='proto',
                           query={ 'from_service' : source_service.name(),
                                   'to_service'   : target_service.name()})
-            if len(comps) == 0:
+            if not comps:
                 logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
                 return set()
 
@@ -1185,7 +1185,7 @@ class MuxerEngine(AnalysisEngine):
                 if self.layer.get_param_value(self, 'target-service', e).matches(restricted_service):
                     affected_edges.add(e)
 
-            if len(affected_edges) == 0:
+            if not affected_edges:
                 return {None}
 
             # always insert muxer if available?
@@ -1199,7 +1199,7 @@ class MuxerEngine(AnalysisEngine):
 
                 candidates.add(cand)
 
-            if len(candidates) > 0:
+            if candidates:
                 return candidates
 
             # if no muxer available but obj is not a singleton, we can replicate component
@@ -1210,7 +1210,7 @@ class MuxerEngine(AnalysisEngine):
 
                 candidates.add(cand)
 
-            if len(candidates) > 0:
+            if candidates:
                 return candidates
 
             return {None}
@@ -1285,7 +1285,7 @@ class ComponentEngine(AnalysisEngine):
 
         components = self.repo.find_components_by_type(child.query(), child.type())
 
-        if len(components) == 0:
+        if not components:
             logging.error("Cannot find referenced child %s '%s'." % (child.type(), child.query()))
             return set()
         elif len(components) > 1:
@@ -1741,7 +1741,7 @@ class SingletonEngine(AnalysisEngine):
             if s.max_clients() is not None:
                 restrictions[s] = { 'max' : int(s.max_clients()), 'cur' : 0 }
 
-        if len(restrictions) == 0:
+        if not restrictions:
             return True
 
         for e in self.layer.in_edges(obj):

@@ -50,7 +50,7 @@ class BacktrackRegistry(Registry):
         return variables
 
     def _check_variables(self):
-        if len(self.variables) == 0:
+        if not self.variables:
             self.variables = list(self._find_variables())
         else:
             cur_variables = self._find_variables()
@@ -218,7 +218,7 @@ class BacktrackRegistry(Registry):
         path = self.decision_graph.root_path(node)
 
         # go backwards until we have found a changeable operation
-        while len(path) > 0:
+        while path:
             n = path.pop()
             if self.decision_graph.revisable(n):
                 return n
@@ -278,7 +278,7 @@ class BacktrackRegistry(Registry):
             # existing 'o' object should have been backrolled earlier due
             # to their automatically added read access record. Thus, the
             # remaining set of associated objects should be empty now.
-            assert not len(trg_layer.associated_objects(src_layer.name, o))
+            assert not trg_layer.associated_objects(src_layer.name, o)
 
             self.delete_recursive(o, trg_layer)
 

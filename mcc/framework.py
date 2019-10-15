@@ -36,7 +36,7 @@ class DecisionGraph(Graph):
             return result
 
         def empty(self):
-            return self.assign is None and self.map is None and len(self.transform) == 0
+            return self.assign is None and self.map is None and not self.transform
 
         def register(self, node):
             if isinstance(node.operation, Assign):
@@ -155,7 +155,7 @@ class DecisionGraph(Graph):
                 p = self.params[0]
                 candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
                 value      = p.layer.untracked_get_param_value(p.param, p.obj)
-                return len(candidates - self.blacklist - {value}) > 0
+                return True if candidates - self.blacklist - {value} else False
             else:
                 return True
 
@@ -341,7 +341,7 @@ class DecisionGraph(Graph):
         return writers
 
     def check_tracking(self):
-        assert len(self.written) == 0, "check operation has written params: %s" % self.written
+        assert not self.written, "check operation has written params: %s" % self.written
 
     def track_read(self, layer, obj, param):
         self.read.add(self.Param(layer, obj, param))
@@ -393,7 +393,7 @@ class DecisionGraph(Graph):
             print('GOTCHA nontree!')
             self.write_dot("/tmp/doublecheck-postmerge.dot", highlight={u})
 
-        assert len(paths) > 0, "No path found between %s and %s" % (self.root, u)
+        assert paths, "No path found between %s and %s" % (self.root, u)
 
         return paths[0]
 
@@ -520,7 +520,7 @@ class Registry:
             current_layer = layer
 
         idx = self.by_order.index(current_layer)
-        if len(self.by_order) > 0:
+        if self.by_order:
             return self.by_order[idx-1]
         else:
             return None
@@ -559,7 +559,7 @@ class Registry:
             :type step: :class:`Step`
         """
         # perform sanity checks (step's layers are correct, etc.)
-        if len(self.steps) > 0:
+        if self.steps:
             if not Registry._same_layers(self.steps[-1], step):
 #                self.print_steps()
 #                logging.info(step)
@@ -881,11 +881,11 @@ class Layer:
 
         if isinstance(obj, Edge) and edges:
             missing = {obj.source, obj.target}.difference(self.graph.nodes())
-            assert len(missing) == 0, "Missing nodes detected during edge creation: %s.\n" \
-                                      "Please consider creating the edge %s by " \
-                                      "transforming edges and not during node transformation. " \
-                                      "Alternatively use a BatchTransform." \
-                                      % (missing, obj)
+            assert not missing, "Missing nodes detected during edge creation: %s.\n" \
+                                "Please consider creating the edge %s by " \
+                                "transforming edges and not during node transformation. " \
+                                "Alternatively use a BatchTransform." \
+                                % (missing, obj)
 
             # local insertions are restricted to edges between nodes whose parents
             # are already connected (or have the same parent)
@@ -896,13 +896,13 @@ class Layer:
                     source_parents = self.associated_objects(ae.layer.name, obj.source)
                     target_parents = self.associated_objects(ae.layer.name, obj.target)
 
-                    if len(source_parents) == 0:
+                    if not source_parents:
                         source_parents = {parent}
 
-                    if len(target_parents) == 0:
+                    if not target_parents:
                         target_parents = {parent}
 
-                    if len(source_parents & target_parents) == 0:
+                    if not source_parents & target_parents:
                         if parent in target_parents:
                             assert parent.source in source_parents, \
                                 "Locality not given when inserting edge %s, " \
@@ -918,13 +918,13 @@ class Layer:
                     source_parents = self.associated_objects(ae.layer.name, obj.source)
                     target_parents = self.associated_objects(ae.layer.name, obj.target)
 
-                    if len(source_parents) == 0:
+                    if not source_parents:
                         source_parents = {parent}
 
-                    if len(target_parents) == 0:
+                    if not target_parents:
                         target_parents = {parent}
 
-                    if len(source_parents & target_parents) == 0:
+                    if not source_parents & target_parents:
                         found = False
                         for p in source_parents:
                             for e in ae.layer.graph.out_edges(p):
@@ -950,7 +950,7 @@ class Layer:
                                                local=local,
                                                nodes=nodes,
                                                edges=edges)
-            if len(tmp):
+            if tmp:
                 self.set_params(ae, obj.obj, obj.params())
             inserted.update(tmp)
         elif isinstance(obj, self.Node) and nodes:
@@ -1650,7 +1650,7 @@ class InheritEngine(AnalysisEngine):
 
         if len(candidates) > 1:
             logging.warning("Cannot inherit '%s' from source/target node unambiguously" % (self.source_param))
-        elif len(candidates) == 0:
+        elif not candidates:
             logging.warning("No value for param '%s' for node %s\'s nodes." % (self.source_param, obj))
 
         return candidates
@@ -1785,7 +1785,7 @@ class Map(Operation):
 
             # check if we can reuse old results
             candidates = self.source_layer.untracked_get_param_candidates(self.param, obj)
-            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
+            if not candidates or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
             self.source_layer.start_tracking(self)
@@ -1833,7 +1833,7 @@ class BatchMap(Map):
             assert not self.source_layer.untracked_isset_param_value(ae, self.param, obj), 'partial BatchMap detected'
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
-            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
+            if not candidates or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
             if candidates is None:
@@ -1849,7 +1849,7 @@ class BatchMap(Map):
         for obj, new_candidates in result.items():
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
-            if len(candidates) == 0 or (len(candidates) == 1 and list(candidates)[0] == None):
+            if not candidates or (len(candidates) == 1 and list(candidates)[0] == None):
                 candidates = None
 
             if candidates is None:
@@ -1959,7 +1959,7 @@ class BatchAssign(Assign):
 
             candidates = raw_cand - bad_values
 
-            if len(candidates) == 0:
+            if not candidates:
                 logging.error("No candidates left for param '%s' of object %s." % (self.param, obj))
                 # simulate write access to param
                 self.source_layer.track_written(self.param, obj)
@@ -2061,7 +2061,7 @@ class Transform(Operation):
         for (index ,obj) in enumerate(iterable):
 
             # skip if parameter was already selected
-            if len(self.source_layer.associated_objects(self.target_layer.name, obj)) > 0:
+            if self.source_layer.associated_objects(self.target_layer.name, obj):
                 logging.info("Not transforming %s on layer %s" % (obj, self.source_layer))
                 continue
 
@@ -2081,7 +2081,7 @@ class Transform(Operation):
                                                               parent=obj,
                                                               nodes=False)
                 inserted = inserted_nodes | inserted_edges
-                assert len(inserted) > 0
+                assert inserted
 
                 for o in inserted:
                     if not isinstance(o, Edge):
@@ -2151,7 +2151,7 @@ class BatchTransform(Transform):
                                                           local=False,
                                                           nodes=False)
             inserted = inserted_nodes[obj] | inserted_edges
-            assert len(inserted) > 0
+            assert inserted
 
             for o in inserted:
                 if not isinstance(o, Edge):

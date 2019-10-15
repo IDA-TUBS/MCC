@@ -110,7 +110,7 @@ class Graph:
         for n in self.graph.predecessors(node):
             result.update(self.roots(n))
 
-        if len(result) == 0:
+        if not result:
             result.add(node)
 
         return result
@@ -211,7 +211,7 @@ class Graph:
                         if p in node_params and 'value' in node_params[p]:
                             params[p] = node_params[p]['value']
 
-            result.add(GraphObj(n, params if len(params) > 0 else None))
+            result.add(GraphObj(n, params if params else None))
 
         for e in self.edges():
             if e.source in nodes and e.target in nodes:

@@ -174,8 +174,8 @@ class TopologicalGraph(DecisionGraph):
             writers.update(trafos)
 
         # return early if there are no dependencies
-        if len(writers) == 0:
-            if len(written) > 0:
+        if not writers:
+            if written:
                 self.create_edge(self.root, node)
 
             self.update_path_matrix(node, set())
@@ -349,19 +349,19 @@ class DecisionTree(DecisionGraph):
             writers.update(trafos)
 
         # return early if there are no dependencies
-        if len(writers) == 0:
-            if len(written) > 0:
+        if not writers:
+            if written:
                 self.create_edge(self.root, node)
             return
 
         # ignore writers that are predecessors of any other writer
         blacklist = set()
         for w in writers:
-            if len(self.successors(w, recursive=True) & writers) > 0:
+            if self.successors(w, recursive=True) & writers:
                 blacklist.add(w)
 
         dependencies = writers - blacklist
-        assert len(dependencies) > 0
+        assert dependencies
 
         if isinstance(node.operation, Check) and not force_sequential:
             for d in dependencies:
@@ -371,7 +371,7 @@ class DecisionTree(DecisionGraph):
                 # first, maintain tree structure
                 order = sorted(dependencies, key=lambda x: x.iteration)
                 main = order.pop()
-                while len(order) > 0:
+                while order:
                     best_level = 0
                     best_path1 =  None
                     for n in order:
