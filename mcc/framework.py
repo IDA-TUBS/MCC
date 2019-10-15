@@ -2205,6 +2205,9 @@ class Check(Operation):
             for ae in self.analysis_engines:
                 result = ae.check(obj)
                 if isinstance(result, DecisionGraph.Node):
+                    # FIXME we must stop tracking and ensure that the
+                    #       decision graph is sorted
+                    raise NotImplementedError
                     raise ConstraintNotSatisfied(result)
                 elif not result:
                     # we must stop tracking (to insert a new node) and
@@ -2236,6 +2239,9 @@ class BatchCheck(Check):
             result = ae.batch_check(iterable)
 
             if isinstance(result, DecisionGraph.Node):
+                # FIXME we must stop tracking and ensure that the
+                #       decision graph is sorted
+                raise NotImplementedError
                 raise ConstraintNotSatisfied(result)
             elif not result:
                 # we must stop tracking (to insert a new node) and
