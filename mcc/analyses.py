@@ -33,7 +33,7 @@ class ReliabilityEngine(AnalysisEngine):
 
     def _get_objects_on_layer(self, source, sink, target_layer):
         objects = set()
-        for path in self.layers[0].graph.paths(source, sink):
+        for path in self.layers[0].graph.paths(source, sink, undirected=True):
             last = None
             for n in path:
                 # add node

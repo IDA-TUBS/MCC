@@ -127,8 +127,12 @@ class Graph:
                     reversed(list(dag.topological_sort(self.graph)))),
                 {node})
 
-    def paths(self, source, target):
-        return shortest_paths.generic.all_shortest_paths(self.graph, source=source, target=target)
+    def paths(self, source, target, undirected=False):
+        if undirected:
+            G = self.graph.to_undirected(as_view=True)
+            return shortest_paths.generic.all_shortest_paths(G, source=source, target=target)
+        else:
+            return shortest_paths.generic.all_shortest_paths(self.graph, source=source, target=target)
 
     def predecessors(self, node, recursive=False):
         if recursive:
