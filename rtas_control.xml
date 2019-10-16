@@ -1,7 +1,7 @@
 <xml>
-<mcc_control name="rtas" platform='rtas_base.xml' repo='rtas_repo.xml' query='c1_pose_estimation_hw.xml'>
+<mcc_control name="rtas" platform='rtas_base.xml' repo='rtas_repo.xml' query='rtas_pose_estimation_hw.xml'>
     <latency source='CAM' sink='POSE' max_rt_us='100000' />
-    <reliability sink='CAM' source='POSE' value='high' />
+    <reliability source='CAM' sink='POSE' value='high' />
     <platform_component name='FPGA' reliability='low' />
 </mcc_control>
 </xml>
