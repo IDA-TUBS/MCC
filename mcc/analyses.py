@@ -19,6 +19,28 @@ from mcc.importexport import *
 import itertools
 import copy
 import csv
+import random
+
+
+class AffinityEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Simple implementation for assigning components to cores.
+        """
+        acl = { layer        : {'reads' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='affinity', acl=acl)
+
+    def map(self, obj, candidates):
+        assert candidates is None
+        assert not isinstance(obj, Edge)
+
+        # get platform component
+        pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+        return set(range(pfc.smp_cores()))
+
+    def assign(self, obj, candidates):
+        return random.choice(list(candidates))
+
 
 class ReliabilityEngine(AnalysisEngine):
     def __init__(self, layer, layers, constrmodel):

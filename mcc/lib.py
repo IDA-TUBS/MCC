@@ -357,6 +357,16 @@ class MccBase:
         re   = ReliabilityEngine(layer, model.by_order[1:], constrmodel)
         model.add_step_unsafe(NodeStep(BatchCheck(re, 'check reliability')))
 
+    def _assign_scheduling_params(self, model, layer):
+        layer = model.by_name[layer]
+
+        ae = AffinityEngine(layer)
+
+        step = NodeStep(      Map(ae, 'set affinity'))
+        step.add_operation(Assign(ae, 'set affinity'))
+
+        model.add_step(step)
+
     def _timing_check(self, model, slayer, dlayer):
         """ Build taskgraph layer and perform timing checks
         """
@@ -468,6 +478,9 @@ class SimpleMcc(MccBase):
 
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
+
+        # assign affinity and priority
+        self._assign_scheduling_params(model, layer='comp_inst')
 
         self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
 

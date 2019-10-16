@@ -356,6 +356,10 @@
                <xs:element name="spec" type="NameType" minOccurs="0" />
                <xs:element name="ram" type="QuantumType" minOccurs="0" maxOccurs="1" />
                <xs:element name="caps" type="QuantumType" minOccurs="0" maxOccurs="1" />
+               <xs:element name="smp" minOccurs="0" maxOccurs="1" />
+                <xs:complexType>
+                    <xs:attribute name="cores" type="xs:integer" use="required"/>
+                </xs:complexType>
              </xs:sequence>
            </xs:complexType>
          </xs:element>

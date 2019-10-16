@@ -1190,6 +1190,13 @@ class PlatformParser:
 
             return True
 
+        def smp_cores(self):
+            n = self._root.find('provides/smp')
+            if n is not None:
+                return int(n.get('cores'))
+            else:
+                return 1
+
         def specs(self):
             names = set()
             for r in self._root.findall('provides/spec'):
