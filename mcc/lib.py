@@ -398,14 +398,10 @@ class SimpleMcc(MccBase):
         self._test_backtracking = test_backtracking
         self._nonchronological  = not chronologicaltracking
 
-    def insert_random_backtracking_engine(self, model, failure_rate=0.0, fail_times=0):
-        # TODO idea for better testing: only fail if there are candidates left for any assign in the dependency tree
-        #      if we then set failure_rate to 1.0, we can traverse the entire search space
-        assert(0 <= failure_rate <= 1.0)
-
+    def insert_backtracking_engine(self, model, outpath=None):
         source_layer = model.steps[-1].source_layer;
         # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, None, model, failure_rate, fail_times=fail_times)
+        bt = BacktrackingTestEngine(source_layer, None, model, outpath=outpath)
         model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
         return bt
 
@@ -480,7 +476,7 @@ class SimpleMcc(MccBase):
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
-            bt = self.insert_random_backtracking_engine(model, 0.05, 10000)
+            bt = self.insert_backtracking_engine(model, outpath=outpath)
 
 #        model.print_steps()
         if outpath is not None and dot_mcc:
@@ -503,7 +499,7 @@ class SimpleMcc(MccBase):
 
         except Exception as e:
             if self._test_backtracking:
-                print("Solutions found: %d\n" % (10000-bt.fail_times))
+                bt.write_stats(outpath+'solutions.csv')
 
             print(e)
             export = PickleExporter(model)
