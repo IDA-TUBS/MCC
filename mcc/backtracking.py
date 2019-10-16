@@ -136,9 +136,6 @@ class BacktrackRegistry(Registry):
                 step.execute(self)
 
             except ConstraintNotSatisfied as cns:
-                if __debug__:
-                    self._record_failed()
-
                 logging.info('%s failed' % cns)
 
                 # find branch point
@@ -146,6 +143,9 @@ class BacktrackRegistry(Registry):
                 if culprit is None:
                     print("\n%s" % self.stats)
                     raise Exception('No config could be found')
+
+                if __debug__:
+                    self._record_failed()
 
                 logging.info("\nRolling back to: %s" % (culprit))
 
@@ -215,8 +215,8 @@ class BacktrackRegistry(Registry):
         return self._find_brancheable(cns.node)
 
     def _find_brancheable(self, node):
-        # find the latest operation
         path = self.decision_graph.root_path(node)
+        path.pop() # pop 'node' from path
 
         # go backwards until we have found a changeable operation
         while path:
