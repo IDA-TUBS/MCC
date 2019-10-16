@@ -189,6 +189,9 @@
 		<subsystem name="FPGA">
 			<provides>
 				<spec name="fpga" />
+			    <ram quantum="0"/>
+			    <!-- we use caps as FPGA regions -->
+			    <caps quantum="2"/>
 			</provides>
 			<config name="zynq_fpga.config" />
 		</subsystem>
