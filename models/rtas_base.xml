@@ -64,7 +64,7 @@
 		</requires>
 		<timing>
 		    <!-- we only model the rpc here, i.e. clients must use <on-time> //-->
-		    <on-rpc from_ref="client" method="foobar">
+		    <on-rpc from_ref="client" method="oneshot">
 		        <task name="configure" wcet="100" bcet="50"/>
 		    </on-rpc>
 		</timing>

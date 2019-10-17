@@ -70,7 +70,12 @@
 		</dependency>
 	</child>
 
-	<child name="TRIGGER" subsystem="pc"><function name="TRIGGER" /></child>
+	<child name="TRIGGER" subsystem="pc">
+	    <function name="TRIGGER" />
+		<dependency>
+			<function name="TIMER" />
+		</dependency>
+	</child>
 
 </system>
 </xml>
