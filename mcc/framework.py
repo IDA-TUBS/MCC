@@ -115,9 +115,16 @@ class DecisionGraph(Graph):
 
         def __lt__(self, rhs):
             if self.iteration == rhs.iteration:
-                if hasattr(self, 'rank') and hasattr(rhs, 'rank'):
-                    return self.rank < rhs.rank
+                if hasattr(self, 'decisions') and hasattr(rhs, 'decisions'):
+                    if self.decisions == rhs.decisions:
+                        if hasattr(self, 'rank') and hasattr(rhs, 'rank'):
+                            # prefer higher rank (put more operations earlier)
+                            return self.rank > rhs.rank
 
+                    # prefer lower decisions
+                    return self.decisions < rhs.decisions
+
+            # prefer lower iterations
             return self.iteration < rhs.iteration
 
 

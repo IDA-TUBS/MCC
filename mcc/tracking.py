@@ -13,6 +13,8 @@ from mcc.framework import *
 from  networkx.algorithms import dag
 from  networkx.algorithms import shortest_paths
 
+from collections import deque
+
 class LinearGraph(DecisionGraph):
     """ Discards dependencies and and pushes each operation to a stack """
 
@@ -44,7 +46,7 @@ class TopologicalGraph(DecisionGraph):
         super().__init__()
         self.pm_cached = None
 
-    def sort(self, node, calculate_ranks=False):
+    def sort(self, node, calculate_ranks=True):
         """ execute topological sort for ordering
             all predecessors of 'node' ensuring that
             old nodes come before younger nodes.
@@ -55,42 +57,49 @@ class TopologicalGraph(DecisionGraph):
 
         self.pm_cached = None
 
-        # get subgraph to be sorted
         nodes = self.predecessors(node, recursive=True) | {node}
         subgraph = self.graph.subgraph(nodes)
 
         if calculate_ranks:
-            ranks = {self.root : 0}
-
-            # calculate ranks
-            for n, length in shortest_paths.generic.shortest_path_length(subgraph, source=self.root).items():
-                ranks[n] = length
-
-            # propagate the biggest rank to every direct neighbour
             for n in nodes:
-                for e in self.out_edges(n):
-                    # iterate only neighbours that are not in subgraph
-                    if e.target in nodes:
-                        continue
+                if hasattr(n, 'rank'):
+                    del n.rank
+                    del n.decisions
 
-                    if e.target not in ranks or ranks[e.target] < ranks[n]:
-                        ranks[e.target] = ranks[n]
+            next_nodes = deque()
+            n = node
 
-            # set node ranks to the difference between their rank and the neighbours ranks
-            for n in nodes:
-                rank = 0  # store minimum rank among all neighbours
-                for e in self.out_edges(n):
-                    # iterate only neighbours that are not in subgraph
-                    if e.target in nodes:
-                        continue
+            # decisions denote the minimum number of revisable decisions on any path to 'node'
+            n.decisions = 1 if self.revisable(n) else 0
+            # rank denotes the longest path to 'node'
+            n.rank = 0
+            while n:
+                for p in subgraph.predecessors(n):
+                    add = True
+                    cur_revisable = 1 if self.revisable(p) else 0
+                    dec_set  = set()
+                    rank_set = set()
+                    for s in subgraph.successors(p):
+                        if not hasattr(s, 'decisions'):
+                            # only push predecessors if all their successors have been visited
+                            add = False
+                            break
+                        else:
+                            rank_set.add(s.rank+1)
+                            dec_set.add(s.decisions + cur_revisable)
 
-                    if rank > ranks[e.target]:
-                        rank = ranks[e.target]
+                    if add:
+                        # propagate minimum number of decisions
+                        p.decisions = min(dec_set)
+                        # propagate maximum rank
+                        p.rank      = max(rank_set)
 
-                # rank is always bigger or equal than ranks[n]
-                #   n.rank = 0 means there is a direct neighbour (not in subgraph)
-                #     that has no other downstream dependencies
-                n.rank = rank - ranks[n]
+                        next_nodes.append(p)
+
+                try:
+                    n = next_nodes.popleft()
+                except:
+                    n = None
 
         # FIXME key option is not working, will be fixed in networkx 2.4
         #       (see https://github.com/networkx/networkx/issues/3493)
