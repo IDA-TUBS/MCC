@@ -1830,7 +1830,7 @@ class BatchMap(Map):
         for obj in iterable:
             assert(self.check_source_type(obj))
 
-            assert not self.source_layer.untracked_isset_param_value(ae, self.param, obj), 'partial BatchMap detected'
+            assert not self.source_layer.untracked_isset_param_value(self.param, obj), 'partial BatchMap detected'
 
             candidates = self.source_layer.get_param_candidates(ae, self.param, obj)
             if not candidates or (len(candidates) == 1 and list(candidates)[0] == None):
