@@ -332,13 +332,17 @@ class Page(Gtk.HPaned):
         params    = current_layer.untracked_get_params(obj)
         relations = current_layer._interlayer(obj)
 
-        if hasattr(obj, 'viewer_properties'):
+        real_obj = obj
+        if not isinstance(obj, mccgraph.Edge):
+            real_obj = obj.untracked_obj()
+
+        if hasattr(real_obj, 'viewer_properties'):
             propnode = self.paramview.add_treenode(parent,
                                                    'Properties',
                                                    dict(),
                                                    None,
                                                    None)
-            for prop, value in obj.viewer_properties().items():
+            for prop, value in real_obj.viewer_properties().items():
                 self.paramview.add_treenode(propnode,
                                             '%s: %s' % (prop, value),
                                             dict(), None, None)
