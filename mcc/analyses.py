@@ -330,7 +330,7 @@ class TasksRPCEngine(AnalysisEngine):
 
         # find server component 
         to_ref = call.expect_out_args['to_ref']
-        method = call.expect_out_args('method')
+        method = call.expect_out_args['method']
         server = None
         for e in self.layer.out_edges(obj):
             src = self.layer.get_param_value(self, 'source-service', e)
@@ -341,10 +341,11 @@ class TasksRPCEngine(AnalysisEngine):
         assert(server is not None)
 
         # get rpcobjects
-        if isinstance(server, model.Instance):
-            rpc_objects = server.component.taskgraph_objects(rpc=server_ref, method=method)
+        server_obj = server.obj(self.layer)
+        if isinstance(server_obj, model.Instance):
+            rpc_objects = server_obj.component.taskgraph_objects(rpc=server_ref, method=method)
         else:
-            rpc_objects = server.taskgraph_objects(rpc=server_ref, method=method)
+            rpc_objects = server_obj.taskgraph_objects(rpc=server_ref, method=method)
 
         assert rpc_objects, 'No task objects found for RPC'
 
@@ -387,7 +388,7 @@ class TasksRPCEngine(AnalysisEngine):
         """
         assert candidates is None
 
-        objects = self.layer.get_param_value(self, 'coretasks', obj)
+        objects = set(self.layer.get_param_value(self, 'coretasks', obj))
 
         rpcs = set()
         for task in (t for t in objects if isinstance(t, Task)):
@@ -538,8 +539,6 @@ class TaskgraphEngine(AnalysisEngine):
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
         links = (t for t in taskobjects if isinstance(t, Tasklink))
-
-        # TODO check that sender exists for each receiver
 
         # check for unconnected tasks
         for t in tasks:

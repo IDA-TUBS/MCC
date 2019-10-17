@@ -59,13 +59,15 @@ class Task:
                  'BCET' : self.bcet }
 
         if self.expect_in == 'junction':
-            props['Thread'] = self.thread
+            props['Junction'] = self.expect_in_args['junction_type']
+
+        props['Thread'] = self.thread
 
         if self.activation_period > 0:
             props['P'] = self.activation_period
 
         if self.activation_jitter > 0:
-            props['P'] = self.activation_jitter
+            props['J'] = self.activation_jitter
 
         if self.expect_in is not None:
             props['Input'] = '%s %s' % (self.expect_in, self.expect_in_args)
@@ -90,3 +92,6 @@ class Tasklink(Edge):
 
     def edgetype(self):
         return self.linktype
+
+    def viewer_properties(self):
+        return { 'type' : self.linktype }

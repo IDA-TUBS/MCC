@@ -357,13 +357,13 @@ class Repository(XMLParser):
                                                     method=node.get('method'))
 
             if objects[0].expect_in == 'client':
-                objects[-1].expect_out == 'client'
+                objects[-1].expect_out = 'client'
 
             if 'period' in kwargs:
-                objects[0].activation_period = kwargs['period']
+                objects[0].activation_period = int(kwargs['period'])
 
             if 'jitter' in kwargs:
-                objects[0].activation_jitter = kwargs['jitter']
+                objects[0].activation_jitter = int(kwargs['jitter'])
 
             return set(objects)
 
@@ -377,7 +377,11 @@ class Repository(XMLParser):
                 if method is None:
                     node = timing.find('./on-rpc[@from_ref="%s"]' % rpc)
                 else:
-                    node = timing.find('./on-rpc[@from_ref="%s",@method="%s"]' % (rpc, method))
+                    node = None
+                    for n in timing.findall('./on-rpc[@from_ref="%s"]' % (rpc)):
+                        if n.get('method') == method:
+                            node = n
+                            break
 
                 assert node is not None, '<on-rpc from_ref="%s" method="%s"> not present' % (rpc, method)
 
