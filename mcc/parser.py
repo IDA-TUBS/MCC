@@ -338,7 +338,7 @@ class Repository(XMLParser):
                                                        callertask=objects[-1])
                         else:
                             objects.append(Tasklink(objects[-1], newtask))
-                    else:
+                    elif expect:
                         newtask.set_placeholder_in(expect, **kwargs)
 
                     objects.append(newtask)
@@ -358,6 +358,12 @@ class Repository(XMLParser):
 
             if objects[0].expect_in == 'client':
                 objects[-1].expect_out == 'client'
+
+            if 'period' in kwargs:
+                objects[0].activation_period = kwargs['period']
+
+            if 'jitter' in kwargs:
+                objects[0].activation_jitter = kwargs['jitter']
 
             return set(objects)
 
@@ -419,6 +425,34 @@ class Repository(XMLParser):
                 # TODO remember to connect junction placeholders (caller)
                 # TODO remember to connect server placeholders
                 return objects
+
+        def handlers(self):
+            refs = set()
+            timing = self.xml_node.find('./timing')
+            if timing is None:
+                return refs
+
+            for node in timing.findall('./on-signal'):
+                refs.add(node.get('from_ref'))
+
+        def periods(self):
+            periods = set()
+
+            timing = self.xml_node.find('./timing')
+            if timing is None:
+                return periods
+
+            for node in timing.findall('on-time'):
+                periods.add(time_node.get('period'))
+
+            return periods
+
+        def interrupt(self):
+            timing = self.xml_node.find('./timing')
+            if timing is None:
+                return False
+
+            return True if timing.find('on-interrupt') else False
 
         def __repr__(self):
             return self.label()
@@ -1196,6 +1230,16 @@ class PlatformParser:
                 return int(n.get('cores'))
             else:
                 return 1
+
+        def priorities(self):
+            prios = set()
+            for p in self._root.findall('provides/priorities'):
+                tmp = set(range(int(p.get('min')),
+                                int(p.get('max'))+1
+                               ))
+                prios.update(tmp)
+
+            return prios
 
         def specs(self):
             names = set()

@@ -20,6 +20,130 @@ import itertools
 import copy
 import csv
 import random
+from collections import deque
+
+class ActivationEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Checks existence of activation pattern in taskgraph
+        """
+        AnalysisEngine.__init__(self, layer, param=None)
+
+    def batch_check(self, iterable):
+        for obj in iterable:
+            if not set(self.layer.in_edges(obj)):
+                if obj.obj(self.layer).activation_period == 0:
+                    logging.error("Root task %s has no activation period" % obj)
+                    return False
+
+        return True
+
+class PriorityEngine(AnalysisEngine):
+    def __init__(self, layer, taskgraph, platform):
+        """ Simple implementation for assigning components to scheduling priorities.
+        """
+        acl = { layer        : {'reads' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='priority', acl=acl)
+
+        self.taskgraph = taskgraph
+        self.platform  = platform
+
+    def batch_map(self, data):
+
+        # get priority range from platform component
+        partitions = dict()
+        for pfc in self.platform.platform_components():
+            partitions[pfc] = {'prios'    : pfc.priorities(),
+                               'complist' : []
+                              }
+
+        # at the moment, we only want a single but deterministic assignment
+        #    rationale: there are lots of heuristics and even
+        #               optimal priority-assignment schemes.
+        #               We expect that there will be such a scheme for
+        #               task chains as well. Until now, we just apply something
+        #               similar to RMS.
+        #    note: if we want to implement audsleys algorithm, we must assign
+        #          priorities after the task graph is known
+
+        periods = dict()
+        for task in self.taskgraph.nodes():
+            # start from roots in the task graph
+            if not set(self.taskgraph.in_edges(task)):
+                current_period = task.obj(self.taskgraph).activation_period
+                if current_period in periods:
+                    # make sure that periods are distinct
+                    logging.error('Periods are not distinct. Period %d occurs multiple times.' \
+                            % current_period)
+                    raise NotImplementedError
+                else:
+                    periods[current_period] = [task]
+                    t = task
+                    next_tasks = deque()
+                    # trace task graph (not following calls)
+                    while t:
+                        tmp = set()
+                        # collect signalled tasks in tmp
+                        for e in self.taskgraph.out_edges(t):
+                            if e.edgetype() == 'signal':
+                                tmp.add(e.target)
+                        # deterministically iterate through tasks
+                        for t in sorted(tmp, key=lambda x: x.label()):
+                            next_tasks.append(t)
+                            periods[current_period].append(t)
+
+                        t = next_tasks.popleft()
+
+        # hierarchically sort periods
+        tasklist = []
+        for p in sorted(periods.keys()):
+            for t in periods[p]:
+                tasklist.append(t)
+
+        # sort components by first occurence of a task in tasklist
+        visisted_comps = set()
+        for t in tasklist:
+            comps = self.taskgraph.associated_objects(self.layer.name, t)
+            if len(comps) > 1:
+                logging.error("Task %d is associated to multiple component. " \
+                              "Priority assignment won't be deterministic." % t)
+            for c in comps:
+                if c not in visisted_comps:
+                    pfc = self.layer.get_param_value(self, 'mapping', c)
+                    partitions[pfc]['complist'].append(c)
+                    visisted_comps.add(c)
+
+        # initialise result object with lowest priority
+        result = dict()
+        for c in data.keys():
+            if self.layer.associated_objects(self.taskgraph.name, c):
+                result[c] = set()
+            else:
+                result[c] = set([None])
+
+        # map to priority range
+        for pfc, data in partitions.items():
+            prios    = sorted(data['prios'])
+            complist = data['complist']
+
+            # get the i-th priority for component i
+            #   unless we have no more prios left
+            #   then take the lowest priority
+            for i in range(len(complist)):
+                j = min(i, len(prios)-1)
+                result[complist[i]] = set(prios[j])
+
+        return result
+
+    def batch_assign(self, data, objects, bad_combinations):
+        # at the moment, we only want a single but deterministic assignment
+        if bad_combinations:
+            return False
+
+        result = dict()
+        for o, cands in data:
+            result[0] = list(cands)[0]
+
+        return result
 
 
 class AffinityEngine(AnalysisEngine):

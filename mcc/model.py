@@ -420,6 +420,9 @@ class SimplePlatformModel(PlatformModel):
                     self.platform_graph.edge_attributes(e1)['carrier'] = comm
                     self.platform_graph.edge_attributes(e1)['undirected'] = True
 
+    def platform_components(self):
+        return self.platform_graph.nodes()
+
     def find_by_name(self, name):
         for n in self.platform_graph.nodes():
             if n.name() == name:

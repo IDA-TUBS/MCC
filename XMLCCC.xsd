@@ -360,6 +360,11 @@
                 <xs:complexType>
                     <xs:attribute name="cores" type="xs:integer" use="required"/>
                 </xs:complexType>
+               <xs:element name="priorities" minOccurs="1" />
+                <xs:complexType>
+                    <xs:attribute name="min" type="xs:integer" use="required"/>
+                    <xs:attribute name="max" type="xs:integer" use="required"/>
+                </xs:complexType>
              </xs:sequence>
            </xs:complexType>
          </xs:element>

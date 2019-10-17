@@ -155,6 +155,8 @@
 			<provides>
 			    <ram quantum="128"/>
 			    <caps quantum="1000"/>
+			    <priorities min="1"   max="1"/>
+			    <priorities min="128" max="128"/>
 			</provides>
 			<requires>
 				<comm name="Network" />
@@ -175,6 +177,7 @@
 			    <ram quantum="768"/>
 			    <caps quantum="10000"/>
 			    <smp cores='2'/>
+			    <priorities min="2" max="127"/>
 			</provides>
 			<requires>
 				<comm name="Network" />
@@ -192,6 +195,7 @@
 			    <ram quantum="0"/>
 			    <!-- we use caps as FPGA regions -->
 			    <caps quantum="2"/>
+			    <priorities min="0" max="0"/>
 			</provides>
 			<config name="zynq_fpga.config" />
 		</subsystem>
@@ -201,6 +205,8 @@
 			<provides>
 			    <ram quantum="128"/>
 			    <caps quantum="1000"/>
+			    <priorities min="1"   max="1"/>
+			    <priorities min="128" max="128"/>
 			</provides>
 			<requires>
 				<comm name="Network" />
@@ -212,6 +218,7 @@
 			    <spec name="pc" />
 			    <ram quantum="1024"/>
 			    <caps quantum="10000"/>
+			    <priorities min="2" max="127"/>
 			</provides>
 			<requires>
 				<comm name="Network" />

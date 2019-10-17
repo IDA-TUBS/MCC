@@ -357,7 +357,7 @@ class MccBase:
         re   = ReliabilityEngine(layer, model.by_order[1:], constrmodel)
         model.add_step_unsafe(NodeStep(BatchCheck(re, 'check reliability')))
 
-    def _assign_scheduling_params(self, model, layer):
+    def _assign_affinity(self, model, layer):
         layer = model.by_name[layer]
 
         ae = AffinityEngine(layer)
@@ -367,7 +367,7 @@ class MccBase:
 
         model.add_step(step)
 
-    def _timing_check(self, model, slayer, dlayer):
+    def _timing_check(self, model, pf_model, slayer, dlayer):
         """ Build taskgraph layer and perform timing checks
         """
 
@@ -393,9 +393,17 @@ class MccBase:
         con.add_operation(Transform(ae, tg, 'connect tasks'))
         model.add_step(con)
 
-        # TODO assign activation patterns
-
         # TODO connect nic tasks (via Proxy)
+
+        # check that root tasks have assigned a period
+        acte = ActivationEngine(tg)
+        model.add_step(NodeStep(BatchCheck(acte, 'activation patterns')))
+
+        # assign priorities
+        pe = PriorityEngine(slayer, taskgraph=tg, platform=pf_model)
+        prios = NodeStep(      BatchMap(pe, 'assign priorities'))
+        prios.add_operation(BatchAssign(pe, 'assign priorities'))
+        model.add_step_unsafe(prios)
 
         # TODO check CPU load
 
@@ -479,10 +487,12 @@ class SimpleMcc(MccBase):
         # assign and check resource consumptions (RAM, caps)
         self._assign_resources(model, layer='comp_inst')
 
-        # assign affinity and priority
-        self._assign_scheduling_params(model, layer='comp_inst')
+        # do not do scheduling stuff for base model
+        if base is not None:
+            # assign affinity
+            self._assign_affinity(model, layer='comp_inst')
 
-        self._timing_check(model, slayer='comp_inst', dlayer='task_graph')
+            self._timing_check(model, pf_model, slayer='comp_inst', dlayer='task_graph')
 
         if constrmodel is not None:
             self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
