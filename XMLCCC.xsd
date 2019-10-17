@@ -167,6 +167,7 @@
 
    <xs:complexType name="CompositeRequiresType">
      <xs:choice maxOccurs="unbounded">
+       <xs:element name="spec" minOccurs="0" maxOccurs="unbounded" type="NameType" />
        <xs:element name="service" minOccurs="0" maxOccurs="unbounded">
          <xs:complexType>
             <xs:complexContent>
@@ -184,27 +185,29 @@
    </xs:complexType>
 
 	<xs:complexType name="TaskType">
-     <xs:choice minOccurs="1" maxOccurs="unbounded">
-       <xs:element name="task" minOccurs="1" maxOccurs="unbounded">
-         <xs:complexType>
-           <xs:attribute name="wcet" type="xs:integer" use="required"/>
-           <xs:attribute name="bcet" type="xs:integer" use="required"/>
-           <xs:attribute name="name" type="xs:string"/>
-         </xs:complexType>
-       </xs:element>
-       <xs:element name="signal" minOccurs="1" maxOccurs="unbounded">
-         <xs:complexType>
-           <xs:attribute name="to_ref" type="xs:string" />
-           <xs:attribute name="junction" type="xs:string" />
-         </xs:complexType>
-       </xs:element>
-       <xs:element name="call" minOccurs="1" maxOccurs="unbounded">
-         <xs:complexType>
-           <xs:attribute name="to_ref" type="xs:string" use="required"/>
-           <xs:attribute name="method" type="xs:string" use="required"/>
-         </xs:complexType>
-       </xs:element>
-	  </xs:choice>
+	 <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="task" minOccurs="1" maxOccurs="1">
+        <xs:complexType>
+          <xs:attribute name="wcet" type="xs:integer" use="required"/>
+          <xs:attribute name="bcet" type="xs:integer" use="required"/>
+          <xs:attribute name="name" type="xs:string"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:choice minOccurs="0" maxOccurs="1">
+        <xs:element name="signal">
+          <xs:complexType>
+            <xs:attribute name="to_ref" type="xs:string" />
+            <xs:attribute name="junction" type="xs:string" />
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="call">
+          <xs:complexType>
+            <xs:attribute name="to_ref" type="xs:string" use="required"/>
+            <xs:attribute name="method" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
+	   </xs:choice>
+	 </xs:sequence>
 	</xs:complexType>
 
    <xs:complexType name="TimingType">
@@ -351,20 +354,22 @@
      <xs:sequence>
          <xs:element name="provides" minOccurs="0" maxOccurs="1">
            <xs:complexType>
-             <xs:sequence maxOccurs="unbounded">
+             <xs:sequence maxOccurs="1">
                <xs:element name="rte" type="NameType" minOccurs="0" maxOccurs="1" />
-               <xs:element name="spec" type="NameType" minOccurs="0" />
+               <xs:element name="spec" type="NameType" minOccurs="0" maxOccurs="unbounded"/>
                <xs:element name="ram" type="QuantumType" minOccurs="0" maxOccurs="1" />
                <xs:element name="caps" type="QuantumType" minOccurs="0" maxOccurs="1" />
-               <xs:element name="smp" minOccurs="0" maxOccurs="1" />
+               <xs:element name="smp" minOccurs="0" maxOccurs="1">
                 <xs:complexType>
                     <xs:attribute name="cores" type="xs:integer" use="required"/>
                 </xs:complexType>
-               <xs:element name="priorities" minOccurs="1" />
+               </xs:element>
+               <xs:element name="priorities" minOccurs="1">
                 <xs:complexType>
                     <xs:attribute name="min" type="xs:integer" use="required"/>
                     <xs:attribute name="max" type="xs:integer" use="required"/>
                 </xs:complexType>
+               </xs:element>
              </xs:sequence>
            </xs:complexType>
          </xs:element>
