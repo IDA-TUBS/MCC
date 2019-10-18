@@ -144,11 +144,14 @@ class PriorityEngine(AnalysisEngine):
                             if e.edgetype() == 'signal':
                                 tmp.add(e.target)
                         # deterministically iterate through tasks
-                        for t in sorted(tmp, key=lambda x: x.label()):
+                        for t in sorted(tmp, key=lambda x: x.obj(self.taskgraph).label()):
                             next_tasks.append(t)
                             periods[current_period].append(t)
 
-                        t = next_tasks.popleft()
+                        try:
+                            t = next_tasks.popleft()
+                        except:
+                            t = None
 
         # hierarchically sort periods
         tasklist = []
@@ -187,7 +190,7 @@ class PriorityEngine(AnalysisEngine):
             #   then take the lowest priority
             for i in range(len(complist)):
                 j = min(i, len(prios)-1)
-                result[complist[i]] = set(prios[j])
+                result[complist[i]] = {prios[j]}
 
         return result
 
@@ -197,8 +200,8 @@ class PriorityEngine(AnalysisEngine):
             return False
 
         result = dict()
-        for o, cands in data:
-            result[0] = list(cands)[0]
+        for o, cands in data.items():
+            result[o] = list(cands)[0]
 
         return result
 
