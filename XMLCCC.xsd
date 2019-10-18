@@ -206,6 +206,11 @@
             <xs:attribute name="method" type="xs:string" use="required"/>
           </xs:complexType>
         </xs:element>
+        <xs:element name="interrupt">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
 	   </xs:choice>
 	 </xs:sequence>
 	</xs:complexType>
@@ -234,6 +239,7 @@
 			<xs:complexType>
 				<xs:complexContent>
 					<xs:extension base="TaskType">
+					  <xs:attribute name="id" type="xs:string" use="required"/>
 					</xs:extension>
 				</xs:complexContent>
 			</xs:complexType>

@@ -355,6 +355,9 @@ class Repository(XMLParser):
                     objects[-1].set_placeholder_out('server',
                                                     to_ref=node.get('to_ref'),
                                                     method=node.get('method'))
+                elif node.tag == 'interrupt':
+                    objects[-1].set_placeholder_out('interrupt',
+                                                    id=node.get('id'))
 
             if objects[0].expect_in == 'client':
                 objects[-1].expect_out = 'client'
@@ -413,7 +416,8 @@ class Repository(XMLParser):
 
                 # on-interrupt
                 for interrupt_node in timing.findall('on-interrupt'):
-                    objects.update(self._taskgraph_objects(interrupt_node, 'interrupt'))
+                    objects.update(self._taskgraph_objects(interrupt_node, 'interrupt',
+                                                           id=interrupt_node.get('id')))
 
 #                # link to junctions
 #                for task in objects:

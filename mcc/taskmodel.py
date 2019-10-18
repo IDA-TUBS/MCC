@@ -11,6 +11,38 @@ Implements XML parser classes for the component repository.
 
 from mcc.graph import Edge
 
+class EventModel:
+    pass
+
+
+class PJEventModel(EventModel):
+    def __init__(self, P, J=0):
+        super().__init__()
+        self.P = P
+        self.J = J
+
+    def __repr__(self):
+        return 'P=%d, J=%d' % (self.P, self.J)
+
+
+class InEventModel(EventModel):
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+
+    def __repr__(self):
+        return 'InEventModel: %s' % self.name
+
+
+class OutEventModel(EventModel):
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+
+    def __repr__(self):
+        return 'OutEventModel: %s' % self.name
+
+
 class Task:
     def __init__(self, name, wcet, bcet, thread=None):
         self.name = name
@@ -38,6 +70,7 @@ class Task:
     def set_placeholder_out(self, expect, **kwargs):
         assert expect == 'junction' or \
                expect == 'receiver' or \
+               expect == 'interrupt' or \
                expect == 'server' or expect is None
 
         self.expect_out      = expect

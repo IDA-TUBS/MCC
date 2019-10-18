@@ -41,7 +41,7 @@
 		        <signal to_ref="nic"/>
 		    </on-signal>
 		    <on-signal from_ref="nic">
-		        <task name="acknowledge" wcet="100" bcet="50"/>
+		        <task name="acknowledge" wcet="20" bcet="10"/>
 		    </on-signal>
 		</timing>
 		<defaults dynamic='true' />
@@ -84,8 +84,9 @@
 		<timing>
 		    <on-signal from_ref="client">
 		        <task name="send" wcet="100" bcet="50"/>
+		        <interrupt id='nic' />
 		    </on-signal>
-		    <on-interrupt>
+		    <on-interrupt id='nic'>
 		        <task name="recv" wcet="100" bcet="50"/>
 		        <signal to_ref="client" />
 		    </on-interrupt>

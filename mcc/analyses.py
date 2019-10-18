@@ -24,24 +24,74 @@ from collections import deque
 
 class ActivationEngine(AnalysisEngine):
     def __init__(self, layer):
-        """ Checks existence of activation pattern in taskgraph
+        """ Assigns activation pattern to root tasks and checks
+            existence of activation pattern in taskgraph.
         """
-        AnalysisEngine.__init__(self, layer, param=None)
+        acl = { layer        : {'reads' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='activation', acl=acl)
 
-    def batch_check(self, iterable):
-        for obj in iterable:
-            if not set(self.layer.in_edges(obj)):
-                if obj.obj(self.layer).activation_period == 0:
-                    logging.error("Root task %s has no activation period" % obj)
-                    return False
+    def map(self, obj, candidates):
+        assert not candidates
 
-        return True
+        result = set()
+
+        # only assign activation pattern to root tasks
+        if not set(self.layer.in_edges(obj)):
+            task = obj.obj(self.layer)
+            if task.expect_in == 'interrupt':
+                # pragmatically assume its a nic task and there
+                #  is only one other nic task in the system
+                # FIXME if this does not hold anymore, we must have a look at the proxy
+                pfc = self.layer.get_param_value(self, 'mapping', obj)
+                for o in self.layer.nodes() - {obj}:
+                    # find task who raises interrupt with same id
+                    t = o.obj(self.layer)
+                    if t.expect_out == 'interrupt' and \
+                       t.expect_out_args['id'] == task.expect_in_args['id']:
+
+                        # task must be in different domains
+                        if not pfc.in_native_domain(
+                                self.layer.get_param_value(self, 'mapping', o)):
+                            result.add(InEventModel(t.expect_out_args['id']))
+
+            elif task.expect_out == 'interrupt':
+                pfc = self.layer.get_param_value(self, 'mapping', obj)
+                for o in self.layer.nodes() - {obj}:
+                    # find task who raises interrupt with same id
+                    t = o.obj(self.layer)
+                    if t.expect_in == 'interrupt' and \
+                       t.expect_in_args['id'] == task.expect_out_args['id']:
+
+                        # task must be in different domains
+                        if not pfc.in_native_domain(
+                                self.layer.get_param_value(self, 'mapping', o)):
+                            result.add(OutEventModel(t.expect_in_args['id']))
+
+            elif task.activation_period != 0:
+                result.add(PJEventModel(P=task.activation_period,
+                                        J=task.activation_jitter))
+            else:
+                logging.error("Root task %s has no activation period" % obj)
+
+            if len(result) > 1:
+                logging.error("Cannot unambiguously connect interrupts %s" % \
+                              task.expect_out_args['id'])
+
+            return result
+
+        else:
+            return {None}
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
+
 
 class PriorityEngine(AnalysisEngine):
     def __init__(self, layer, taskgraph, platform):
         """ Simple implementation for assigning components to scheduling priorities.
         """
-        acl = { layer        : {'reads' : set(['mapping'])}}
+        acl = { layer        : {'reads' : {'mapping'}},
+                taskgraph    : {'reads' : {'activation'}}}
         AnalysisEngine.__init__(self, layer, param='priority', acl=acl)
 
         self.taskgraph = taskgraph
@@ -66,10 +116,17 @@ class PriorityEngine(AnalysisEngine):
         #          priorities after the task graph is known
 
         periods = dict()
+        isr_period = 1
         for task in self.taskgraph.nodes():
-            # start from roots in the task graph
-            if not set(self.taskgraph.in_edges(task)):
-                current_period = task.obj(self.taskgraph).activation_period
+            act = self.taskgraph.get_param_value(self, 'activation', task)
+            if act and isinstance(act, PJEventModel) or isinstance(act, InEventModel):
+                if isinstance(act, PJEventModel):
+                    current_period = act.P
+                else:
+                    # highest priority for interrupts
+                    current_period = isr_period
+                    isr_period += 1
+
                 if current_period in periods:
                     # make sure that periods are distinct
                     logging.error('Periods are not distinct. Period %d occurs multiple times.' \

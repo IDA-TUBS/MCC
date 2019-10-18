@@ -393,11 +393,12 @@ class MccBase:
         con.add_operation(Transform(ae, tg, 'connect tasks'))
         model.add_step(con)
 
-        # TODO connect nic tasks (via Proxy)
 
-        # check that root tasks have assigned a period
+        # assign event model to interrupt tasks
         acte = ActivationEngine(tg)
-        model.add_step(NodeStep(BatchCheck(acte, 'activation patterns')))
+        activation = NodeStep(       Map(acte, 'activation pattern'))
+        activation.add_operation(    Assign(acte, 'activation patterns'))
+        model.add_step(activation)
 
         # assign priorities
         pe = PriorityEngine(slayer, taskgraph=tg, platform=pf_model)
