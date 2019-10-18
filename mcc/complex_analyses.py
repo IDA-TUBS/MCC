@@ -10,11 +10,245 @@ Implements more sophisticated analysis engines.
 """
 import logging
 from mcc.framework import *
+from mcc.taskmodel import *
 
 from collections import OrderedDict
 import itertools
 
 from ortools.sat.python import cp_model
+
+from pycpa import model as pycpa_model
+from pycpa import options as pycpa_options
+from pycpa import schedulers as pycpa_schedulers
+from pycpa import analysis as pycpa_analysis
+from pycpa import junctions as pycpa_junctions
+from taskchain import model as tc_model
+
+class CPAEngine(AnalysisEngine):
+
+    def __init__(self, layer, complayer):
+        acl = { layer        : {'reads' : {'mapping', 'activation'}},
+                complayer    : {'reads' : {'priority'}}}
+        AnalysisEngine.__init__(self, layer, param=None, acl=acl)
+
+        self.complayer = complayer
+
+    def batch_check(self, iterable):
+
+        resources = dict()  # PfComponent -> tc_model.ResourceModel
+        tasks     = dict()  # Node -> pycpa_model.Task
+        revtasks  = dict()  # pycpa_model.Task -> Node
+        threads   = dict()  # Component -> (tc_model.ExecutionContext, tc_model.SchedulingContext)
+        threadmap = dict()  # Node -> Thread
+        junctions = dict()
+
+        taskid = 1
+        for obj in iterable:
+            task = obj.obj(self.layer)
+            pfc = self.layer.get_param_value(self, 'mapping', obj)
+
+            # create new resource model if needed
+            if pfc not in resources:
+                create = True
+                for tmp in resources.keys():
+                    if tmp.in_native_domain(pfc):
+                        resources[pfc] = resources[tmp]
+                        create = False
+                        break
+
+                if create:
+                    resources[pfc] = tc_model.ResourceModel(pfc.name())
+
+            # create pycpa_model.Task
+            name = 't%d-%s' % (taskid, task.name)
+            tasks[obj] = pycpa_model.Task(name, wcet=task.wcet, bcet=task.bcet)
+            if task.expect_in == 'junction':
+                jt = task.expect_in_args['junction_type']
+                if jt == 'AND':
+                    junctions[obj] = pycpa_model.Junction('j%d'%taskid, strategy=pycpa_junctions.ANDJoin())
+                    resources[pfc].add_junction(junctions[obj])
+                elif jt == 'OR':
+                    junctions[obj] = pycpa_model.Junction('j%d'%taskid, strategy=pycpa_junctions.ORJoin())
+                    resources[pfc].add_junction(junctions[obj])
+                elif jt == 'MUX':
+                    raise NotImplementedError
+
+            taskid += 1
+            revtasks[tasks[obj]] = obj
+            resources[pfc].add_task(tasks[obj])
+
+            comp = task.thread
+            # create new execution and scheduling context if needed
+            if comp not in threads:
+                # create execution context
+                ectx = tc_model.ExecutionContext('e-'+task.thread.obj(self.complayer).label())
+                resources[pfc].add_execution_context(ectx)
+
+                # get scheduling priority
+                prio = self.complayer.get_param_value(self, 'priority', comp)
+
+                # create scheduling context
+                sctx = tc_model.SchedulingContext('s-'+task.thread.obj(self.complayer).label())
+                if prio:
+                    sctx.priority = prio
+                resources[pfc].add_scheduling_context(sctx)
+
+                threads[comp] = (ectx, sctx)
+
+            threadmap[obj] = comp
+
+        # create tasklinks
+        roots  = set()
+        leaves = set()
+        for model in set(resources.values()):
+            for pycpa_task in model.tasks:
+                node = revtasks[pycpa_task]
+                # remember root tasks
+                if not set(self.layer.in_edges(node)):
+                    roots.add(node)
+
+                if node in junctions:
+                    model.link_junction(junctions[node], pycpa_task)
+
+                has_out = False
+                for e in self.layer.out_edges(node):
+                    has_out = True
+                    if e.target not in junctions:
+                        model.link_tasks(pycpa_task, tasks[e.target])
+                    else:
+                        model.connect_junction(pycpa_task, junctions[e.target])
+
+                if not has_out:
+                    leaves.add(node)
+
+
+        # assign execution and scheduling contexts by tracing task graph
+        visited = set()
+        for root in roots:
+            pfc = self.layer.get_param_value(self, 'mapping', root)
+
+            # assign/store event model
+            act = self.layer.get_param_value(self, 'activation', root)
+            if isinstance(act, PJEventModel):
+                tasks[root].in_event_model = pycpa_model.PJdEventModel(P=act.P, J=act.J)
+
+            ectx, sctx = threads[threadmap[root]]
+
+            logging.info("\n\nprocessing chain from %s" % tasks[root])
+
+            # assign own scheduling context to root tasks
+            resources[pfc].assign_scheduling_context(tasks[root],
+                                                     sctx)
+
+            # assign own execution context to root tasks
+            resources[pfc].assign_execution_context(tasks[root],
+                                                    ectx,
+                                                    blocking=False)
+
+            threadstack = []
+            node = root
+            next_nodes = deque()
+
+            while node:
+                logging.info("\nprocessing task %s" % tasks[node])
+
+                if not set(self.layer.out_edges(node)):
+                    # release our execution context
+                    pfc = self.layer.get_param_value(self, 'mapping', node)
+                    resources[pfc].assign_execution_context(tasks[node],
+                                                            threads[threadmap[node]][0])
+
+
+                # first follow rpc edges
+                for e in (e for e in self.layer.out_edges(node) if e.edgetype() == 'call'):
+                    assert e.target not in visited
+                    next_nodes.append(e.target)
+                    visited.add(e.target)
+
+                    logging.info("processing edge %s -> %s" % (tasks[e.source],tasks[e.target]) )
+
+                    # called task gets its scheduling context from top of stack
+                    if threadstack:
+                        sctx = threads[threadstack[0]][1]
+                    else:
+                        sctx = threads[threadmap[e.source]][1]
+                    resources[pfc].assign_scheduling_context(tasks[e.target], sctx)
+
+                    thread_target = threadmap[e.target]
+                    thread_source = threadmap[e.source]
+
+                    # if called task is already on the stack
+                    logging.info('%s is in %s' % (thread_target, threadstack))
+                    if thread_target in threadstack:
+                        # this is a return call -> release ectx from current task
+                        resources[pfc].assign_execution_context(tasks[e.source],
+                                                                threads[thread_source][0],
+                                                                blocking = False)
+
+                        assert threadstack[-1] == thread_source, '%s != %s, for edge %s -> %s\n%s'  \
+                             % (threadstack[-1], thread_source, e.source, e.target, threadstack)
+                        threadstack.pop()
+                    elif not threadstack:
+                        resources[pfc].assign_execution_context(tasks[e.source],
+                                                                threads[thread_source][0],
+                                                                blocking = True)
+                        if thread_source != thread_target:
+                            threadstack.append(thread_source)
+                        threadstack.append(thread_target)
+                    else:
+                        # this is a real call -> push ectx to stack
+                        threadstack.append(thread_target)
+
+                    # called task blocks all execution contexts on the stack
+                    for th in threadstack:
+                        resources[pfc].assign_execution_context(tasks[e.target],
+                                                                threads[th][0],
+                                                                blocking = True)
+
+                for e in (e for e in self.layer.out_edges(node) if e.edgetype() == 'signal'):
+                    if e.target in visited:
+                        continue
+
+                    logging.info("processing edge %s -> %s" % (tasks[e.source],tasks[e.target]) )
+
+                    next_nodes.appendleft(e.target)
+                    visited.add(e.target)
+
+                    pfc = self.layer.get_param_value(self, 'mapping', e.target)
+                    if e.edgetype() == 'signal':
+                        # signalled tasks get their own scheduling context
+                        resources[pfc].assign_scheduling_context(tasks[e.target],
+                                                                 threads[threadmap[e.target]][1])
+                        # next task releases its execution context
+                        resources[pfc].assign_execution_context(tasks[e.target],
+                                                                threads[threadmap[e.target]][0],
+                                                                blocking = False)
+
+                try:
+                    node = next_nodes.pop()
+                except:
+                    node = None
+
+
+        for model in set(resources.values()):
+            model.check()
+
+        # FIXME (future work) deal with mux and demux junctions
+
+        # TODO create TaskchainResources, create taskchains
+        
+        # TODO find interrupt tasks and connect
+
+        # TODO perform analysis
+
+        # TODO define path for latency requirement (split at junctions)
+
+        # TODO perform path analysis
+
+        tc_model.ResourceModel.write_dot(set(resources.values()), '/tmp/taskgraph.dot')
+
+        return False
+
 
 class CPMappingEngine(AnalysisEngine):
     """ Assigns platform mappings using ortools' CP-sat solver """

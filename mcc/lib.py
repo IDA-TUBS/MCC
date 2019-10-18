@@ -406,7 +406,9 @@ class MccBase:
         prios.add_operation(BatchAssign(pe, 'assign priorities'))
         model.add_step_unsafe(prios)
 
-        # TODO check CPU load
+        # perform CPA
+        pycpa = CPAEngine(tg, slayer)
+        model.add_step(NodeStep(BatchCheck(pycpa, 'CPA')))
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
