@@ -320,7 +320,7 @@ class TasksCoreEngine(AnalysisEngine):
 
         # get time-triggered taskgraph
         try:
-            objects = component.taskgraph_objects()
+            objects = component.taskgraph_objects(obj)
         except Exception as e:
            logging.error("Could not get taskgraph objects for %s" % obj) 
            raise e
@@ -337,7 +337,7 @@ class TasksCoreEngine(AnalysisEngine):
             signals.add(serv.ref())
 
         for sig in signals - {None}:
-            objects.update(component.taskgraph_objects(signal=sig))
+            objects.update(component.taskgraph_objects(obj, signal=sig))
 
         objects = self._connect_junctions(objects)
 
@@ -403,9 +403,9 @@ class TasksRPCEngine(AnalysisEngine):
         # get rpcobjects
         server_obj = server.obj(self.layer)
         if isinstance(server_obj, model.Instance):
-            rpc_objects = server_obj.component.taskgraph_objects(rpc=server_ref, method=method)
+            rpc_objects = server_obj.component.taskgraph_objects(server, rpc=server_ref, method=method)
         else:
-            rpc_objects = server_obj.taskgraph_objects(rpc=server_ref, method=method)
+            rpc_objects = server_obj.taskgraph_objects(server, rpc=server_ref, method=method)
 
         assert rpc_objects, 'No task objects found for RPC'
 
