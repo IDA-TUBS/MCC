@@ -441,7 +441,7 @@
 		    <service name="Timer" function="TIMER" ref='timer'/>
 		</requires>
 		<timing>
-			<on-time period='1000'>
+			<on-time period='1000000'>
 				<task name='send_trigger' wcet="100" bcet="80"/>
 				<signal to_ref='out' />
 				<task name='oneshot' wcet="20" bcet="10"/>

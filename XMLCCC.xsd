@@ -371,7 +371,7 @@
                     <xs:attribute name="cores" type="xs:integer" use="required"/>
                 </xs:complexType>
                </xs:element>
-               <xs:element name="priorities" minOccurs="1">
+               <xs:element name="priorities" minOccurs="1" maxOccurs="unbounded">
                 <xs:complexType>
                     <xs:attribute name="min" type="xs:integer" use="required"/>
                     <xs:attribute name="max" type="xs:integer" use="required"/>
@@ -400,6 +400,7 @@
 		<xs:sequence>
 			<xs:element name="subsystem" type="SubsystemType" minOccurs="1" maxOccurs="unbounded" />
 		</xs:sequence>
+   	    <xs:attribute name="name" type="xs:string" use="required"/>
 	</xs:complexType>
 
    <xs:complexType name="PlatformType">

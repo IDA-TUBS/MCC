@@ -151,7 +151,7 @@
 </repository>
 
 <platform>
-	<component>
+	<component name='zynq'>
 		<subsystem name="zynq-static">
 			<provides>
 			    <ram quantum="128"/>
@@ -201,7 +201,7 @@
 			<config name="zynq_fpga.config" />
 		</subsystem>
 	</component>
-	<component>
+	<component name='pc'>
 		<subsystem name="pc-static">
 			<provides>
 			    <ram quantum="128"/>

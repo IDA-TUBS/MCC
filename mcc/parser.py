@@ -1206,6 +1206,16 @@ class PlatformParser:
 
             return domain
 
+        def domain_name(self):
+            p = None
+            if self._parent is not None:
+                if hasattr(self._parent, '_domain'):
+                    p = self._parent._domain()
+                else:
+                    p = self._parent
+
+            return p.get('name')
+
         def name(self):
             return self._root.get('name')
 
