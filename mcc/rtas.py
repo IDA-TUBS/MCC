@@ -102,8 +102,12 @@ class ConstraintsModel:
 
             if lat.get('max_rt_us'):
                 data['max_rt'] = int(lat.get('max_rt_us'))
+                assert False, 'max_rt_us not supported in latency requirement'
             if lat.get('max_age_us'):
                 data['max_age'] = int(lat.get('max_age_us'))
+                assert False, 'max_age_us not supported in latency requirement'
+            if lat.get('min_rate_us'):
+                data['min_rate'] = int(lat.get('min_rate_us'))
 
             constraints.append(data)
 
