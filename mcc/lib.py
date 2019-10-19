@@ -367,7 +367,7 @@ class MccBase:
 
         model.add_step(step)
 
-    def _timing_check(self, model, pf_model, slayer, dlayer):
+    def _timing_check(self, model, pf_model, slayer, dlayer, constrmodel):
         """ Build taskgraph layer and perform timing checks
         """
 
@@ -407,7 +407,7 @@ class MccBase:
         model.add_step_unsafe(prios)
 
         # perform CPA
-        pycpa = CPAEngine(tg, slayer)
+        pycpa = CPAEngine(tg, slayer, model.by_order[1:], constrmodel)
         model.add_step(NodeStep(BatchCheck(pycpa, 'CPA')))
 
 class SimpleMcc(MccBase):
@@ -495,7 +495,9 @@ class SimpleMcc(MccBase):
             # assign affinity
             self._assign_affinity(model, layer='comp_inst')
 
-            self._timing_check(model, pf_model, slayer='comp_inst', dlayer='task_graph')
+            self._timing_check(model, pf_model, slayer='comp_inst',
+                                                dlayer='task_graph',
+                                                constrmodel=constrmodel)
 
         if constrmodel is not None:
             self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)

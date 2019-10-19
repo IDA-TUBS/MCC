@@ -26,12 +26,14 @@ from taskchain import schedulers as tc_schedulers
 
 class CPAEngine(AnalysisEngine):
 
-    def __init__(self, layer, complayer):
+    def __init__(self, layer, complayer, layers, constrmodel):
         acl = { layer        : {'reads' : {'mapping', 'activation'}},
                 complayer    : {'reads' : {'priority'}}}
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
         self.complayer = complayer
+        self.layers      = layers
+        self.constrmodel = constrmodel
 
     def batch_check(self, iterable):
 
@@ -137,8 +139,6 @@ class CPAEngine(AnalysisEngine):
 
             ectx, sctx = threads[threadmap[root]]
 
-            logging.info("\n\nprocessing chain from %s" % tasks[root])
-
             # assign own scheduling context to root tasks
             models[pfc].assign_scheduling_context(tasks[root],
                                                      sctx)
@@ -153,8 +153,6 @@ class CPAEngine(AnalysisEngine):
             next_nodes = deque()
 
             while node:
-                logging.info("\nprocessing task %s" % tasks[node])
-
                 if not set(self.layer.out_edges(node)):
                     # release our execution context
                     pfc = self.layer.get_param_value(self, 'mapping', node)
@@ -167,8 +165,6 @@ class CPAEngine(AnalysisEngine):
                     assert e.target not in visited
                     next_nodes.append(e.target)
                     visited.add(e.target)
-
-                    logging.info("processing edge %s -> %s" % (tasks[e.source],tasks[e.target]) )
 
                     # called task gets its scheduling context from top of stack
                     if threadstack:
@@ -211,8 +207,6 @@ class CPAEngine(AnalysisEngine):
                 for e in (e for e in self.layer.out_edges(node) if e.edgetype() == 'signal'):
                     if e.target in visited:
                         continue
-
-                    logging.info("processing edge %s -> %s" % (tasks[e.source],tasks[e.target]) )
 
                     next_nodes.appendleft(e.target)
                     visited.add(e.target)
@@ -269,11 +263,21 @@ class CPAEngine(AnalysisEngine):
                             found = True
                 assert found, 'Cannot link interrupt task %s with irq=%s' % (to, name)
 
-        # TODO define path for latency requirement (split at junctions)
+
+        # workaround: the latency requirement is actually a fps requirement, i.e. 
+        #             we must adapt the input event model to the latency requirement
+        for lat in self.constrmodel.latency_constraints():
+            # only for minimum rate requirements
+            if 'min_rate' in lat:
+                # find time trigger
+                for t in self._get_objects_on_layer(lat['source'], self.layer):
+                    if not isinstance(t, Edge) and tasks[t].in_event_model:
+                        # assign period from min_rate_us attribute
+                        tasks[t].in_event_model.P = lat['min_rate']
 
 
-        # TODO workaround: the latency requirement is actually a fps requirement, i.e. 
-        #           we must adapt the input event model to the latency requirement
+        if __debug__:
+            tc_model.ResourceModel.write_dot(set(models.values()), '/tmp/taskgraph.dot')
 
         # perform analysis
         logging.info("Performing CPA")
@@ -285,14 +289,25 @@ class CPAEngine(AnalysisEngine):
 
         logging.info("System is SCHEDULABLE")
 
-        # TODO perform path analysis
+        # TODO define path for latency requirement (split at junctions)
+        # TODO perform path analysis based on 'max_rt_us' attribute from latency requirement
 
-        from pycpa import graph
-        graph.graph_system(system, '/tmp/system.pdf', dotout='/tmp/system.dot')
-
-        tc_model.ResourceModel.write_dot(set(models.values()), '/tmp/taskgraph.dot')
+#        from pycpa import graph
+#        graph.graph_system(system, '/tmp/system.pdf', dotout='/tmp/system.dot')
 
         return True
+
+    def _get_objects_on_layer(self, obj, target_layer):
+        objects = {obj}
+        for l1,l2 in zip(self.layers, self.layers[1:]):
+            if l1 == target_layer:
+                break
+            next_objects = set()
+            for obj in objects:
+                next_objects.update(l1.associated_objects(l2.name, obj))
+            objects = next_objects
+
+        return objects
 
 
 class CPMappingEngine(AnalysisEngine):
