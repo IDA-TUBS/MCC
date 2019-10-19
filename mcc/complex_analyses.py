@@ -19,10 +19,10 @@ from ortools.sat.python import cp_model
 
 from pycpa import model as pycpa_model
 from pycpa import options as pycpa_options
-from pycpa import schedulers as pycpa_schedulers
 from pycpa import analysis as pycpa_analysis
 from pycpa import junctions as pycpa_junctions
 from taskchain import model as tc_model
+from taskchain import schedulers as tc_schedulers
 
 class CPAEngine(AnalysisEngine):
 
@@ -35,7 +35,7 @@ class CPAEngine(AnalysisEngine):
 
     def batch_check(self, iterable):
 
-        resources = dict()  # PfComponent -> tc_model.ResourceModel
+        models = dict()  # PfComponent -> tc_model.ResourceModel
         tasks     = dict()  # Node -> pycpa_model.Task
         revtasks  = dict()  # pycpa_model.Task -> Node
         threads   = dict()  # Component -> (tc_model.ExecutionContext, tc_model.SchedulingContext)
@@ -48,16 +48,16 @@ class CPAEngine(AnalysisEngine):
             pfc = self.layer.get_param_value(self, 'mapping', obj)
 
             # create new resource model if needed
-            if pfc not in resources:
+            if pfc not in models:
                 create = True
-                for tmp in resources.keys():
+                for tmp in models.keys():
                     if tmp.in_native_domain(pfc):
-                        resources[pfc] = resources[tmp]
+                        models[pfc] = models[tmp]
                         create = False
                         break
 
                 if create:
-                    resources[pfc] = tc_model.ResourceModel(pfc.name())
+                    models[pfc] = tc_model.ResourceModel(pfc.domain_name())
 
             # create pycpa_model.Task
             name = 't%d-%s' % (taskid, task.name)
@@ -66,23 +66,23 @@ class CPAEngine(AnalysisEngine):
                 jt = task.expect_in_args['junction_type']
                 if jt == 'AND':
                     junctions[obj] = pycpa_model.Junction('j%d'%taskid, strategy=pycpa_junctions.ANDJoin())
-                    resources[pfc].add_junction(junctions[obj])
+                    models[pfc].add_junction(junctions[obj])
                 elif jt == 'OR':
                     junctions[obj] = pycpa_model.Junction('j%d'%taskid, strategy=pycpa_junctions.ORJoin())
-                    resources[pfc].add_junction(junctions[obj])
+                    models[pfc].add_junction(junctions[obj])
                 elif jt == 'MUX':
                     raise NotImplementedError
 
             taskid += 1
             revtasks[tasks[obj]] = obj
-            resources[pfc].add_task(tasks[obj])
+            models[pfc].add_task(tasks[obj])
 
             comp = task.thread
             # create new execution and scheduling context if needed
             if comp not in threads:
                 # create execution context
                 ectx = tc_model.ExecutionContext('e-'+task.thread.obj(self.complayer).label())
-                resources[pfc].add_execution_context(ectx)
+                models[pfc].add_execution_context(ectx)
 
                 # get scheduling priority
                 prio = self.complayer.get_param_value(self, 'priority', comp)
@@ -91,7 +91,7 @@ class CPAEngine(AnalysisEngine):
                 sctx = tc_model.SchedulingContext('s-'+task.thread.obj(self.complayer).label())
                 if prio:
                     sctx.priority = prio
-                resources[pfc].add_scheduling_context(sctx)
+                models[pfc].add_scheduling_context(sctx)
 
                 threads[comp] = (ectx, sctx)
 
@@ -100,7 +100,7 @@ class CPAEngine(AnalysisEngine):
         # create tasklinks
         roots  = set()
         leaves = set()
-        for model in set(resources.values()):
+        for model in set(models.values()):
             for pycpa_task in model.tasks:
                 node = revtasks[pycpa_task]
                 # remember root tasks
@@ -124,6 +124,7 @@ class CPAEngine(AnalysisEngine):
 
         # assign execution and scheduling contexts by tracing task graph
         visited = set()
+        interrupt_tasks_in = dict((k, dict()) for k in models.keys())
         for root in roots:
             pfc = self.layer.get_param_value(self, 'mapping', root)
 
@@ -131,17 +132,19 @@ class CPAEngine(AnalysisEngine):
             act = self.layer.get_param_value(self, 'activation', root)
             if isinstance(act, PJEventModel):
                 tasks[root].in_event_model = pycpa_model.PJdEventModel(P=act.P, J=act.J)
+            elif isinstance(act, InEventModel):
+                interrupt_tasks_in[pfc][act.name] = tasks[root]
 
             ectx, sctx = threads[threadmap[root]]
 
             logging.info("\n\nprocessing chain from %s" % tasks[root])
 
             # assign own scheduling context to root tasks
-            resources[pfc].assign_scheduling_context(tasks[root],
+            models[pfc].assign_scheduling_context(tasks[root],
                                                      sctx)
 
             # assign own execution context to root tasks
-            resources[pfc].assign_execution_context(tasks[root],
+            models[pfc].assign_execution_context(tasks[root],
                                                     ectx,
                                                     blocking=False)
 
@@ -155,7 +158,7 @@ class CPAEngine(AnalysisEngine):
                 if not set(self.layer.out_edges(node)):
                     # release our execution context
                     pfc = self.layer.get_param_value(self, 'mapping', node)
-                    resources[pfc].assign_execution_context(tasks[node],
+                    models[pfc].assign_execution_context(tasks[node],
                                                             threads[threadmap[node]][0])
 
 
@@ -172,7 +175,7 @@ class CPAEngine(AnalysisEngine):
                         sctx = threads[threadstack[0]][1]
                     else:
                         sctx = threads[threadmap[e.source]][1]
-                    resources[pfc].assign_scheduling_context(tasks[e.target], sctx)
+                    models[pfc].assign_scheduling_context(tasks[e.target], sctx)
 
                     thread_target = threadmap[e.target]
                     thread_source = threadmap[e.source]
@@ -181,7 +184,7 @@ class CPAEngine(AnalysisEngine):
                     logging.info('%s is in %s' % (thread_target, threadstack))
                     if thread_target in threadstack:
                         # this is a return call -> release ectx from current task
-                        resources[pfc].assign_execution_context(tasks[e.source],
+                        models[pfc].assign_execution_context(tasks[e.source],
                                                                 threads[thread_source][0],
                                                                 blocking = False)
 
@@ -189,7 +192,7 @@ class CPAEngine(AnalysisEngine):
                              % (threadstack[-1], thread_source, e.source, e.target, threadstack)
                         threadstack.pop()
                     elif not threadstack:
-                        resources[pfc].assign_execution_context(tasks[e.source],
+                        models[pfc].assign_execution_context(tasks[e.source],
                                                                 threads[thread_source][0],
                                                                 blocking = True)
                         if thread_source != thread_target:
@@ -201,7 +204,7 @@ class CPAEngine(AnalysisEngine):
 
                     # called task blocks all execution contexts on the stack
                     for th in threadstack:
-                        resources[pfc].assign_execution_context(tasks[e.target],
+                        models[pfc].assign_execution_context(tasks[e.target],
                                                                 threads[th][0],
                                                                 blocking = True)
 
@@ -217,10 +220,10 @@ class CPAEngine(AnalysisEngine):
                     pfc = self.layer.get_param_value(self, 'mapping', e.target)
                     if e.edgetype() == 'signal':
                         # signalled tasks get their own scheduling context
-                        resources[pfc].assign_scheduling_context(tasks[e.target],
+                        models[pfc].assign_scheduling_context(tasks[e.target],
                                                                  threads[threadmap[e.target]][1])
                         # next task releases its execution context
-                        resources[pfc].assign_execution_context(tasks[e.target],
+                        models[pfc].assign_execution_context(tasks[e.target],
                                                                 threads[threadmap[e.target]][0],
                                                                 blocking = False)
 
@@ -229,25 +232,67 @@ class CPAEngine(AnalysisEngine):
                 except:
                     node = None
 
-
-        for model in set(resources.values()):
-            model.check()
+        interrupt_tasks_out = dict((k, dict()) for k in models.keys())
+        for leaf in leaves:
+            pfc = self.layer.get_param_value(self, 'mapping', leaf)
+            act = self.layer.get_param_value(self, 'activation', leaf)
+            if isinstance(act, OutEventModel):
+                interrupt_tasks_out[pfc][act.name] = tasks[leaf]
 
         # FIXME (future work) deal with mux and demux junctions
 
-        # TODO create TaskchainResources, create taskchains
-        
-        # TODO find interrupt tasks and connect
+        resources = dict()   # map ResourceModel to TaskchainResource
+        schedclass = tc_schedulers.SPPScheduler
+        for model in set(models.values()):
+            model.check()
 
-        # TODO perform analysis
+            # create TaskchainResources and create taskchains
+            resources[model] = tc_model.TaskchainResource(model.name, scheduler=schedclass())
+            resources[model].build_from_model(model)
+            resources[model].create_taskchains()
+
+        # bind everything to a system
+        system = pycpa_model.System('S')
+        for model, resource in resources.items():
+            system.bind_resource(resource)
+            for j in model.junctions:
+                system.bind_junction(j)
+
+        # find and connect interrupt tasks
+        for pfco, odata in interrupt_tasks_out.items():
+            for name, to in odata.items():
+                found = False
+                for pfci, idata in interrupt_tasks_in.items():
+                    if not pfco.in_native_domain(pfci):
+                        if name in idata:
+                            to.link_dependent_task(idata[name])
+                            found = True
+                assert found, 'Cannot link interrupt task %s with irq=%s' % (to, name)
 
         # TODO define path for latency requirement (split at junctions)
 
+
+        # TODO workaround: the latency requirement is actually a fps requirement, i.e. 
+        #           we must adapt the input event model to the latency requirement
+
+        # perform analysis
+        logging.info("Performing CPA")
+        try:
+            task_results = pycpa_analysis.analyze_system(system)
+        except pycpa_analysis.NotSchedulableException as e:
+            logging.error("System is NOT SCHEDULABLE")
+            return False
+
+        logging.info("System is SCHEDULABLE")
+
         # TODO perform path analysis
 
-        tc_model.ResourceModel.write_dot(set(resources.values()), '/tmp/taskgraph.dot')
+        from pycpa import graph
+        graph.graph_system(system, '/tmp/system.pdf', dotout='/tmp/system.dot')
 
-        return False
+        tc_model.ResourceModel.write_dot(set(models.values()), '/tmp/taskgraph.dot')
+
+        return True
 
 
 class CPMappingEngine(AnalysisEngine):
