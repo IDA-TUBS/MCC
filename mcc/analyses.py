@@ -53,8 +53,19 @@ class ActivationEngine(AnalysisEngine):
                         if not pfc.in_native_domain(
                                 self.layer.get_param_value(self, 'mapping', o)):
                             result.add(InEventModel(t.expect_out_args['id']))
+            elif task.activation_period != 0:
+                result.add(PJEventModel(P=task.activation_period,
+                                        J=task.activation_jitter))
+            else:
+                logging.error("Root task %s has no activation period" % obj)
 
-            elif task.expect_out == 'interrupt':
+            if len(result) > 1:
+                logging.error("Cannot unambiguously connect interrupts %s" % \
+                              task.expect_in_args['id'])
+
+        elif not set(self.layer.out_edges(obj)):
+            task = obj.obj(self.layer)
+            if task.expect_out == 'interrupt':
                 pfc = self.layer.get_param_value(self, 'mapping', obj)
                 for o in self.layer.nodes() - {obj}:
                     # find task who raises interrupt with same id
@@ -66,21 +77,19 @@ class ActivationEngine(AnalysisEngine):
                         if not pfc.in_native_domain(
                                 self.layer.get_param_value(self, 'mapping', o)):
                             result.add(OutEventModel(t.expect_in_args['id']))
-
-            elif task.activation_period != 0:
-                result.add(PJEventModel(P=task.activation_period,
-                                        J=task.activation_jitter))
             else:
-                logging.error("Root task %s has no activation period" % obj)
+                result.add(None)
+
 
             if len(result) > 1:
                 logging.error("Cannot unambiguously connect interrupts %s" % \
                               task.expect_out_args['id'])
 
-            return result
 
         else:
             return {None}
+
+        return result
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
