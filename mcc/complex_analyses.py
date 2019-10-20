@@ -177,7 +177,6 @@ class CPAEngine(AnalysisEngine):
                     thread_source = threadmap[e.source]
 
                     # if called task is already on the stack
-                    logging.info('%s is in %s' % (thread_target, threadstack))
                     if thread_target in threadstack:
                         # this is a return call -> release ectx from current task
                         models[pfc].assign_execution_context(tasks[e.source],
