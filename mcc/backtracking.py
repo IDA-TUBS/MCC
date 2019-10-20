@@ -104,11 +104,16 @@ class BacktrackRegistry(Registry):
                 if nonchronological else ChronologicalTracker()
         self.decision_graph.initialize_tracking(self.by_order)
 
+        import time
+        start = time.process_time()
+
         while not self._backtrack_execute(outpath):
             pass
 
+        end = time.process_time()
+
         print("Backtracking succeeded in try %s" % self.backtracking_try)
-        print(self.stats)
+        self.print_stats(end-start)
 
         self._output_layer(self.steps[-1].target_layer)
 
@@ -141,7 +146,7 @@ class BacktrackRegistry(Registry):
                 # find branch point
                 culprit = self.find_culprit(cns)
                 if culprit is None:
-                    print("\n%s" % self.stats)
+                    self.print_stats()
                     raise Exception('No config could be found')
 
 #                if __debug__:
@@ -210,6 +215,19 @@ class BacktrackRegistry(Registry):
             if failed_operation not in self.stats['failed_ops']:
                 self.stats['failed_ops'][failed_operation] = 0
             self.stats['failed_ops'][failed_operation] += 1
+
+    def print_stats(self, time=None):
+        print('Stats:')
+        for k in sorted(self.stats.keys()):
+            if isinstance(self.stats[k], dict):
+                for k2, val in self.stats[k].items():
+                    print("%s: %s ## %s" % (k, k2, val))
+            else:
+                print("%s: %s" %(k, self.stats[k]))
+        print('operations: %d' % len(set(self.decision_graph.nodes())))
+
+        if time:
+            print('time: %f' % time)
 
     def find_culprit(self, cns):
         return self._find_brancheable(cns.node)
