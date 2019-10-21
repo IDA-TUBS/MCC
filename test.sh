@@ -11,12 +11,12 @@
 BASEPATH="./models/rtas/"
 
 EXPERIMENTS=(
-"./models/rtas/pose_no_fpga_low_rel.xml"
-"./models/rtas/pose_fpga_low_rel.xml"
-"./models/rtas/pose_fpga_high_rel.xml"
-"./models/rtas/obj_no_fpga_low_rel.xml"
-"./models/rtas/obj_fpga_low_rel.xml"
-"./models/rtas/obj_fpga_high_rel.xml"
+"./models/rtas/queries/pose_no_fpga_low_rel.xml"
+"./models/rtas/queries/pose_fpga_low_rel.xml"
+"./models/rtas/queries/pose_fpga_high_rel.xml"
+"./models/rtas/queries/obj_no_fpga_low_rel.xml"
+"./models/rtas/queries/obj_fpga_low_rel.xml"
+"./models/rtas/queries/obj_fpga_high_rel.xml"
 )
 
 JOBS=2
