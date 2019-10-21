@@ -395,14 +395,11 @@ class DecisionGraph(Graph):
         self.remove_node(node)
 
     def root_path(self, u):
-        paths = list(self.paths(self.root, u))
-        if __debug__ and len(paths) > 1:
-            print('GOTCHA nontree!')
-            self.write_dot("/tmp/doublecheck-postmerge.dot", highlight={u})
+        path = self.direct_path(self.root, u)
 
-        assert paths, "No path found between %s and %s" % (self.root, u)
+        assert path, "No path found between %s and %s" % (self.root, u)
 
-        return paths[0]
+        return path
 
     def _stylize_node(self, node, reshape=False, highlight=False):
 
@@ -869,7 +866,12 @@ class Layer:
             node = self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation, error=error)
             self.tracked_operation = None
 
+        self.canary = False
+
         return node
+
+    def set_canary(self):
+        self.canary = True
 
     def set_params(self, ae, obj, params):
         for name, value in params.items():
@@ -1643,14 +1645,14 @@ class InheritEngine(AnalysisEngine):
                 candidates.add(self.layer.get_param_value(self, self.source_param, obj))
 
         if self.out_edges:
-            edges = self.layer.graph.out_edges(obj)
+            edges = self.layer.out_edges(obj)
 
             for e in edges:
                 if self.layer.isset_param_value(self, self.source_param, e.target):
                     candidates.add(self.layer.get_param_value(self, self.source_param, e.target))
 
         if self.in_edges:
-            edges = self.layer.graph.in_edges(obj)
+            edges = self.layer.in_edges(obj)
 
             for e in edges:
                 if self.layer.isset_param_value(self, self.source_param, e.source):
@@ -2331,11 +2333,15 @@ class NodeStep(Step):
                 continue
 
             try:
+                # set canary that will be reset if any node was inserted into the dependency graph
+                self.source_layer.set_canary()
                 if not op.execute(self.source_layer.graph.nodes()):
                     raise Exception("NodeStep failed during '%s' on layer '%s'" % (op, self.source_layer.name))
                     return False
 
-                registry.complete_operation(op)
+                # only mark operation completed if it has a node in the dependency graph
+                if not self.source_layer.canary:
+                    registry.complete_operation(op)
             except ConstraintNotSatisfied as cns:
                 raise cns
 
@@ -2353,11 +2359,14 @@ class EdgeStep(Step):
                 continue
 
             try:
+                self.source_layer.set_canary()
                 if not op.execute(self.source_layer.graph.edges()):
                     raise Exception("EdgeStep failed during %s on layer '%s'" % (op, self.source_layer.name))
                     return False
 
-                registry.complete_operation(op)
+                # only mark operation completed if it has a node in the dependency graph
+                if not self.source_layer.canary:
+                    registry.complete_operation(op)
             except ConstraintNotSatisfied as cns:
                 raise cns
 

@@ -128,7 +128,7 @@ class ConstraintsModel:
         comps = set()
         for pf in self.control._xml_node.findall('./platform_component'):
             rel = pf.get('reliability')
-            if rel is not None and rel == 'low':
+            if rel and rel == 'low':
                 comps.add(pf.get('name'))
 
         return comps

@@ -115,6 +115,9 @@ class Instance:
     def provides_services(self, name=None, ref=None):
         return self.component.provides_services(name, ref)
 
+    def singleton(self):
+        return self.component.singleton()
+
     def uid(self):
         return self
 

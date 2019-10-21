@@ -148,10 +148,9 @@ class PriorityEngine(AnalysisEngine):
                     # trace task graph (not following calls)
                     while t:
                         tmp = set()
-                        # collect signalled tasks in tmp
+                        # collect activated tasks in tmp
                         for e in self.taskgraph.out_edges(t):
-                            if e.edgetype() == 'signal':
-                                tmp.add(e.target)
+                            tmp.add(e.target)
                         # deterministically iterate through tasks
                         for t in sorted(tmp, key=lambda x: x.obj(self.taskgraph).label()):
                             next_tasks.append(t)
@@ -228,8 +227,15 @@ class AffinityEngine(AnalysisEngine):
 
         # get platform component
         pfc = self.layer.get_param_value(self, 'mapping', obj)
+        inst = obj.obj(self.layer)
 
-        return set(range(pfc.smp_cores()))
+        available = set(range(pfc.smp_cores()))
+
+        required = inst.component.affinities()
+        if required:
+            return available & required
+
+        return available
 
     def assign(self, obj, candidates):
         return random.choice(list(candidates))
@@ -273,13 +279,15 @@ class ReliabilityEngine(AnalysisEngine):
 
     def batch_check(self, iterable):
 
+        objects = set()
+
         # iterate constraints from constrmodel
         for constraint in self.constrmodel.reliability_constraints():
             if constraint['value'] != 'high':
                 logging.info("Ignoring reliability constraint %s" % constraint)
                 continue
 
-            objects = self._get_objects_on_layer(constraint['source'], constraint['sink'], self.layer)
+            objects.update(self._get_objects_on_layer(constraint['source'], constraint['sink'], self.layer))
 
         result = True
         for obj in objects:
@@ -416,7 +424,7 @@ class TasksRPCEngine(AnalysisEngine):
         else:
             rpc_objects = server_obj.taskgraph_objects(server, rpc=server_ref, method=method)
 
-        assert rpc_objects, 'No task objects found for RPC'
+        assert rpc_objects, 'No task objects found for RPC (to_ref=%s, method=%s) %s' % (server_ref, method)
 
         # check rpcobjects for any calls
         rpcs = set()
@@ -601,9 +609,7 @@ class TaskgraphEngine(AnalysisEngine):
 
         # component may have no tasks, which is an indicator for a superfluous component
         # but not necessarily an error
-        if taskobjects is None:
-            logging.warning("No tasks found for component %s" % component)
-        elif not taskobjects:
+        if not taskobjects:
             logging.warning("No tasks found for component %s" % component)
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
@@ -793,10 +799,38 @@ class StaticEngine(AnalysisEngine):
         if len(candidates) > 1:
             logging.warning("Still cannot inherit mapping unambiguously.")
         if exclude:
-            logging.warning("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" \
+            logging.info("Mapping was reduced by excluding static subsystems. Candidates left for %s: %s" \
                             % (obj.obj(self.layer), candidates))
 
         return candidates
+
+class CoprocEngine(AnalysisEngine):
+    def __init__(self, layer, platform, source_param):
+        acl = { layer        : {'reads' : {source_param}}}
+        AnalysisEngine.__init__(self, layer, param='mapping', acl=acl)
+
+        self.platform = platform
+        self.source_param = source_param
+
+    def map(self, obj, candidates):
+        assert candidates is None
+
+        cur_pfc = self.layer.get_param_value(self, self.source_param, obj)
+
+        coprocs = set()
+        for pfc in self.platform.platform_components():
+            if pfc.coproc() and cur_pfc.in_native_domain(pfc):
+                coprocs.add(pfc)
+
+        for pfc in coprocs:
+            if pfc.match_specs(obj.obj(self.layer).component.requires_specs()):
+                return {pfc}
+
+        return {cur_pfc}
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
+
 
 class FunctionEngine(AnalysisEngine):
     class Dependency:
@@ -984,7 +1018,7 @@ class MappingEngine(AnalysisEngine):
         # iterate components and aggregate possible platform components
         for c in components:
             for pfc in pf_components:
-                if pfc.match_specs(c.requires_specs()):
+                if pfc.match_specs(c.requires_specs()) and not pfc.coproc():
                     candidates.add(pfc)
 
         return candidates
@@ -1200,7 +1234,12 @@ class ServiceEngine(AnalysisEngine):
 
         # there may be multiple source ports, i.e. multiple requirements connected to the same target
         for src in source_ports:
-            candidates.add(self.Connection(src, target_ports[0]))
+            if src.label():
+                for trg in target_ports:
+                    if not trg.label() or trg.label() == src.label():
+                        candidates.add(self.Connection(src, trg))
+            else:
+                candidates.add(self.Connection(src, target_ports[0]))
 
         return set([frozenset(candidates)])
 
@@ -1311,9 +1350,9 @@ class ProtocolStackEngine(AnalysisEngine):
                 logging.warning("Could not find protocol stack from '%s' to '%s' in repo." % (source_service.name(), target_service.name()))
                 return set()
 
-            return comps
+            return set(comps)
 
-        return set([None])
+        return {None}
 
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
@@ -1580,8 +1619,26 @@ class PatternEngine(AnalysisEngine):
 
             return obj
         elif isinstance(obj, Edge):
+            params = None
+            if self.layer.isset_param_value(self, 'mapping', obj.source):
+                params = { 'mapping' : self.layer.get_param_value(self, 'mapping', obj.source) }
+            elif self.layer.isset_param_value(self, 'mapping', obj.target):
+                params = { 'mapping' : self.layer.get_param_value(self, 'mapping', obj.target) }
+
+            pattern = self.layer.get_param_value(self, self.param, obj)
+            result = pattern.flatten(params)
+
             # TODO implement
-            raise NotImplementedError()
+            assert len(result) == 1, "Pattern insertion on edges not implemented"
+
+            node = list(result)[0].obj
+
+            result.add(GraphObj(
+                Edge(obj.source, node)))
+            result.add(GraphObj(
+                Edge(node, obj.target)))
+
+            return result
         else:
             params = None
             if self.layer.isset_param_value(self, 'mapping', obj):
@@ -1894,12 +1951,13 @@ class BacktrackingTestEngine(AnalysisEngine):
         return []
 
 class InstantiationEngine(AnalysisEngine):
-    def __init__(self, layer, target_layer, factory):
+    def __init__(self, layer, target_layer, factory, target_mapping='mapping'):
         acl = { layer        : { 'reads'  : { 'mapping', 'source-service', 'target-service', 'pattern-config'} },
-                target_layer : { 'writes' : { 'mapping', 'source-service', 'target-service' }}}
+                target_layer : { 'writes' : { target_mapping, 'source-service', 'target-service' }}}
         AnalysisEngine.__init__(self, layer, param='instance', acl=acl)
         self.factory      = factory
         self.target_layer = target_layer
+        self.target_mapping = target_mapping
 
     def reset(self, obj):
         if isinstance(obj, Layer.Node):
@@ -1999,7 +2057,7 @@ class InstantiationEngine(AnalysisEngine):
                 instance.node = Layer.Node(instance)
 
             return GraphObj(instance.node,
-                            params={'mapping':self.layer.get_param_value(self, 'mapping', obj)})
+                            params={self.target_mapping:self.layer.get_param_value(self, 'mapping', obj)})
 
     def target_types(self):
         return self.factory.types()

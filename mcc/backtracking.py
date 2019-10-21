@@ -169,7 +169,8 @@ class BacktrackRegistry(Registry):
                     self.decision_graph.write_dot(path, leaves=None,
                                                   verbose=False,
                                                   reshape=leaves,
-                                                  highlight=highlight)
+                                                  highlight=highlight,
+                                                  skip_check=isinstance(self.decision_graph, NonchronologicalTracker))
 
                     logging.info(" rolling back %d operations" % len(leaves))
 

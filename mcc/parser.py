@@ -185,6 +185,13 @@ class Repository(XMLParser):
         def properties(self):
             return set()
 
+        def affinities(self):
+            res = set()
+            for a in self.xml_node.findall('./required/affinity'):
+                res.add(a.get('val'))
+
+            return res
+
         def prio(self):
             return 0
 
@@ -512,9 +519,9 @@ class Repository(XMLParser):
                 for e in c.findall('./expose'):
                     if to_ref is None or e.get('ref') == to_ref:
                         for s in e.findall('./service'):
-                            if service is not None and s.get('name') != service:
+                            if service and s.get('name') != service:
                                 continue
-                            if function is not None and c.find('function').get('name') != function:
+                            if function and c.find('function').get('name') != function:
                                 continue
 
                             components = self.repo.find_components_by_type(c.get('name'), querytype='component')
@@ -590,7 +597,7 @@ class Repository(XMLParser):
                 for s in c.findall('./route/service'):
                     services = child_lookup[c].requires_services(s.get('name'), ref=s.get('ref'))
                     assert len(services) == 1, \
-                        "Cannot unambigously determine composite-internal connection of service name %s, ref %s from component %s in composite %s" % (s.get('name'), s.get('ref'), c.get('name'), self.label())
+                        "Cannot unambiguously determine composite-internal connection of service name %s, ref %s from component %s in composite %s, services found: %s" % (s.get('name'), s.get('ref'), c.get('name'), self.label(), services)
                     source_service = services[0]
 
                     if s.find('child') is not None:
@@ -1076,9 +1083,16 @@ class ChildQuery:
 
         for t in [ "function", "component" ]:
             if self._root.find(t) is not None:
-                self._type = t
+                n = self._root.find(t)
                 self._identifier = self._root.get('name')
-                self._queryname  = self._root.find(t).get('name')
+                if t == 'function' and n.get('component'):
+                    self._type = 'component'
+                    self._queryname  = n.get('component')
+                    self._functions  = {n.get('name')}
+                else:
+                    self._type = t
+                    self._queryname  = n.get('name')
+                    self._functions  = set()
                 break
 
         assert(self._type is not None)
@@ -1099,14 +1113,11 @@ class ChildQuery:
         return self._type
 
     def functions(self):
-        if self.type() == 'function':
-            return set([self.query()])
-
-        return set()
+        return self._functions
 
     def components(self):
         if self.type() == 'component':
-            return set([self.query()])
+           return {self.query()}
 
         return set()
 
@@ -1228,6 +1239,12 @@ class PlatformParser:
 
         def static(self):
             return self.config() is None
+
+        def coproc(self):
+            val = self._root.get('coproc')
+            if val and val == 'True':
+                return True
+            return False
 
         def comms(self):
             names = set()

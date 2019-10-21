@@ -153,18 +153,13 @@ class CPAEngine(AnalysisEngine):
             next_nodes = deque()
 
             while node:
-                if not set(self.layer.out_edges(node)):
-                    # release our execution context
-                    pfc = self.layer.get_param_value(self, 'mapping', node)
-                    models[pfc].assign_execution_context(tasks[node],
-                                                            threads[threadmap[node]][0])
-
-
                 # first follow rpc edges
+                has_rpc = False
                 for e in (e for e in self.layer.out_edges(node) if e.edgetype() == 'call'):
                     assert e.target not in visited
                     next_nodes.append(e.target)
                     visited.add(e.target)
+                    has_rpc = True
 
                     # called task gets its scheduling context from top of stack
                     if threadstack:
@@ -202,6 +197,13 @@ class CPAEngine(AnalysisEngine):
                         models[pfc].assign_execution_context(tasks[e.target],
                                                                 threads[th][0],
                                                                 blocking = True)
+
+                if not has_rpc:
+                    # release our execution context
+                    pfc = self.layer.get_param_value(self, 'mapping', node)
+                    models[pfc].assign_execution_context(tasks[node],
+                                                         threads[threadmap[node]][0],
+                                                         blocking = False)
 
                 for e in (e for e in self.layer.out_edges(node) if e.edgetype() == 'signal'):
                     if e.target in visited:

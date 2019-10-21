@@ -11,6 +11,7 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
 """
 from  networkx import MultiDiGraph, DiGraph
 from  networkx.algorithms import dag
+from  networkx.algorithms import simple_paths
 from  networkx.algorithms import shortest_paths
 from collections import deque
 import logging
@@ -130,9 +131,12 @@ class Graph:
     def paths(self, source, target, undirected=False):
         if undirected:
             G = self.graph.to_undirected(as_view=True)
-            return shortest_paths.generic.all_shortest_paths(G, source=source, target=target)
+            return simple_paths.all_simple_paths(G, source=source, target=target)
         else:
-            return shortest_paths.generic.all_shortest_paths(self.graph, source=source, target=target)
+            return simple_paths.all_simple_paths(self.graph, source=source, target=target)
+
+    def direct_path(self, source, target):
+        return shortest_paths.generic.shortest_path(self.graph, source=source, target=target)
 
     def predecessors(self, node, recursive=False):
         if recursive:

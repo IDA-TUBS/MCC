@@ -20,7 +20,7 @@ class LinearGraph(DecisionGraph):
 
     def __init__(self):
         super().__init__()
-        self.latest = None
+        self.latest = self.root
 
     def add_dependencies(self, node, read, written, force_sequential):
         for p in written:
@@ -30,10 +30,15 @@ class LinearGraph(DecisionGraph):
         self.written_params(node).update(written)
 
         # avoid iterating though the graph if we already know the latest node
-        if self.latest not in self.nodes(): # this may happen after a rollback
-            self.latest = next(self.filter_leaves(self.nodes()))
+#        if self.latest not in self.nodes(): # this may happen after a rollback
+#            self.latest = next(self.filter_leaves(self.nodes()))
+        assert self.latest in self.nodes()
         self.create_edge(self.latest, node)
         self.latest = node
+
+    def next_iteration(self, culprit):
+        super().next_iteration(culprit)
+        self.latest = culprit
 
 
 class TopologicalGraph(DecisionGraph):

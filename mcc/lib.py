@@ -319,7 +319,7 @@ class MccBase:
         ca = model.by_name[slayer]
         ci = model.by_name[dlayer]
 
-        ie = InstantiationEngine(ca, ci, factory)
+        ie = InstantiationEngine(ca, ci, factory, 'tmp-mapping')
 
         instantiate = NodeStep(Map(ie, 'instantiate'))
         instantiate.add_operation(Assign(ie, 'instantiate'))
@@ -329,6 +329,11 @@ class MccBase:
         connect.add_operation(Assign(ie, 'copy edges'))
         connect.add_operation(Transform(ie, ci, 'copy edges'))
         model.add_step(connect)
+
+        ce = CoprocEngine(ci, pf_model, 'tmp-mapping')
+        coproc = NodeStep(      Map(ce, 'coproc'))
+        coproc.add_operation(Assign(ce, 'coproc'))
+        model.add_step(coproc)
 
         # check singleton (per PfComponent)
         se = SingletonEngine(ci, pf_model)
@@ -367,7 +372,7 @@ class MccBase:
 
         model.add_step(step)
 
-    def _timing_check(self, model, pf_model, slayer, dlayer, constrmodel):
+    def _timing_model(self, model, pf_model, slayer, dlayer, constrmodel):
         """ Build taskgraph layer and perform timing checks
         """
 
@@ -405,6 +410,11 @@ class MccBase:
         prios = NodeStep(      BatchMap(pe, 'assign priorities'))
         prios.add_operation(BatchAssign(pe, 'assign priorities'))
         model.add_step_unsafe(prios)
+
+    def _timing_check(self, model, slayer, dlayer, constrmodel):
+
+        slayer = model.by_name[slayer]
+        tg     = model.by_name[dlayer]
 
         # perform CPA
         pycpa = CPAEngine(tg, slayer, model.by_order[1:], constrmodel)
@@ -495,12 +505,15 @@ class SimpleMcc(MccBase):
             # assign affinity
             self._assign_affinity(model, layer='comp_inst')
 
-            self._timing_check(model, pf_model, slayer='comp_inst',
+            self._timing_model(model, pf_model, slayer='comp_inst',
                                                 dlayer='task_graph',
                                                 constrmodel=constrmodel)
 
-        if constrmodel is not None:
-            self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
+            if constrmodel is not None:
+                self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
+                self._timing_check(model, slayer='comp_inst', dlayer='task_graph',
+                                   constrmodel=constrmodel)
+
 
         # insert backtracking engine for testing (random rejection of candidates)
         if self._test_backtracking:
