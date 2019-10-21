@@ -127,6 +127,11 @@
        <xs:element name="spec" minOccurs="0" maxOccurs="unbounded" type="NameType" />
        <xs:element name="ram" minOccurs="0" maxOccurs="1" type="QuantumType" />
        <xs:element name="caps" minOccurs="0" maxOccurs="1" type="QuantumType" />
+       <xs:element name="affinity" minOccurs="0" maxOccurs="unbounded">
+           <xs:complexType>
+             <xs:attribute name="val" use="required" type="xs:integer" />
+           </xs:complexType>
+       </xs:element>
 
      </xs:choice>
    </xs:complexType>
@@ -296,6 +301,7 @@
                        <xs:attribute name="max_clients" type="xs:string"/>
                        <xs:attribute name="filter" type="xs:string"/>
                        <xs:attribute name="ref" type="xs:string"/>
+                       <xs:attribute name="label" type="xs:string"/>
                     </xs:extension>
                  </xs:complexContent>
                </xs:complexType>
@@ -390,6 +396,7 @@
 			<xs:element name="config" type="NameType" minOccurs="0" maxOccurs="1" />
 		</xs:sequence>
    	<xs:attribute name="name" type="xs:string" use="required"/>
+   	<xs:attribute name="coproc" type="xs:string"/>
 	</xs:complexType>
 
    <xs:complexType name="CommType">

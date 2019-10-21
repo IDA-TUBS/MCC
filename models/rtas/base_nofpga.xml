@@ -183,9 +183,9 @@
 	<component name='zynq'>
 		<subsystem name="zynq-static">
 			<provides>
+			    <spec name="cpu" />
 			    <ram quantum="128"/>
 			    <caps quantum="2000"/>
-			    <spec name="cpu" />
 			    <priorities min="1"   max="1"/>
 			    <priorities min="128" max="128"/>
 			</provides>
@@ -213,9 +213,9 @@
 	<component name='pc'>
 		<subsystem name="pc-static">
 			<provides>
+			    <spec name="cpu" />
 			    <ram quantum="128"/>
 			    <caps quantum="1000"/>
-			    <spec name="cpu" />
 			    <priorities min="1"   max="1"/>
 			    <priorities min="128" max="128"/>
 			</provides>

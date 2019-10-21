@@ -433,18 +433,18 @@
 
 		<pattern>
 			<!-- TODO try using GPIO again here //-->
+			<component name="vdma_drv" />
+			<component name="bitstream_loader" />
 			<component name="mono_preproc_hw">
 				<route>
 					<service name="CAM" ref="cam" ><external ref="cam_left"/></service>
-					<service name="VDMA" ><child name="vdma_drv" ref="vdma"/></service>
-					<service name="Dpr" ><child name="bitstream_loader" ref="dpr"/></service>
+					<service name="VDMA" ><child name="vdma_drv"/></service>
+					<service name="Dpr" ><child name="bitstream_loader"/></service>
 				</route>
 				<expose ref="out">
 					<service name="ROM" ref="out"/>
 				</expose>
 			</component>
-			<component name="vdma_drv" />
-			<component name="bitstream_loader" />
 		</pattern>
 	</composite>
 
@@ -462,19 +462,19 @@
 
 		<pattern>
 			<!-- TODO try using GPIO again here //-->
+			<component name="vdma_drv" />
+			<component name="bitstream_loader" />
 			<component name="stereo_preproc_hw">
 				<route>
 					<service name="CAM" ref="cam_left" ><external ref="cam_left"/></service>
 					<service name="CAM" ref="cam_right" ><external ref="cam_right"/></service>
-					<service name="VDMA" ><child name="vdma_drv" ref="vdma"/></service>
-					<service name="Dpr" ><child name="bitstream_loader" ref="dpr"/></service>
+					<service name="VDMA" ><child name="vdma_drv"/></service>
+					<service name="Dpr" ><child name="bitstream_loader"/></service>
 				</route>
 				<expose ref="out">
 					<service name="ROM" ref="out"/>
 				</expose>
 			</component>
-			<component name="vdma_drv" />
-			<component name="bitstream_loader" />
 		</pattern>
 	</composite>
 
