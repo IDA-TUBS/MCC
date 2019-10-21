@@ -162,7 +162,7 @@ class BacktrackRegistry(Registry):
                     highlight = {cns.node}
 
                     self.decision_graph.write_dot(path, leaves=None,
-                                                  verbose=True,
+                                                  verbose=False,
                                                   reshape=leaves,
                                                   highlight=highlight)
 

@@ -761,8 +761,6 @@ class QuantumEngine(AnalysisEngine):
             if remaining < 0:
                 logging.error("Subsystem %s exceeds its %s (%d)." % (pfc, self.name,
                                                                      pfc.quantum(self.name)))
-                # FIXME we should return a set of
-                #       all obj and mapping params on this pfc
                 return False
 
             pfc.set_state('%s-remaining' % self.name, remaining)

@@ -570,7 +570,8 @@ class Registry:
             if not Registry._same_layers(self.steps[-1], step):
 #                self.print_steps()
 #                logging.info(step)
-                assert(step.target_layer == self._next_layer(self.steps[-1].target_layer))
+                assert step.target_layer == self._next_layer(self.steps[-1].target_layer), \
+                        '%s != %s' % (self.steps[-1].target_layer, step.target_layer)
         else:
             assert(step.source_layer == self.by_order[0])
 
