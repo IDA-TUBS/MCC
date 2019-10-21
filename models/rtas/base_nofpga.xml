@@ -198,7 +198,6 @@
 			<provides>
 			    <spec name="zynq" />
 			    <spec name="cpu" />
-			    <spec name="fpga" />
 			    <ram quantum="768"/>
 			    <caps quantum="10000"/>
 			    <smp cores='2'/>
@@ -210,16 +209,6 @@
 			<config name="zynq.config" />
 		</subsystem>
 
-		<subsystem name="FPGA" coproc='True'>
-			<provides>
-			    <spec name="fpga" />
-			    <ram quantum="0"/>
-			    <!-- we use caps as FPGA regions -->
-			    <caps quantum="1"/>
-			    <priorities min="0" max="0"/>
-			</provides>
-			<config name="zynq_fpga.config" />
-		</subsystem>
 	</component>
 	<component name='pc'>
 		<subsystem name="pc-static">
