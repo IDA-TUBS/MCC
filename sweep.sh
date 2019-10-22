@@ -45,8 +45,13 @@ run_chronological() {
 
 	cmd="./mcc_rtas.py --explore --chronological --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
-	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
-	[ -z $? ] && echo "   SUCCEEDED" || echo "   FAILED"
+	out=$(unbuffer sh -c "$cmd" > "${OUTPATH}output.log")
+	succ=$(printf '%s\n' "$out" | grep 'Stats' | wc -l)
+	if [ 2 -eq $succ ] ; then
+		printf 'SUCCEEDED'
+	else
+		printf 'FAILED'
+	fi
 }
 
 run_nonchronological() {
@@ -56,8 +61,13 @@ run_nonchronological() {
 
 	cmd="./mcc_rtas.py --explore --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
-	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
-	[ -z $? ] && echo "   SUCCEEDED" || echo "   FAILED"
+	out=$(unbuffer sh -c "$cmd" > "${OUTPATH}output.log")
+	succ=$(printf '%s\n' "$out" | grep 'Stats' | wc -l)
+	if [ 2 -eq $succ ] ; then
+		printf 'SUCCEEDED'
+	else
+		printf 'FAILED'
+	fi
 }
 
 # first run, chronological BT
