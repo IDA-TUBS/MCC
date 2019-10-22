@@ -61,8 +61,7 @@ class Task:
                expect == 'junction' or \
                expect == 'server' or \
                expect == 'client' or \
-               expect == 'interrupt' or \
-               expect is None
+               expect == 'interrupt'
 
         self.expect_in      = expect
         self.expect_in_args = kwargs
@@ -71,7 +70,7 @@ class Task:
         assert expect == 'junction' or \
                expect == 'receiver' or \
                expect == 'interrupt' or \
-               expect == 'server' or expect is None
+               expect == 'server'
 
         self.expect_out      = expect
         self.expect_out_args = kwargs

@@ -311,6 +311,7 @@ class TasksCoreEngine(AnalysisEngine):
         # connect junctions
         for task in [t for t in objects if isinstance(t, Task)]:
             if task.expect_out == 'junction':
+                found = False
                 for junction in objects:
                     if isinstance(junction, Tasklink):
                         continue
@@ -319,10 +320,11 @@ class TasksCoreEngine(AnalysisEngine):
                        junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
 
                         objects.add(Tasklink(task, junction, linktype='signal'))
-                        task.set_placeholder_out(None)
+                        found = True
+#                        task.set_placeholder_out(None)
                         break
 
-                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+                assert found, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
 
         return objects
 
@@ -378,6 +380,7 @@ class TasksRPCEngine(AnalysisEngine):
         # connect junctions
         for task in [t for t in objects if isinstance(t, Task)]:
             if task.expect_out == 'junction':
+                found = False
                 for junction in junction_objects:
                     if isinstance(junction, Tasklink):
                         continue
@@ -386,10 +389,11 @@ class TasksRPCEngine(AnalysisEngine):
                        junction.expect_in_args['junction_name'] == task.expect_out_args['name']:
 
                         objects.add(Tasklink(task, junction, linktype='signal'))
-                        task.set_placeholder_out(None)
+#                        task.set_placeholder_out(None)
+                        found = True
                         break
 
-                assert task.expect_out is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
+                assert found is None, 'Not found: Junction "%s" for task %s' % (task.expect_out_args['name'], task)
 
         return objects
 
@@ -453,10 +457,10 @@ class TasksRPCEngine(AnalysisEngine):
         objects.update(rpc_objects)
         objects.add(Tasklink(call, firsttask))
         objects.add(Tasklink(lasttask, ret))
-        call.set_placeholder_out(None)
-        ret.set_placeholder_in(None)
-        firsttask.set_placeholder_in(None)
-        lasttask.set_placeholder_out(None)
+#        call.set_placeholder_out(None)
+#        ret.set_placeholder_in(None)
+#        firsttask.set_placeholder_in(None)
+#        lasttask.set_placeholder_out(None)
 
         return objects
 
@@ -617,10 +621,10 @@ class TaskgraphEngine(AnalysisEngine):
 
         # check for unconnected tasks
         for t in tasks:
-            # There must not be a client/server placeholder in the taskgraph
-            if t.expect_in == 'client' or t.expect_in == 'server':
-                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % component)
-                return False
+#            # There must not be a client/server placeholder in the taskgraph
+#            if t.expect_in == 'client' or t.expect_in == 'server':
+#                logging.error("Client/Server placeholder (in) present in taskgraph for component %s" % component)
+#                return False
 
             # resulting taskgraph may still contain interrupt or sender placeholders,
             #  junction placeholders must at least have one connection though
@@ -632,14 +636,15 @@ class TaskgraphEngine(AnalysisEngine):
 
                 if connections == 0:
                     logging.error("Junction placeholder (in) present in taskgraph for component %s" % component)
+                    assert False, "This should never happen unless there is a problem in the timing model"
                     return False
                 elif connections > 1 and t.expect_in != 'junction':
                     logging.error("Multiple connections to junction taskgraph for component %s" % component)
                     return False
 
-            if t.expect_out == 'server':
-                logging.error("Server placeholder (out) present in taskgraph for component %s" % component)
-                return False
+#            if t.expect_out == 'server':
+#                logging.error("Server placeholder (out) present in taskgraph for component %s" % component)
+#                return False
 
         return True
 
