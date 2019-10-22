@@ -19,7 +19,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
@@ -37,7 +37,7 @@
 			<service name="Nic" ref='nic' />
 			<ram quantum="32" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
@@ -55,7 +55,7 @@
 			<service name="ROM" ref='rom' />
 			<ram quantum="32" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
@@ -84,7 +84,7 @@
 		<requires>
 			<ram quantum="1" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
@@ -105,7 +105,7 @@
 		<requires>
 			<ram quantum="16" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
@@ -129,7 +129,7 @@
 			<service name="Nic" ref='driver' />
 			<ram quantum="32" />
 			<caps quantum="300" />
-			<affinity val="1" />
+			<affinity val="0" />
 			<spec name="cpu"/>
 		</requires>
 		<timing>
