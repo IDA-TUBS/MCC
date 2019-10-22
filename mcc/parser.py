@@ -187,8 +187,8 @@ class Repository(XMLParser):
 
         def affinities(self):
             res = set()
-            for a in self.xml_node.findall('./required/affinity'):
-                res.add(a.get('val'))
+            for a in self.xml_node.findall('./requires/affinity'):
+                res.add(int(a.get('val')))
 
             return res
 
