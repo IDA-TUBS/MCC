@@ -6,6 +6,8 @@
 	<binary name="nic_drv" />
 	<binary name="nic_bridge" />
 	<binary name="timer" />
+	<binary name="core" />
+	<binary name="zynqcore" />
 	<binary name="remote_rom_client" />
 	<binary name="remote_rom_server" />
 
@@ -74,6 +76,30 @@
 		<provides>
 			<service name="LOG" />
 		</provides>
+		<requires>
+			<spec name="cpu"/>
+			<affinity val="0" />
+		</requires>
+		<timing>
+		    <on-time period="10000">
+		        <task name='core' wcet='7000' bcet='500' />
+		    </on-time>
+		</timing>
+	</component>
+
+	<component name="zynqcore" singleton="true">
+		<provides>
+			<service name="LOG" />
+		</provides>
+		<requires>
+			<spec name="cpu"/>
+			<affinity val="0" />
+		</requires>
+		<timing>
+		    <on-time period="10001">
+		        <task name='zynqcore' wcet='7000' bcet='500' />
+		    </on-time>
+		</timing>
 	</component>
 
 	<component name="timer" singleton="true">
@@ -264,12 +290,18 @@
 	<child name="gpio" subsystem="zynq-static">
 		<component name="gpio_drv" />
 	</child>
+	<child name="core" subsystem="zynq-static">
+		<component name="zynqcore" />
+	</child>
 
 	<child name="nic" subsystem="pc-static">
 		<function name="Network" />
 	</child>
 	<child name="timer" subsystem="pc-static">
 		<component name="timer" />
+	</child>
+	<child name="core" subsystem="pc-static">
+		<component name="core" />
 	</child>
 </system>
 </xml>

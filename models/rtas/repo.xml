@@ -121,7 +121,7 @@
 		    <on-signal from_ref="trigger">
 		        <task name="shoot" wcet="100" bcet="50"/>
 		        <call to_ref='gpio' method='set' />
-		        <task name='wait' wcet="10000" bcet="5000" />
+		        <task name='wait' wcet="20000" bcet="5000" />
 		        <signal to_ref="cam"/>
 		    </on-signal>
 		</timing>
@@ -140,7 +140,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task wcet="10000" bcet="5000" name="debay_left"/>
+				<task wcet="20000" bcet="5000" name="debay_left"/>
 				<signal to_ref="out" />
 			</on-signal>
 		</timing>
@@ -162,7 +162,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task name='debay_right' wcet="10000" bcet="5000"/>
+				<task name='debay_right' wcet="20000" bcet="5000"/>
 				<signal to_ref="out" />
 			</on-signal>
 		</timing>
@@ -184,7 +184,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task name='rect_left' wcet="10000" bcet="5000"/>
+				<task name='rect_left' wcet="20000" bcet="5000"/>
 				<signal to_ref="out" />
 			</on-signal>
 		</timing>
@@ -206,7 +206,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task name='rect_right' wcet="10000" bcet="5000"/>
+				<task name='rect_right' wcet="20000" bcet="5000"/>
 				<signal to_ref="out" />
 			</on-signal>
 		</timing>
@@ -236,7 +236,7 @@
 				<signal junction="match" />
 			</on-signal>
 			<junction name="match" type="AND">
-				<task wcet="10000" bcet="5000" name="match" />
+				<task wcet="20000" bcet="5000" name="match" />
 				<signal to_ref="out" />
 			</junction>
 		</timing>
@@ -268,7 +268,7 @@
 				<signal junction="match" />
 			</on-signal>
 			<junction name="match" type="AND">
-				<task wcet="10000" bcet="5000" name="proc_pc" />
+				<task wcet="20000" bcet="5000" name="proc_pc" />
 				<signal to_ref="out" />
 			</junction>
 		</timing>
@@ -295,7 +295,7 @@
 				<signal junction='disp_to_pc' />
 			</on-signal>
 			<junction name="disp_to_pc" type="AND">
-				<task wcet="10000" bcet="5000" name="disp_to_pc" />
+				<task wcet="20000" bcet="5000" name="disp_to_pc" />
 				<signal to_ref="out" />
 			</junction>
 		</timing>
@@ -315,7 +315,8 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task name='pose' wcet="10000" bcet="5000"/>
+				<task name='pose1' wcet="20000" bcet="5000"/>
+				<task name='pose2' wcet="25000" bcet="5000"/>
 			</on-signal>
 			<on-time period='1000000'>
 				<task name='send_trigger' wcet="100" bcet="50"/>
@@ -341,7 +342,7 @@
 		</requires>
 		<timing>
 			<on-signal from_ref="in">
-				<task name='obj' wcet="10000" bcet="5000"/>
+				<task name='obj' wcet="20000" bcet="5000"/>
 			</on-signal>
 			<on-time period='300000'>
 				<task name='send_trigger' wcet="100" bcet="50"/>
