@@ -496,9 +496,7 @@ class TaskgraphEngine(AnalysisEngine):
         self.target_layer = target_layer
 
     def _edge(self, link):
-        link.source = self._node(link.source)
-        link.target = self._node(link.target)
-        return link
+        return Tasklink(self._node(link.source), self._node(link.target), link.linktype)
 
     def _node(self, task):
         if not hasattr(task, 'node'):
@@ -617,7 +615,7 @@ class TaskgraphEngine(AnalysisEngine):
             logging.warning("No tasks found for component %s" % component)
 
         tasks = (t for t in taskobjects if isinstance(t, Task))
-        links = (t for t in taskobjects if isinstance(t, Tasklink))
+        links = [t for t in taskobjects if isinstance(t, Tasklink)]
 
         # check for unconnected tasks
         for t in tasks:
