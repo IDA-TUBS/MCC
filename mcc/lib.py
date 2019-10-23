@@ -540,7 +540,7 @@ class SimpleMcc(MccBase):
 
         except Exception as e:
             if self._test_backtracking:
-                bt.write_stats(outpath+'solutions.csv')
+                bt.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
 
             print(e)
             export = PickleExporter(model)

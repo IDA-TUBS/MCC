@@ -1878,7 +1878,6 @@ class BacktrackingTestEngine(AnalysisEngine):
         print("Solutions found: %d" % len(self.solutions))
 
         if outpath:
-            outpath = outpath[:outpath.rfind('/')] + '/solutions.csv'
             with open(outpath, 'w') as csvfile:
                 fieldnames = ['solution',
                               'iterations',
