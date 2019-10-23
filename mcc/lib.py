@@ -411,14 +411,17 @@ class MccBase:
         prios.add_operation(BatchAssign(pe, 'assign priorities'))
         model.add_step_unsafe(prios)
 
-    def _timing_check(self, model, slayer, dlayer, constrmodel):
+    def _timing_check(self, model, slayer, dlayer, constrmodel, ae):
 
         slayer = model.by_name[slayer]
         tg     = model.by_name[dlayer]
 
         # perform CPA
         pycpa = CPAEngine(tg, slayer, model.by_order[1:], constrmodel)
-        model.add_step(NodeStep(BatchCheck(pycpa, 'CPA')))
+        check = BatchCheck(pycpa, 'CPA')
+        if ae:
+            check.register_ae(ae)
+        model.add_step(NodeStep(check))
 
 class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
@@ -428,13 +431,6 @@ class SimpleMcc(MccBase):
         MccBase.__init__(self, repo)
         self._test_backtracking = test_backtracking
         self._nonchronological  = not chronologicaltracking
-
-    def insert_backtracking_engine(self, model, outpath=None):
-        source_layer = model.steps[-1].source_layer;
-        # target_layer = self.ste[r-1].target_layer;
-        bt = BacktrackingTestEngine(source_layer, None, model, outpath=outpath)
-        model.steps.append(NodeStep(Check(bt, 'BackTrackingTest')))
-        return bt
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
             dot_ae=False, dot_layer=False, envmodel=None, constrmodel=None):
@@ -509,15 +505,14 @@ class SimpleMcc(MccBase):
                                                 dlayer='task_graph',
                                                 constrmodel=constrmodel)
 
+            bt = None
+            if self._test_backtracking:
+                bt = BacktrackingTestEngine(model.by_name['task_graph'], model, outpath=outpath)
+
             if constrmodel is not None:
                 self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
                 self._timing_check(model, slayer='comp_inst', dlayer='task_graph',
-                                   constrmodel=constrmodel)
-
-
-        # insert backtracking engine for testing (random rejection of candidates)
-        if self._test_backtracking:
-            bt = self.insert_backtracking_engine(model, outpath=outpath)
+                                   constrmodel=constrmodel, ae=bt)
 
 #        model.print_steps()
         if outpath is not None and dot_mcc:

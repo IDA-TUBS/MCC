@@ -1864,8 +1864,8 @@ class BacktrackingTestEngine(AnalysisEngine):
         def __init__(self, **kwargs):
             self.data = kwargs
 
-    def __init__(self, layer, param, model, outpath=None):
-        super().__init__(layer, param)
+    def __init__(self, layer, model, outpath=None):
+        super().__init__(layer, None)
         self.model        = model
         self.modeloutpath = outpath
         self.solutions    = list()
@@ -1902,7 +1902,7 @@ class BacktrackingTestEngine(AnalysisEngine):
             export = PickleExporter(self.model)
             export.write('%smodel-%d.pickle' % (self.modeloutpath, len(self.solutions)+1))
 
-    def check(self, obj):
+    def batch_check(self, iterable):
         graph = self.model.decision_graph
 
         ######################
@@ -1942,11 +1942,9 @@ class BacktrackingTestEngine(AnalysisEngine):
                                             operations=len(graph.nodes()),
                                             rolledback=rolledback))
 
-        # check whether there is a revisable decision in the ancestors of obj
-        for w in graph.find_writers(self.layer, obj, 'obj').transform:
-            for node in graph.predecessors(w, recursive=True):
-                if graph.revisable(node):
-                    return False
+        for node in graph.nodes():
+            if graph.revisable(node):
+                return False
 
         return True
 

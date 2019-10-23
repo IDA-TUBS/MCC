@@ -1269,6 +1269,9 @@ class AnalysisEngine:
             :type  access: str ('reads' or 'writes')
 
         """
+        if 'grantall' in self.acl:
+            return True
+
         if layer not in self.acl:
             logging.critical('%s has no access to layer "%s".' % (type(self).__name__, layer))
             logging.info('Requested: %s(%s.%s)' % (access, layer, param))
