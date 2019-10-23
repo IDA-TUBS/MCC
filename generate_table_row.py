@@ -83,7 +83,8 @@ def process_results(results):
 
 def compare_results(res1, res2):
     # assert that some values are the same in both files:
-    assert res1['solutions'] == res2['solutions'], 'Number of solutions differ.'
+    assert res1['solutions'] == res2['solutions'], \
+            'Number of solutions differ: %d vs %d' % (res1['solutions'], res2['solutions'])
     assert res1['min_vars'] == res2['min_vars'], 'Minimum number of variables differ.'
     assert res1['max_vars'] == res2['max_vars'], 'Maximum number of variables differ.'
     assert res1['min_ops'] == res2['min_ops'], 'Minimum number of operations differ.'

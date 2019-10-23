@@ -9,6 +9,7 @@
 from argparse import ArgumentParser
 import seaborn as sns
 import pandas as pd
+import csv
 import matplotlib.pyplot as plt
 
 def get_args():
@@ -30,11 +31,11 @@ def get_args():
 def parse_file(filename):
     data = list()
     with open(filename, 'r') as csvfile:
-        reader = DictReader(csvfile, delimiter='\t')
+        reader = csv.DictReader(csvfile, delimiter='\t')
 
         for row in reader:
             newrow = dict()
-            newrow['Time']       = float(row['time'])
+            newrow['Time [s]']   = float(row['time'])
             newrow['Iterations'] = int(row['iterations'])
             newrow['Operations'] = int(row['operations'])
             newrow['run']        = int(row['run'])
@@ -48,36 +49,39 @@ def prepare_data(basepath, experiments, labels):
     # iterate experiments and parse files
     raw_data = list()
     for exp,label in zip(experiments, labels):
-        chrono    = parse_file('%s/%s/chrono/results.csv'    % (basepath, exp))
-        nonchrono = parse_file('%s/%s/nonchrono/results.csv' % (basepath, exp))
+        chrono    = parse_file('%s/%s/test/chrono/results.csv'    % (basepath, exp))
+        nonchrono = parse_file('%s/%s/test/nonchrono/results.csv' % (basepath, exp))
 
         # assert that both files have the same sample size
-        assert len(chrono) == len(nonchrono)
+        if len(chrono) != len(nonchrono):
+            print("WARNING: different number of samples in %s: %d vs %d" % (exp, len(chrono), len(nonchrono)))
+
 
         for r in chrono:
-            r['chrono']   = 'Yes'
-            r['scenario'] = label
+            r['search']   = 'chronological'
+            r['Variant'] = label
 
         for r in nonchrono:
-            r['chrono'] = 'No'
-            r['scenario'] = label
+            r['search'] = 'non-chronological'
+            r['Variant'] = label
 
         raw_data.extend(chrono + nonchrono)
 
-    return pd.DataFrame(data)
+    return pd.DataFrame(raw_data)
 
 
 def create_plot(data, variables, output=None):
     # configure style
-    sns.set(style='ticks', context='talk')
+    sns.set(style='ticks', context='notebook')
 
     rows=len(variables)
 
-    f, axes = plt.subplots(rows, 1, sharex=True)
+    f, axes = plt.subplots(rows, 1, sharex=True, figsize=[6, 9])
     row=1
     for var, ax in zip(variables, axes):
-        sns.boxplot(x="day", y=var, hue="smoker",
+        sns.boxplot(x="Variant", y=var, hue="search",
                     data=data, notch=False,
+                    fliersize=3,
                     palette="muted", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
@@ -87,7 +91,7 @@ def create_plot(data, variables, output=None):
 
     sns.despine()
     if output:
-        plt.savefig(output)
+        plt.savefig(output, bbox_inches='tight')
     else:
         plt.show()
 

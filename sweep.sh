@@ -70,13 +70,14 @@ run_nonchronological() {
 	fi
 }
 
-# first run, chronological BT
 export -f run_chronological
 export -f run_nonchronological
 export BASEPATH
 
-parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
-
 # second run, nonchronological BT
 parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
+
+# first run, chronological BT
+parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
+
 
