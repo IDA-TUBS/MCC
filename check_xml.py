@@ -12,10 +12,10 @@ from lxml import etree
 parser = argparse.ArgumentParser(description='Check config model XML.')
 parser.add_argument('file', metavar='xml_file', type=str, 
         help='XML file to be processed')
-parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
+parser.add_argument('--schema', type=str, default="xsd/CCC.xsd",
         help='XML Schema Definition (xsd)')
 parser.add_argument('--batch', action='store_true')
-parser.add_argument('--dotpath', type=str, default='./',
+parser.add_argument('--dotpath', type=str, default=None,
         help='Write graphs to DOT files in this path.')
 
 args = parser.parse_args()
@@ -50,7 +50,8 @@ def check_xml(xmlfile):
         # check <platform>
         pf_xml = cfgparser.PlatformParser(xmlfile, args.schema)
         pf_model = model.SimplePlatformModel(pf_xml)
-        pf_model.write_dot(args.dotpath + basename[:-4] + '-platform.dot')
+        if args.dotpath:
+            pf_model.write_dot(args.dotpath + basename[:-4] + '-platform.dot')
     except cfgparser.PlatformParser.NodeNotFoundError:
         print('%s - SKIP : no <platform> node' % basename)
 
@@ -58,7 +59,8 @@ def check_xml(xmlfile):
         # check <system>
         sys_xml   = cfgparser.SystemParser(xmlfile, args.schema)
         sys_model = model.FuncArchQuery(sys_xml)
-        sys_model.write_dot(args.dotpath + basename[:-4] + '-system.dot')
+        if args.dotpath:
+            sys_model.write_dot(args.dotpath + basename[:-4] + '-system.dot')
     except cfgparser.SystemParser.NodeNotFoundError:
         print('%s - SKIP : no <system> node' % basename)
 

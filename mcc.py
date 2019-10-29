@@ -17,7 +17,7 @@ parser.add_argument('files', metavar='xml_file', type=str, nargs='+',
         help='XML files to be processed (<system>)')
 parser.add_argument('--base', type=str, required=True,
         help='Base system specification')
-parser.add_argument('--schema', type=str, default="XMLCCC.xsd",
+parser.add_argument('--schema', type=str, default="xsd/CCC.xsd",
         help='XML Schema Definition (xsd)')
 parser.add_argument('--platform', type=str, default=None,
         help='XML file with platform specification (<platform>)')
@@ -25,7 +25,7 @@ parser.add_argument('--repos', type=str, default=list(), nargs='*',
         help='XML files with contract repository (<repository>)')
 parser.add_argument('--dotpath', type=str,
         help='Write graphs to DOT files in this path.')
-parser.add_argument('--config_xsd', type=str, default='genode_xsd/config.xsd',
+parser.add_argument('--config_xsd', type=str, default='xsd/genode/config.xsd',
         help='Config XSD schema.')
 parser.add_argument('--dependency_analysis', action='store_true')
 
