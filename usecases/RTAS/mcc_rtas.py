@@ -2,13 +2,13 @@
 
 import logging
 from argparse import ArgumentParser
-from mcc.rtas import Mcc
+from rtas import Mcc
 
 def get_args():
     descr = 'all arguments are optional'
     parser = ArgumentParser(description=descr)
     parser.add_argument('filename', default='rtas_control.xml', nargs='?')
-    parser.add_argument('--basepath', default='models/rtas/')
+    parser.add_argument('--basepath', default='../../models/rtas/')
     parser.add_argument('-o', '--outpath', default='./run/')
     parser.add_argument('-e', '--explore', action='store_true', default=False)
     parser.add_argument('--chronological', action='store_true', default=False)
