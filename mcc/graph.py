@@ -171,10 +171,10 @@ class Graph:
 
     def node_attributes(self, node, params=None):
         if params is None:
-            return self.graph.node[node]
+            return self.graph.nodes[node]
         else:
             filtered_attrs = { 'params' : dict() }
-            for attr, val in self.graph.node[node].items():
+            for attr, val in self.graph.nodes[node].items():
                 if attr == 'params':
                     for param, pval in val.items():
                         if param in params:
@@ -204,12 +204,12 @@ class Graph:
         raise NotImplementedError
 
     def nodes(self):
-        return self.graph.node.keys()
+        return self.graph.nodes.keys()
 
     def subgraph(self, nodes, keep_node_params=None):
         result = set()
         for n in nodes:
-            assert n in self.graph.node.keys()
+            assert n in self.graph.nodes.keys()
             attribs = self.node_attributes(n)
             params = dict()
             if keep_node_params is not None:
@@ -239,7 +239,7 @@ class Graph:
 
 class GraphExporter(Graph):
     def __init__(self, graph, node_params, edge_params):
-        self.graph = graph.graph.fresh_copy()
+        self.graph = graph.graph.__class__()
         self.graph.add_nodes_from(graph.graph)
         self.graph.add_edges_from(graph.graph.edges(keys=True))
 
