@@ -11,6 +11,7 @@ Implements variants of the MCC by composing cross-layer models, analysis engines
 from mcc.model import *
 from mcc.framework import *
 from mcc.analyses import *
+from mcc.simulation import *
 from mcc.complex_analyses import *
 from mcc.importexport import *
 
@@ -411,6 +412,12 @@ class MccBase:
         prios.add_operation(BatchAssign(pe, 'assign priorities'))
         model.add_step_unsafe(prios)
 
+        # assign WCETs
+        we = WcetEngine(tg)
+        wcets = NodeStep(       Map(we, 'WCETs'))
+        wcets.add_operation(    Assign(we, 'WCETs'))
+        model.add_step(wcets)
+
     def _timing_check(self, model, slayer, dlayer, constrmodel, ae):
 
         slayer = model.by_name[slayer]
@@ -427,9 +434,13 @@ class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
 
-    def __init__(self, repo, test_backtracking=False, chronologicaltracking=False):
+    def __init__(self, repo, test_backtracking=False, chronologicaltracking=False, test_adaptation=False):
+        assert test_backtracking == False or test_adaptation == False
+        assert chronologicaltracking == False or test_adaptation == False
+
         MccBase.__init__(self, repo)
         self._test_backtracking = test_backtracking
+        self._test_adaptation   = test_adaptation
         self._nonchronological  = not chronologicaltracking
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
@@ -505,14 +516,18 @@ class SimpleMcc(MccBase):
                                                 dlayer='task_graph',
                                                 constrmodel=constrmodel)
 
-            bt = None
+            sim = None
             if self._test_backtracking:
-                bt = BacktrackingTestEngine(model.by_name['task_graph'], model, outpath=outpath)
+                sim = BacktrackingSimulation(model.by_name['task_graph'], model, outpath=outpath)
 
             if constrmodel is not None:
                 self._reliability_check(model, layer='comp_inst', constrmodel=constrmodel)
                 self._timing_check(model, slayer='comp_inst', dlayer='task_graph',
-                                   constrmodel=constrmodel, ae=bt)
+                                   constrmodel=constrmodel, ae=sim)
+
+            if self._test_adaptation:
+                sim = AdaptationSimulation(model.by_name['task_graph'], model, outpath=outpath)
+                model.add_step(NodeStep(BatchCheck(sim)))
 
 #        model.print_steps()
         if outpath is not None and dot_mcc:
@@ -534,8 +549,8 @@ class SimpleMcc(MccBase):
             decision_graph = model.decision_graph
 
         except Exception as e:
-            if self._test_backtracking:
-                bt.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
+            if sim:
+                sim.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
 
             print(e)
             export = PickleExporter(model)

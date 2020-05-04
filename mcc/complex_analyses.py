@@ -27,7 +27,7 @@ from taskchain import schedulers as tc_schedulers
 class CPAEngine(AnalysisEngine):
 
     def __init__(self, layer, complayer, layers, constrmodel):
-        acl = { layer        : {'reads' : {'mapping', 'activation'}},
+        acl = { layer        : {'reads' : {'mapping', 'wcet', 'activation'}},
                 complayer    : {'reads' : {'priority', 'affinity'}}}
         AnalysisEngine.__init__(self, layer, param=None, acl=acl)
 
@@ -75,7 +75,7 @@ class CPAEngine(AnalysisEngine):
 
             # create pycpa_model.Task
             name = 't%d-%s' % (taskid, task.name)
-            tasks[obj] = pycpa_model.Task(name, wcet=task.wcet, bcet=task.bcet)
+            tasks[obj] = pycpa_model.Task(name, wcet=self.layer.get_param_value(self, 'wcet', obj).copy(), bcet=task.bcet)
             if task.expect_in == 'junction':
                 jt = task.expect_in_args['junction_type']
                 if jt == 'AND':

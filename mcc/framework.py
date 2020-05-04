@@ -272,7 +272,7 @@ class DecisionGraph(Graph):
         self.read    = set()
         self.written = set()
 
-    def stop_tracking(self, layer, obj, operation, error=False):
+    def stop_tracking(self, layer, obj, operation, error=False, error_nodes=None):
         if isinstance(operation, Check):
             self.check_tracking()
 
@@ -281,36 +281,16 @@ class DecisionGraph(Graph):
             node = self.revise_assign
             self.revise_assign = None
         else:
-            node = self.Node(layer, obj, operation, 0)
-            if __debug__ and node in self.nodes():
-                assert isinstance(operation, Check), "%s already in dependency graph" % node
-                print("%s already exists" % (node))
-                changed = False
-                for r in self.read-self.written:
-                    if r not in self.read_params(node):
-                        changed = True
-                        print("read param %s not in %s: %s" % (r, node, self.read_params(node)))
-                for w in self.written:
-                    if w not in self.written_params(node):
-                        changed = True
-                        print("written param %s not in %s: %s" % (w, node, self.written_params(node)))
+            node = self.add_node(layer, obj, operation)
 
-                if changed:
-                    self.write_dot("/tmp/doublecheck-pre.dot", highlight={node})
-
-                assert not changed
-
+            # track read access to object
+            if isinstance(obj, frozenset):
+                for o in obj:
+                    self.track_read(layer, o, 'obj')
             else:
-                node = self.add_node(layer, obj, operation)
+                self.track_read(layer, obj, 'obj')
 
-                # track read access to object
-                if isinstance(obj, frozenset):
-                    for o in obj:
-                        self.track_read(layer, o, 'obj')
-                else:
-                    self.track_read(layer, obj, 'obj')
-
-                self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error)
+            self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error, extra=error_nodes)
 
         self.read    = set()
         self.written = set()
@@ -320,7 +300,6 @@ class DecisionGraph(Graph):
     def _raw_dependencies(self, node, read, written):
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
-
 
         writers = set()
         for p in read:
@@ -828,6 +807,9 @@ class Layer:
         self.track_read('nodes', None)
         return self.graph.nodes()
 
+    def untracked_nodes(self):
+        return self.graph.nodes()
+
     def edges(self):
         self.track_read('edges', None)
         return self.graph.edges()
@@ -861,11 +843,13 @@ class Layer:
             self.tracked_operation = op
             self.dependency_tracker.start_tracking()
 
-    def stop_tracking(self, obj, error=False):
+    def stop_tracking(self, obj, error=False, error_nodes=None):
         node = None
         if self.dependency_tracker is not None:
             assert(self.tracked_operation is not None)
-            node = self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation, error=error)
+            node = self.dependency_tracker.stop_tracking(self, obj, self.tracked_operation,
+                                                         error=error,
+                                                         error_nodes=error_nodes)
             self.tracked_operation = None
 
         self.canary = False
@@ -2303,10 +2287,10 @@ class BatchCheck(Check):
             result = ae.batch_check(iterable)
 
             if isinstance(result, DecisionGraph.Node):
-                # FIXME we must stop tracking and ensure that the
-                #       decision graph is sorted
-                raise NotImplementedError
-                raise ConstraintNotSatisfied(result)
+                # if the ae can pinpoint a single culprit in the
+                # decision graph, we assume it was the only dependency for this check
+                node = self.source_layer.stop_tracking(result.obj, error=True, error_nodes=set([result]))
+                raise ConstraintNotSatisfied(node)
             elif not result:
                 # we must stop tracking (to insert a new node) and
                 # fail on this node

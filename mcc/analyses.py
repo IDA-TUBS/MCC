@@ -14,13 +14,26 @@ from mcc.graph import *
 from mcc import model
 from mcc import parser
 from mcc.taskmodel import *
-from mcc.importexport import *
 
 import itertools
 import copy
-import csv
 import random
 from collections import deque
+
+class WcetEngine(AnalysisEngine):
+    def __init__(self, layer):
+        """ Assigns WCETs to tasks (by copying from the Task object).
+            (required for adaption of WCETs by AdaptationSimulation)
+        """
+        AnalysisEngine.__init__(self, layer, param='wcet')
+
+    def map(self, obj, candidates):
+        assert not candidates
+        return set([obj.obj(self.layer).wcet])
+
+    def assign(self, obj, candidates):
+        return list(candidates)[0]
+
 
 class ActivationEngine(AnalysisEngine):
     def __init__(self, layer):
@@ -1851,105 +1864,6 @@ class ReachabilityEngine(AnalysisEngine):
     def target_types(self):
         return self.target_layer.node_types()
 
-class GenodeSubsystemEngine(AnalysisEngine):
-    """ Decompose component graph into subsystems by insert 'init' or other RTEs (e.g. noux, etc.).
-    """
-    # TODO [low] implement GenodeSubystemEngine (only required for nested/hierarchical systems)
-
-    def __init__(self, layer):
-        AnalysisEngine.__init__(self, layer, param='rte-instance')
-
-class BacktrackingTestEngine(AnalysisEngine):
-    class Solution:
-        def __init__(self, **kwargs):
-            self.data = kwargs
-
-    def __init__(self, layer, model, outpath=None):
-        super().__init__(layer, None)
-        self.model        = model
-        self.modeloutpath = outpath
-        self.solutions    = list()
-
-        self._last_iteration  = 0
-        self._last_rolledback = 0
-        self._last_variables  = set()
-
-    def write_stats(self, outpath=None):
-        print("Solutions found: %d" % len(self.solutions))
-
-        if outpath:
-            with open(outpath, 'w') as csvfile:
-                fieldnames = ['solution',
-                              'iterations',
-                              'total_variables',
-                              'new_variables',
-                              'combinations',
-                              'operations',
-                              'rolledback']
-                writer = csv.DictWriter(csvfile,
-                                        delimiter='\t',
-                                        fieldnames=fieldnames)
-
-                writer.writeheader()
-                i = 1
-                for s in self.solutions:
-                    s.data['solution'] = i
-                    writer.writerow(s.data)
-                    i += 1
-
-    def write_model(self):
-        if self.modeloutpath:
-            export = PickleExporter(self.model)
-            export.write('%smodel-%d.pickle' % (self.modeloutpath, len(self.solutions)+1))
-
-    def batch_check(self, iterable):
-        graph = self.model.decision_graph
-
-        ######################
-        # write model file
-        self.write_model()
-
-        ######################
-        # acquire statistics
-
-        # a) number of variables in this solution
-        variables = self.model._find_variables()
-
-        # (optional) assigned values of these variables
-
-        # b) number of possible combinations for these variables
-        combinations = 1
-        for v in variables:
-            combinations = combinations * len(v.layer.untracked_get_param_candidates(v.param, v.obj))
-
-        # c) how many iterations were required between this and the last solution
-        iterations = self.model.backtracking_try - self._last_iteration
-        self._last_iteration = self.model.backtracking_try
-
-        # d) how many operations were executed between this and the last solution
-        rolledback = self.model.stats['rolled-back operations'] - self._last_rolledback
-        self._last_rolledback = self.model.stats['rolled-back operations']
-
-        # e) calculate number of new variables
-        newvars = variables - self._last_variables
-        self._last_variables = variables
-
-        # store solution statistics
-        self.solutions.append(self.Solution(total_variables=len(variables),
-                                            new_variables=len(newvars),
-                                            combinations=combinations,
-                                            iterations=iterations,
-                                            operations=len(graph.nodes()),
-                                            rolledback=rolledback))
-
-        for node in graph.nodes():
-            if graph.revisable(node):
-                return False
-
-        return True
-
-    def node_types(self):
-        return []
 
 class InstantiationEngine(AnalysisEngine):
     def __init__(self, layer, target_layer, factory, target_mapping='mapping'):

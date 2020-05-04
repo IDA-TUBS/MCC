@@ -185,8 +185,11 @@ class TopologicalGraph(DecisionGraph):
         super().remove(node)
         self.pm_cached = None
 
-    def add_dependencies(self, node, read, written, force_sequential):
+    def add_dependencies(self, node, read, written, force_sequential, extra=None):
         writers = self._raw_dependencies(node, read, written)
+        if extra is not None:
+            assert isinstance(extra, set)
+            writers.update(extra)
 
         old_transforms = dict()
         for p in written:
