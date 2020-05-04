@@ -68,10 +68,10 @@ class CPAEngine(AnalysisEngine):
 
                 if create:
                     models[pfc] = dict()
-                    models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%d' % aff)
+                    models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%s' % aff)
 
             if aff not in models[pfc]:
-                models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%d' % aff)
+                models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%s' % aff)
 
             # create pycpa_model.Task
             name = 't%d-%s' % (taskid, task.name)
@@ -104,7 +104,7 @@ class CPAEngine(AnalysisEngine):
                 # create scheduling context
                 sctx = tc_model.SchedulingContext('s-'+task.thread.obj(self.complayer).label())
                 if prio:
-                    sctx.priority = prio
+                    sctx.priority = prio.copy()
                 models[pfc][aff].add_scheduling_context(sctx)
 
                 threads[comp] = (ectx, sctx)
@@ -158,9 +158,9 @@ class CPAEngine(AnalysisEngine):
 
             # assign/store event model
             act = self.layer.get_param_value(self, 'activation', root)
-            if isinstance(act, PJEventModel):
+            if act.wrapsinstance(PJEventModel):
                 tasks[root].in_event_model = pycpa_model.PJdEventModel(P=act.P, J=act.J)
-            elif isinstance(act, InEventModel):
+            elif act.wrapsinstance(InEventModel):
                 interrupt_tasks_in[pfc][act.name] = tasks[root]
 
             ectx, sctx = threads[threadmap[root]]
@@ -265,7 +265,7 @@ class CPAEngine(AnalysisEngine):
         for leaf in leaves:
             pfc = self.layer.get_param_value(self, 'mapping', leaf)
             act = self.layer.get_param_value(self, 'activation', leaf)
-            if isinstance(act, OutEventModel):
+            if act and act.wrapsinstance(OutEventModel):
                 interrupt_tasks_out[pfc][act.name] = tasks[leaf]
 
         # FIXME (future work) deal with mux and demux junctions

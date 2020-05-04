@@ -81,6 +81,7 @@ class Instance:
         self.config     = config
         self.replaces = set()
         self._static    = False
+        self.node       = Layer.Node(self)
 
     def is_component(self, rhs):
         return self.component.uid() == rhs.uid()
@@ -469,8 +470,8 @@ class SimplePlatformModel(PlatformModel):
             dotfile.write('}\n')
 
     def reachable(self, from_component, to_component):
-        assert isinstance(from_component, PlatformParser.PfComponent)
-        assert isinstance(to_component, PlatformParser.PfComponent)
+        assert from_component.wrapsinstance(PlatformParser.PfComponent)
+        assert to_component.wrapsinstance(PlatformParser.PfComponent)
 
         if from_component.in_native_domain(to_component):
             return True, 'native', from_component

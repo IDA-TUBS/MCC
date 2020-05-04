@@ -128,8 +128,8 @@ class PriorityEngine(AnalysisEngine):
         isr_period = 1
         for task in self.taskgraph.nodes():
             act = self.taskgraph.get_param_value(self, 'activation', task)
-            if act and isinstance(act, PJEventModel) or isinstance(act, InEventModel):
-                if isinstance(act, PJEventModel):
+            if act and (act.wrapsinstance(PJEventModel) or act.wrapsinstance(InEventModel)):
+                if act.wrapsinstance(PJEventModel):
                     current_period = act.P
                 else:
                     # highest priority for interrupts
@@ -2054,8 +2054,7 @@ class InstantiationEngine(AnalysisEngine):
 
         else:
             instance = self.layer.get_param_value(self, self.param, obj)
-            if not hasattr(instance, 'node'):
-                instance.node = Layer.Node(instance)
+            assert hasattr(instance, 'node')
 
             return GraphObj(instance.node,
                             params={self.target_mapping:self.layer.get_param_value(self, 'mapping', obj)})

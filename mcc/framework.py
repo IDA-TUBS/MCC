@@ -9,6 +9,7 @@ Implements generic MCC framework, i.e. cross-layer model, model operations, and 
 
 """
 
+import copy
 import logging
 from mcc.graph import *
 
@@ -66,6 +67,7 @@ class DecisionGraph(Graph):
 
     class Param:
         def __init__(self, layer, obj, param):
+            isinstance(obj, ImmutableParam)
             self.layer = layer
             self.obj   = obj
             self.param = param
@@ -1137,6 +1139,13 @@ class Layer:
         if param not in params:
             params[param] = dict()
 
+        immutablecandidates = set()
+        for cand in candidates:
+            if cand is None or isinstance(cand, ImmutableParam):
+                immutablecandidates.add(cand)
+            else:
+                immutablecandidates.add(ImmutableParam(cand))
+
         params[param]['candidates'] = candidates
 
     def get_param_value(self, ae, param, obj):
@@ -1175,6 +1184,7 @@ class Layer:
         assert param in params, "%s not present for %s" % (param, obj)
 
         assert 'value' in params[param], "value not assigned for %s on %s" % (param, obj)
+        assert params[param]['value'] is None or isinstance(params[param]['value'], ImmutableParam)
         return params[param]['value']
 
     def set_param_value(self, ae, param, obj, value):
@@ -1197,6 +1207,9 @@ class Layer:
 
     def untracked_set_param_value(self, param, obj, value):
         params = self.untracked_get_params(obj)
+
+        if value is not None and not isinstance(value, ImmutableParam):
+            value = ImmutableParam(value)
 
         if param not in params:
             params[param] = { 'value' : value, 'candidates' : set() }
@@ -1670,6 +1683,44 @@ class InheritEngine(AnalysisEngine):
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
+
+
+class ImmutableParam():
+
+    def __init__(self, data):
+        super().__setattr__('data', data)
+
+    def __setattr__(self, name, value):
+        raise Exception("Setting param attributes is not allowed.")
+
+    def __getattr__(self, name):
+        # TODO how to prevent modifications of the attribute?
+        return getattr(self._wrapped_data(), name)
+
+    def copy(self):
+        return copy.copy(self._wrapped_data())
+
+    def __eq__(self, rhs):
+        if isinstance(rhs, ImmutableParam):
+            return self.data == rhs.data
+        else:
+            return self.data == rhs
+
+    def __hash__(self):
+        return hash(self.data)
+
+    def _wrapped_data(self):
+        return super().__getattribute__('data')
+
+    def __iter__(self):
+        return self._wrapped_data().__iter__()
+
+    def wrapsinstance(self, instance):
+        return isinstance(self._wrapped_data(), instance)
+
+    def __repr__(self):
+        return self._wrapped_data().__repr__()
+
 
 class Operation:
     """ Base class for operations on a model.
