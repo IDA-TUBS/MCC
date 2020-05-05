@@ -129,7 +129,7 @@ class MccBase:
         fa = model.by_name[dlayer]
 
         me = MappingEngine(fq, model.repo, model.platform, cost_sensitive=True)
-        cpme = CPMappingEngine(fq, model.repo, model.platform)
+        #cpme = CPMappingEngine(fq, model.repo, model.platform)
         fe = FunctionEngine(fq, fa, model.repo)
 
         step = NodeStep(              Map(fe, 'dependencies'))

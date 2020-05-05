@@ -1,15 +1,15 @@
-Model module
-================
+Backtracking module
+===================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.backtracking
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.backtracking
    :members:
    :show-inheritance:
    :undoc-members:

@@ -1,3 +1,9 @@
+"""
+:Authors:
+    - Johannes Schlatow
+    - Edgard Schmidt
+
+"""
 import os
 import itertools
 

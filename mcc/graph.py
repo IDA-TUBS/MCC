@@ -7,6 +7,7 @@ Serves as a wrapper to networkx so that we could potentially replace it with ano
 
 :Authors:
     - Johannes Schlatow
+    - Edgard Schmidt
 
 """
 from  networkx import MultiDiGraph, DiGraph

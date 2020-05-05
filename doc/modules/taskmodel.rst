@@ -1,15 +1,15 @@
-Model module
+Taskmodel module
 ================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.taskmodel
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.taskmodel
    :members:
    :show-inheritance:
    :undoc-members:

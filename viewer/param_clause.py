@@ -1,3 +1,9 @@
+"""
+:Authors:
+    - Edgard Schmidt
+
+"""
+
 from collections import namedtuple
 import re
 

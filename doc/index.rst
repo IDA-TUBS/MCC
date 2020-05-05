@@ -11,7 +11,6 @@ Welcome to MCC's documentation!
    :caption: Contents:
 
    mcc
-   todo
 
 Indices and tables
 ==================

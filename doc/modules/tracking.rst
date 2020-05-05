@@ -1,15 +1,15 @@
-Model module
-================
+Tracking module
+===============
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.tracking
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.tracking
    :members:
    :show-inheritance:
    :undoc-members:

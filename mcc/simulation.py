@@ -18,6 +18,8 @@ import math
 import time
 
 class SimulationEngine(AnalysisEngine):
+    """ Base class. Implements bookkeeping of found solutions.
+    """
     class Solution:
         def __init__(self, **kwargs):
             self.data = kwargs
@@ -121,10 +123,10 @@ class SimulationEngine(AnalysisEngine):
 
 
 class BacktrackingSimulation(SimulationEngine):
+    """ Performs design-space exploration by rejecting solutions as long as there are still more candidates to
+        iterate. Keeps track of all found solutions and statistics.
+    """
     def __init__(self, layer, model, outpath=None):
-        """ Performs design-space exploration by rejecting solutions as long as there are still more candidates to
-            iterate. Keeps track of all found solutions and statistics.
-        """
         super().__init__(layer, model, outpath)
 
     def batch_check(self, iterable):
@@ -142,10 +144,10 @@ class BacktrackingSimulation(SimulationEngine):
 
 
 class AdaptationSimulation(SimulationEngine):
+    """ Performs simulation of parameter adaptation by changing parameters and rolling back
+        to their writing operation.
+    """
     def __init__(self, layer, model, factor=1.1, outpath=None):
-        """ Performs simulation of parameter adaptation by changing parameters and rolling back
-            to their writing operation.
-        """
         super().__init__(layer, model, outpath)
 
         assert factor > 1

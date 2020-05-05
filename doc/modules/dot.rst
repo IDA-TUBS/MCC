@@ -1,15 +1,15 @@
-Model module
-================
+Dot module
+==========
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.dot
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.dot
    :members:
    :show-inheritance:
    :undoc-members:

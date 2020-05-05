@@ -1,15 +1,15 @@
-Model module
-================
+Noparser module
+===============
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.noparser
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.noparser
    :members:
    :show-inheritance:
    :undoc-members:

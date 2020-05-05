@@ -1,15 +1,15 @@
-Model module
-================
+Simulation module
+=================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.simulation
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.simulation
    :members:
    :show-inheritance:
    :undoc-members:

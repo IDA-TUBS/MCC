@@ -1,15 +1,15 @@
-Model module
-================
+Configuration module
+====================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.configurator
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.configurator
    :members:
    :show-inheritance:
    :undoc-members:

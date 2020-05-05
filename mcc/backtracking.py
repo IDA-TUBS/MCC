@@ -5,8 +5,9 @@ Description
 Implements backtracking-related data structures.
 
 :Authors:
-    - Dustin Frey
     - Johannes Schlatow
+    - Edgard Schmidt
+    - Dustin Frey
 
 """
 

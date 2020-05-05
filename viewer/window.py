@@ -1,3 +1,10 @@
+"""
+:Authors:
+    - Johannes Schlatow
+    - Edgard Schmidt
+
+"""
+
 import os
 import re
 

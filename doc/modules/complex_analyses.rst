@@ -1,15 +1,15 @@
-Model module
-================
+Complex Analyses module
+=======================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.complex_analyses
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.complex_analyses
    :members:
    :show-inheritance:
    :undoc-members:

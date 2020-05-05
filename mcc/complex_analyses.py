@@ -2,10 +2,11 @@
 Description
 -----------
 
-Implements more sophisticated analysis engines.
+Implements more sophisticated analysis engines that require external tools.
 
 :Authors:
     - Johannes Schlatow
+    - Edgard Schmidt
 
 """
 import logging
@@ -25,6 +26,8 @@ from taskchain import model as tc_model
 from taskchain import schedulers as tc_schedulers
 
 class CPAEngine(AnalysisEngine):
+    """ Executes Compositional Performance Analysis. Requires pyCPA.
+    """
 
     def __init__(self, layer, complayer, layers, constrmodel):
         acl = { layer        : {'reads' : {'mapping', 'wcet', 'activation'}},

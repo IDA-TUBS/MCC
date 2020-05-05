@@ -6,6 +6,9 @@ Class diagram
 
 .. inheritance-diagram:: mcc.lib
 
+Classes
+-------
+
 .. automodule:: mcc.lib
    :members:
    :show-inheritance:

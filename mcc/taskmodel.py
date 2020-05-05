@@ -2,7 +2,7 @@
 Description
 -----------
 
-Implements XML parser classes for the component repository.
+Classes required for modelling task graphs.
 
 :Authors:
     - Johannes Schlatow

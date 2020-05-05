@@ -6,6 +6,9 @@ Class diagram
 
 .. inheritance-diagram:: mcc.parser
 
+Classes
+-------
+
 .. automodule:: mcc.parser
    :members:
    :show-inheritance:

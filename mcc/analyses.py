@@ -6,6 +6,7 @@ Implements analysis engines.
 
 :Authors:
     - Johannes Schlatow
+    - Edgard Schmidt
 
 """
 import logging

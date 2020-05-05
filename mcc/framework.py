@@ -6,6 +6,7 @@ Implements generic MCC framework, i.e. cross-layer model, model operations, and 
 
 :Authors:
     - Johannes Schlatow
+    - Edgard Schmidt
 
 """
 
@@ -14,10 +15,13 @@ import logging
 from mcc.graph import *
 
 class DecisionGraph(Graph):
-    """ Stores dependencies between decisions.
+    """ Stores dependencies between decisions to enable backtracking.
+        This is a base class of the graph implementations in :module:`mcc.tracking`.
     """
 
     class Writers:
+        """ Helper for storing the operations that wrote a particular parameter.
+        """
         def __init__(self):
             self.assign    = None
             self.map       = None
@@ -40,6 +44,8 @@ class DecisionGraph(Graph):
             return self.assign is None and self.map is None and not self.transform
 
         def register(self, node):
+            """ Register a :class:`DecisionGraph.Node` as a writer.
+            """
             if isinstance(node.operation, Assign):
                 assert self.assign is None, "%s already registered where %s should go" % (self.assign, node)
                 self.assign = node
@@ -53,6 +59,8 @@ class DecisionGraph(Graph):
                 raise NotImplementedError
 
         def deregister(self, node):
+            """ Deregister a :class:`DecisionGraph.Node` as a writer.
+            """
             if isinstance(node.operation, Assign):
                 assert self.assign == node
                 self.assign = None
@@ -66,6 +74,8 @@ class DecisionGraph(Graph):
 
 
     class Param:
+        """ Helper for storing/identifying parameters by the layer, the object and the param name.
+        """
         def __init__(self, layer, obj, param):
             isinstance(obj, ImmutableParam)
             self.layer = layer
@@ -88,6 +98,9 @@ class DecisionGraph(Graph):
 
 
     class Node:
+        """ Used as node objects in the :class:`DecisionGraph`. A node is identified
+            by the layer, the object, the operation and the iteration (for sorting).
+        """
         def __init__(self, layer, obj, operation, iteration):
             self.layer     = layer
             self.obj       = obj
@@ -131,11 +144,15 @@ class DecisionGraph(Graph):
 
 
     class Failed:
+        """ Helper for storing failed candidates of a single or multiple parameters.
+        """
         def __init__(self, params):
             self.params    = tuple(params)
             self.blacklist = set()
 
         def mark_current_bad(self):
+            """ Mark current value(s) as failed.
+            """
             if len(self.params) == 1:
                 p = self.params[0]
                 # add current value to blacklist
@@ -148,18 +165,26 @@ class DecisionGraph(Graph):
                 self.blacklist.add(tuple(cur))
 
         def bad_values(self):
+            """ Returns the set of failed parameter values.
+                If there are multiple parameters, it returns an empty set.
+            """
             if len(self.params) == 1:
                 return self.blacklist
             else:
                 return set()
 
         def bad_combinations(self):
+            """ Only call this if there are multiple parameters.
+            """
             assert len(self.params) > 1
 
             objects = tuple([x.obj for x in self.params])
             return objects, self.blacklist
 
         def candidates_left(self):
+            """ Returns number of candidates left for iterating.
+                Always returns True if there are multiple parameters.
+            """
             if len(self.params) == 1:
                 p = self.params[0]
                 candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
@@ -198,6 +223,8 @@ class DecisionGraph(Graph):
         self.revise_assign = culprit
 
     def candidates_exhausted(self, p):
+        """ Returns True if there are no more candidates for the given parameter.
+        """
         assert isinstance(p, self.Param)
 
         failed = p.layer.get_param_failed(p.param, p.obj)
@@ -208,6 +235,9 @@ class DecisionGraph(Graph):
         return not failed.candidates_left()
 
     def revisable(self, n):
+        """ Returns True if the operation associated with the given :class:`DecisionGraph.Node`
+            can be revised (i.e. there are more candidates to iterate).
+        """
         assert isinstance(n, self.Node)
 
         # only Assign operations are revisable
@@ -269,10 +299,15 @@ class DecisionGraph(Graph):
             layer.dependency_tracker = self
 
     def start_tracking(self):
+        """ Starts tracking of read/written parameters.
+        """
         self.read    = set()
         self.written = set()
 
     def stop_tracking(self, layer, obj, operation, error=False, error_nodes=None):
+        """ Stop tracking of read/written parameters.
+            Inserts a node into the dependency graph for the given layer, object and operation.
+        """
         if isinstance(operation, Check):
             self.check_tracking()
 
@@ -298,6 +333,8 @@ class DecisionGraph(Graph):
         return node
 
     def _raw_dependencies(self, node, read, written):
+        """ Returns the nodes on which the given node (transitively) depends.
+        """
         written_params = self.written_params(node)
         read_params    = self.read_params(node)
 
@@ -731,6 +768,8 @@ class Registry:
 class Layer:
 
     class Node:
+        """ Wrapper of node objects. The indirect access to the stored objects allows tracking accesses.
+        """
         def __init__(self, obj):
             self._obj = obj
 
@@ -796,14 +835,23 @@ class Layer:
         return self.graph.add_edge(obj)
 
     def out_edges(self, node):
+        """ Returns outgoing edges of the given node and tracks access to the virtual
+            parameter 'outedges'.
+        """
         self.track_read('outedges', node)
         return self.graph.out_edges(node)
 
     def in_edges(self, node):
+        """ Returns incoming edges of the given node and tracks access to the virtual
+            parameter 'inedges'.
+        """
         self.track_read('inedges', node)
         return self.graph.in_edges(node)
 
     def nodes(self):
+        """ Returns all nodes of the layer and tracks access to the virtual
+            parameter 'nodes'.
+        """
         self.track_read('nodes', None)
         return self.graph.nodes()
 
@@ -811,6 +859,9 @@ class Layer:
         return self.graph.nodes()
 
     def edges(self):
+        """ Returns all edges of the layer and tracks access to the virtual
+            parameter 'edges'.
+        """
         self.track_read('edges', None)
         return self.graph.edges()
 
@@ -857,6 +908,8 @@ class Layer:
         return node
 
     def set_canary(self):
+        """ Sets a flag that will be overridden by any successfully executed operation.
+        """
         self.canary = True
 
     def set_params(self, ae, obj, params):
@@ -1201,7 +1254,7 @@ class Layer:
             params[param]['value'] = value
 
 class AnalysisEngine:
-    """ Base class for analysis engines.
+    """ Base class for analysis engines implemented in :module:`mcc.analyses`.
     """
 
     def __init__(self, layer, param, name=None, acl=None):

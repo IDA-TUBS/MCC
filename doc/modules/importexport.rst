@@ -1,15 +1,15 @@
-Model module
-================
+Import/Export module
+====================
 
 Class diagram
 -------------
 
-.. inheritance-diagram:: mcc.model
+.. inheritance-diagram:: mcc.importexport
 
 Classes
 -------
 
-.. automodule:: mcc.model
+.. automodule:: mcc.importexport
    :members:
    :show-inheritance:
    :undoc-members:

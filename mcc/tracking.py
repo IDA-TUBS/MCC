@@ -2,10 +2,11 @@
 Description
 -----------
 
-Implements dependency tracking.
+Implementations of :class:`mcc.framework.DecisionGraph`.
 
 :Authors:
     - Johannes Schlatow
+    - Edgard Schmidt
 
 """
 
@@ -16,7 +17,9 @@ from  networkx.algorithms import shortest_paths
 from collections import deque
 
 class LinearGraph(DecisionGraph):
-    """ Discards dependencies and and pushes each operation to a stack """
+    """ Discards dependencies and pushes each operation to a stack to implement
+        chronological backtracking.
+    """
 
     def __init__(self):
         super().__init__()
