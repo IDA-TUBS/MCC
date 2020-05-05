@@ -526,7 +526,7 @@ class SimpleMcc(MccBase):
                                    constrmodel=constrmodel, ae=sim)
 
             if self._test_adaptation:
-                sim = AdaptationSimulation(model.by_name['task_graph'], model, outpath=outpath)
+                sim = AdaptationSimulation(model.by_name['task_graph'], model, factor=self._test_adaptation, outpath=outpath)
                 model.add_step(NodeStep(BatchCheck(sim)))
 
 #        model.print_steps()

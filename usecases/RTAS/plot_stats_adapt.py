@@ -2,8 +2,9 @@
 
 ##############################################################################
 # Brief:
-# create subplots for iterations, operations and time
-#  every subplot shows two boxplots (chrono/nonchrono) for each experiment
+# create subplots 
+#  every experiment gets its own subplot
+#  every variable gets its own y-axis and line
 ##############################################################################
 
 from argparse import ArgumentParser
@@ -18,9 +19,9 @@ def get_args():
     parser.add_argument('--basepath', required=True,
                         help='basepath to experiments')
     parser.add_argument('--vars',  nargs='+',
-                        help='each variable gets its own subplot')
+                        help='each variable gets its own line')
     parser.add_argument('--experiments', nargs='+',
-                        help='directory names of all included experiments')
+                        help='directory names of all included experiments (each experiment gets its own subplot)')
     parser.add_argument('--labels', nargs='+',
                         help='labels for the experiments')
     parser.add_argument('--output', default=None, required=False,
@@ -33,39 +34,36 @@ def parse_file(filename):
     with open(filename, 'r') as csvfile:
         reader = csv.DictReader(csvfile, delimiter='\t')
 
+        last_ops = 0
+        last_time = 0
         for row in reader:
             newrow = dict()
-            newrow['Total Time [s]'] = float(row['time'])
-            newrow['Iterations']     = int(row['iterations'])
-            newrow['Operations']     = int(row['operations'])
-            newrow['run']            = int(row['run'])
+#            newrow['Time [s]']   = float(row['time']) - last_time
+            newrow['Iterations'] = int(row['iterations'])
+            newrow['Combinations']= int(row['combinations'])
+            newrow['Operations'] = int(row['rolledback']) + int(row['operations']) - last_ops
+            newrow['Adaptation'] = int(row['solution'])
+#            newrow['Complexity'] = int(row['complexity'])
             data.append(newrow)
+            last_ops             = int(row['operations'])
+            #last_time            = float(row['time'])
 
     return data
 
 
 def prepare_data(basepath, experiments, labels):
+    raw_data = list()
 
     # iterate experiments and parse files
-    raw_data = list()
     for exp,label in zip(experiments, labels):
-        chrono    = parse_file('%s/%s/test/chrono/results.csv'    % (basepath, exp))
-        nonchrono = parse_file('%s/%s/test/nonchrono/results.csv' % (basepath, exp))
+        result = parse_file('%s/%s/adapt/nonchrono/solutions.csv' % (basepath, exp))
 
-        # assert that both files have the same sample size
-        if len(chrono) != len(nonchrono):
-            print("WARNING: different number of samples in %s: %d vs %d" % (exp, len(chrono), len(nonchrono)))
+        max_adapt = result[-1]['Adaptation']
 
+        for r in result:
+            r['Variant'] = "%s\n(%d)" % (label, max_adapt)
 
-        for r in chrono:
-            r['search']   = 'chronological'
-            r['Variant'] = label
-
-        for r in nonchrono:
-            r['search'] = 'non-chronological'
-            r['Variant'] = label
-
-        raw_data.extend(chrono + nonchrono)
+        raw_data.extend(result)
 
     return pd.DataFrame(raw_data)
 
@@ -76,15 +74,13 @@ def create_plot(data, variables, output=None):
 
     rows=len(variables)
 
-    f, axes = plt.subplots(rows, 1, sharex=True, figsize=[6, 9])
+    f, axes = plt.subplots(rows, 1, sharex=False, figsize=[8, 6])
     row=1
     for var, ax in zip(variables, axes):
-        sns.boxplot(x="Variant", y=var, hue="search",
+        sns.boxplot(x="Variant", y=var,
                     data=data, notch=False,
-                    fliersize=3,
+                    fliersize=3, width=0.5,
                     palette="muted", ax=ax)
-        if row > 1:
-            ax.legend().set_visible(False)
         if row < rows:
             ax.set_xlabel('')
         row += 1
@@ -102,6 +98,5 @@ if __name__ == '__main__':
     assert len(args.experiments) == len(args.labels)
 
     data = prepare_data(args.basepath, args.experiments, args.labels)
-    print(data.head())
 
     create_plot(data, args.vars, output=args.output)

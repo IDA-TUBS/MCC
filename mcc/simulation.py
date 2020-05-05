@@ -15,6 +15,7 @@ from mcc.importexport import *
 import csv
 import random
 import math
+import time
 
 class SimulationEngine(AnalysisEngine):
     class Solution:
@@ -37,10 +38,13 @@ class SimulationEngine(AnalysisEngine):
         if outpath:
             with open(outpath, 'w') as csvfile:
                 fieldnames = ['solution',
+                              'time',
                               'iterations',
                               'total_variables',
                               'new_variables',
                               'combinations',
+                              'combinations_left',
+                              'complexity',
                               'operations',
                               'rolledback']
                 writer = csv.DictWriter(csvfile,
@@ -79,6 +83,19 @@ class SimulationEngine(AnalysisEngine):
         for v in variables:
             combinations = combinations * len(v.layer.untracked_get_param_candidates(v.param, v.obj))
 
+        # number of combinations left to iterate (theoretical)
+        combinations_left = 1
+        for v in variables:
+            failed = v.layer.get_param_failed(v.param, v.obj)
+            if failed:
+                left = failed.candidates_left() + 1
+            else:
+                left = len(v.layer.untracked_get_param_candidates(v.param, v.obj))
+
+            if left > 1:
+                combinations_left = combinations_left * left
+
+
         # c) how many iterations were required between this and the last solution
         iterations = self.model.backtracking_try - self._last_iteration
         self._last_iteration = self.model.backtracking_try
@@ -94,7 +111,10 @@ class SimulationEngine(AnalysisEngine):
         # store solution statistics
         self.solutions.append(self.Solution(total_variables=len(variables),
                                             new_variables=len(newvars),
+                                            time=time.monotonic,
                                             combinations=combinations,
+                                            combinations_left=combinations_left,
+                                            complexity=self.model.backtracking_try + combinations_left,
                                             iterations=iterations,
                                             operations=len(graph.nodes()),
                                             rolledback=rolledback))
@@ -122,11 +142,14 @@ class BacktrackingSimulation(SimulationEngine):
 
 
 class AdaptationSimulation(SimulationEngine):
-    def __init__(self, layer, model, outpath=None):
+    def __init__(self, layer, model, factor=1.1, outpath=None):
         """ Performs simulation of parameter adaptation by changing parameters and rolling back
             to their writing operation.
         """
         super().__init__(layer, model, outpath)
+
+        assert factor > 1
+        self.factor = factor
 
     def batch_check(self, iterable):
         self.record_solution()
@@ -138,8 +161,8 @@ class AdaptationSimulation(SimulationEngine):
         task_set = list(tg.untracked_nodes())
         culprit = random.choice(task_set)
 
-        # increase WCET by 10%
-        new_wcet = int(math.ceil(tg.untracked_get_param_value('wcet', culprit).copy() * 1.10))
+        # increase WCET by factor
+        new_wcet = int(math.ceil(tg.untracked_get_param_value('wcet', culprit).copy() * self.factor))
 
         logging.info("Increasing WCET of task %s to %d" % (culprit.obj(tg), new_wcet))
 

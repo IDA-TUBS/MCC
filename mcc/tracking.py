@@ -22,7 +22,10 @@ class LinearGraph(DecisionGraph):
         super().__init__()
         self.latest = self.root
 
-    def add_dependencies(self, node, read, written, force_sequential):
+    def add_dependencies(self, node, read, written, force_sequential, extra=None):
+        if extra is not None:
+            raise NotImplementedError
+
         for p in written:
             if p not in self.param_store:
                 self.param_store[p] = self.Writers()
@@ -374,9 +377,12 @@ class DecisionTree(DecisionGraph):
 
         return leaf
 
-    def add_dependencies(self, node, read, written, force_sequential):
+    def add_dependencies(self, node, read, written, force_sequential, extra=None):
         read_params    = self.read_params(node)
         writers = self._raw_dependencies(node, read, written)
+
+        if extra is not None:
+            raise NotImplementedError
 
         old_transforms = dict()
         for p in written:

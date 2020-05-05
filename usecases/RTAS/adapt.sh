@@ -34,9 +34,9 @@ if [ $# -ge 1 ]; then
 	fi
 fi
 
-run_nonchronological() {
+run_adapt110() {
 	exp=$1
-	OUTPATH="./run/$(basename $exp)/adapt/nonchrono/"
+	OUTPATH="./run/$(basename $exp)/adapt110/nonchrono/"
 	mkdir -p "${OUTPATH}"
 
 	cmd="./mcc_rtas.py --adapt --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
@@ -50,10 +50,29 @@ run_nonchronological() {
 	fi
 }
 
-export -f run_nonchronological
+run_adapt200() {
+	exp=$1
+	OUTPATH="./run/$(basename $exp)/adapt200/nonchrono/"
+	mkdir -p "${OUTPATH}"
+
+	cmd="./mcc_rtas.py --adapt --wcet_factor 2.0 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	echo "Running $cmd"
+	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
+	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	if [ 2 -eq $succ ] ; then
+		echo '  SUCCEEDED'
+	else
+		echo '  FAILED'
+	fi
+}
+
+export -f run_adapt110
+export -f run_adapt200
 export BASEPATH
 
 # run
-parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
+parallel --gnu --ungroup -j $JOBS run_adapt200 ::: "${EXPERIMENTS[@]}"
+
+parallel --gnu --ungroup -j $JOBS run_adapt110 ::: "${EXPERIMENTS[@]}"
 
 

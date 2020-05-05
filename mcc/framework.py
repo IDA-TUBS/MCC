@@ -164,7 +164,7 @@ class DecisionGraph(Graph):
                 p = self.params[0]
                 candidates = p.layer.untracked_get_param_candidates(p.param, p.obj)
                 value      = p.layer.untracked_get_param_value(p.param, p.obj)
-                return True if candidates - self.blacklist - {value} else False
+                return len(candidates - self.blacklist - {value})
             else:
                 return True
 
