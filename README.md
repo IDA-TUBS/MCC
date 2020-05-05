@@ -1,6 +1,11 @@
 # Description
 
-t.b.d.
+This repository implements the Multi-Change Controller (MCC), which is a framework for model-based
+self-integration of embedded software systems.
+The work on this implementation was done in the scope of the DFG Research Unit _Controlling Concurrent Change_ (FOR1800).
+More details can be found on the [project's website](https://ccc-project.org).
+
+Please be aware that this software is [licensed under BSD-3-clause](LICENSE).
 
 # Dependencies/Installation
 
@@ -35,7 +40,7 @@ mcc.py
 : This is a general script for executing the MCC. It is not very convenient though as it must be provided with quite a few arguments. The use-case specific implementations have more convenient scripts.
 
 view.py
-: This is the model viewer with wich you can browse exported pickle files interactively.
+: This is the model viewer with which you can browse exported pickle files interactively.
 
 check_xml.py
 : Checks validity of XML files according to the XSD.
@@ -43,20 +48,11 @@ check_xml.py
 check_all_xml.sh
 : Checks all XML files in models/ for validity.
 
-export_mcc.sh
-: Helper script for creating archives in order to make the MCC modules available in Genode.
-
 
 ## Directories
 
 doc
-: Config files for generating Sphinx documentation. The documentation has been created in Feb 2018 and is in an old state.
-
-documents
-: Contains documents that have been created for sketching approaches before implementation. Think of it as RFCs.
-
-errors
-: Is a collection of error/bugs that occured once, the corresponding logs and output files and (if applicable) steps to reproduce.
+: Config files for generating Sphinx documentation.
 
 mcc
 : Contains the python sub-modules of the mcc module.
