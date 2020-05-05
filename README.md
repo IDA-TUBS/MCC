@@ -3,7 +3,7 @@
 This repository implements the Multi-Change Controller (MCC), which is a framework for model-based
 self-integration of embedded software systems.
 The work on this implementation was done in the scope of the DFG Research Unit _Controlling Concurrent Change_ (FOR1800).
-More details can be found on the [project's website](https://ccc-project.org).
+More details can be found on the [project's website](http://ccc-project.org).
 
 Please be aware that this software is [licensed under BSD-3-clause](LICENSE).
 
