@@ -113,7 +113,7 @@ class SimulationEngine(AnalysisEngine):
         # store solution statistics
         self.solutions.append(self.Solution(total_variables=len(variables),
                                             new_variables=len(newvars),
-                                            time=time.monotonic,
+                                            time=time.monotonic(),
                                             combinations=combinations,
                                             combinations_left=combinations_left,
                                             complexity=self.model.backtracking_try + combinations_left,
