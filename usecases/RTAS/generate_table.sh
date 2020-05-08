@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 EXPERIMENTS=(
 "obj_no_fpga_low_rel.xml"

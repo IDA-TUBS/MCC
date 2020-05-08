@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ##############################################################################
 # Description:
@@ -116,7 +116,14 @@ export BASEPATH
 export wanted_tries
 export wanted_succ
 
-parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
+if which parallel &> /dev/null; then
+	parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
 
-# second run, nonchronological BT
-parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
+	# second run, nonchronological BT
+	parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
+else
+	for exp in "${EXPERIMENTS[@]}"; do
+		run_chronological $exp
+		run_nonchronological $exp
+	done
+fi

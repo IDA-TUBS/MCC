@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # arguments: input files (chrono and nonchrono)
 
@@ -22,7 +22,7 @@ def parse_results(filename):
 
         for row in reader:
             for k in row:
-                row[k] = int(row[k])
+                row[k] = int(float(row[k]))
             solutions.append(row)
 
     return solutions
@@ -83,8 +83,6 @@ def process_results(results):
 
 def compare_results(res1, res2):
     # assert that some values are the same in both files:
-    assert res1['solutions'] == res2['solutions'], \
-            'Number of solutions differ: %d vs %d' % (res1['solutions'], res2['solutions'])
     assert res1['min_vars'] == res2['min_vars'], 'Minimum number of variables differ.'
     assert res1['max_vars'] == res2['max_vars'], 'Maximum number of variables differ.'
     assert res1['min_ops'] == res2['min_ops'], 'Minimum number of operations differ.'
@@ -99,6 +97,9 @@ def compare_results(res1, res2):
 
     if res1['total_ops'] != res2['total_ops']:
         print("Total operations differ: %d vs %d" % (res1['total_ops'], res2['total_ops']), file=sys.stderr)
+
+    if res1['solutions'] != res2['solutions']:
+        print('Number of solutions differ: %d vs %d' % (res1['solutions'], res2['solutions']))
 
 def format_range(res, name):
     minval = res['min_%s' % name]

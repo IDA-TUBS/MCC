@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ##############################################################################
 # Description:
@@ -74,10 +74,19 @@ export -f run_chronological
 export -f run_nonchronological
 export BASEPATH
 
-# second run, nonchronological BT
-parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
+if which parallel &> /dev/null; then
+	# first run, nonchronological BT
+	parallel --gnu --ungroup -j $JOBS run_nonchronological ::: "${EXPERIMENTS[@]}"
 
-# first run, chronological BT
-parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
+	# second run, chronological BT
+	parallel --gnu --ungroup -j $JOBS run_chronological ::: "${EXPERIMENTS[@]}"
+else
+	for exp in "${EXPERIMENTS[@]}"; do
+		run_nonchronological $exp
+		run_chronological $exp
+	done
+fi
+
+
 
 

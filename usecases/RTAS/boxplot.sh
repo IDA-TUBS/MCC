@@ -21,4 +21,4 @@ NAMES=(
 ./plot_stats.py --basepath run/ \
 	--experiments "${EXPERIMENTS[@]}" \
 	--labels "${NAMES[@]}" \
-	--vars Iterations Operations "Time [s]"
+	--vars Iterations Operations "Total Time [s]"

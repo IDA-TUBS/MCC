@@ -18,7 +18,14 @@ NAMES=(
 "POSE III"
 )
 
+SERIES=(
+"adapt110"
+"adapt150"
+"adapt200"
+)
+
 ./plot_stats_adapt.py --basepath run/ \
 	--experiments "${EXPERIMENTS[@]}" \
 	--labels "${NAMES[@]}" \
-	--vars Iterations Operations Combinations
+	--series "${SERIES[@]}" \
+	--vars Iterations Operations "Time [s]"

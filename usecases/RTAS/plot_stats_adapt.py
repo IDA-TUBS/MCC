@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 ##############################################################################
 # Brief:
@@ -24,6 +24,10 @@ def get_args():
                         help='directory names of all included experiments (each experiment gets its own subplot)')
     parser.add_argument('--labels', nargs='+',
                         help='labels for the experiments')
+    parser.add_argument('--series', nargs='+',
+                        help='directory names of subseries (corresponds to bars in a box group)')
+    parser.add_argument('--outliers', default=None, type=int,
+                        help='maximum number of iterations to include')
     parser.add_argument('--output', default=None, required=False,
                         help='save plot to given file')
     return parser.parse_args()
@@ -38,32 +42,43 @@ def parse_file(filename):
         last_time = 0
         for row in reader:
             newrow = dict()
-#            newrow['Time [s]']   = float(row['time']) - last_time
+
+            if last_time > 0: # the time of the first solution is not measured
+                newrow['Time [s]']   = float(row['time']) - last_time
+
             newrow['Iterations'] = int(row['iterations'])
             newrow['Combinations']= int(row['combinations'])
             newrow['Operations'] = int(row['rolledback']) + int(row['operations']) - last_ops
             newrow['Adaptation'] = int(row['solution'])
-#            newrow['Complexity'] = int(row['complexity'])
-            data.append(newrow)
+            newrow['Complexity'] = int(row['complexity'])
+            last_time            = float(row['time'])
             last_ops             = int(row['operations'])
-            #last_time            = float(row['time'])
+
+            if args.outliers and int(row['iterations']) > args.outliers:
+                print("Ignoring outlier with %d iterations" % int(row['iterations']))
+                continue
+
+            data.append(newrow)
 
     return data
 
 
-def prepare_data(basepath, experiments, labels):
+def prepare_data(basepath, experiments, labels, series):
     raw_data = list()
 
     # iterate experiments and parse files
     for exp,label in zip(experiments, labels):
-        result = parse_file('%s/%s/adapt/nonchrono/solutions.csv' % (basepath, exp))
+        for serie in series:
+            result = parse_file('%s/%s/%s/nonchrono/solutions.csv' % (basepath, exp, serie))
 
-        max_adapt = result[-1]['Adaptation']
+            max_adapt = result[-1]['Adaptation']
+            print("Experiment %s (%s) had %s adaptations" % (label, serie, max_adapt))
 
-        for r in result:
-            r['Variant'] = "%s\n(%d)" % (label, max_adapt)
+            for r in result:
+                r['Increase'] = "%d%%" % (int(serie[-3:]) - 100)
+                r['Variant'] = "%s" % (label)
 
-        raw_data.extend(result)
+            raw_data.extend(result)
 
     return pd.DataFrame(raw_data)
 
@@ -77,12 +92,15 @@ def create_plot(data, variables, output=None):
     f, axes = plt.subplots(rows, 1, sharex=False, figsize=[8, 6])
     row=1
     for var, ax in zip(variables, axes):
-        sns.boxplot(x="Variant", y=var,
+        sns.boxplot(x="Variant", y=var, hue="Increase",
                     data=data, notch=False,
-                    fliersize=3, width=0.5,
+                    fliersize=3, width=0.6,
                     palette="muted", ax=ax)
+        if row > 1:
+            ax.legend().set_visible(False)
         if row < rows:
             ax.set_xlabel('')
+
         row += 1
 
     sns.despine()
@@ -97,6 +115,6 @@ if __name__ == '__main__':
     args = get_args()
     assert len(args.experiments) == len(args.labels)
 
-    data = prepare_data(args.basepath, args.experiments, args.labels)
+    data = prepare_data(args.basepath, args.experiments, args.labels, args.series)
 
     create_plot(data, args.vars, output=args.output)
