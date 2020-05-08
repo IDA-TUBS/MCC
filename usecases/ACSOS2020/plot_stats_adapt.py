@@ -26,8 +26,8 @@ def get_args():
                         help='labels for the experiments')
     parser.add_argument('--series', nargs='+',
                         help='directory names of subseries (corresponds to bars in a box group)')
-    parser.add_argument('--outliers', default=None, type=int,
-                        help='maximum number of iterations to include')
+    parser.add_argument('--ylims', nargs='+', type=int, default=None,
+                        help='limits the y-axes of the subplots')
     parser.add_argument('--output', default=None, required=False,
                         help='save plot to given file')
     return parser.parse_args()
@@ -53,10 +53,6 @@ def parse_file(filename):
             newrow['Complexity'] = int(row['complexity'])
             last_time            = float(row['time'])
             last_ops             = int(row['operations'])
-
-            if args.outliers and int(row['iterations']) > args.outliers:
-                print("Ignoring outlier with %d iterations" % int(row['iterations']))
-                continue
 
             data.append(newrow)
 
@@ -94,12 +90,15 @@ def create_plot(data, variables, output=None):
     for var, ax in zip(variables, axes):
         sns.boxplot(x="Variant", y=var, hue="Increase",
                     data=data, notch=False,
-                    fliersize=3, width=0.6,
+                    fliersize=3, width=0.8,
                     palette="muted", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
         if row < rows:
             ax.set_xlabel('')
+
+        if args.ylims and len(args.ylims) >= row and args.ylims[row-1]:
+            ax.set_ylim(top=args.ylims[row-1])
 
         row += 1
 

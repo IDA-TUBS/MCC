@@ -25,6 +25,8 @@ def get_args():
                         help='labels for the experiments')
     parser.add_argument('--output', default=None, required=False,
                         help='save plot to given file')
+    parser.add_argument('--ylims', nargs='+', type=int,
+                        help='limits the y-axes of the subplots')
     return parser.parse_args()
 
 
@@ -76,17 +78,21 @@ def create_plot(data, variables, output=None):
 
     rows=len(variables)
 
-    f, axes = plt.subplots(rows, 1, sharex=True, figsize=[6, 9])
+    f, axes = plt.subplots(rows, 1, sharex=True, figsize=[8, 6])
     row=1
     for var, ax in zip(variables, axes):
         sns.boxplot(x="Variant", y=var, hue="search",
-                    data=data, notch=False,
+                    data=data, notch=False, width=0.5,
                     fliersize=3,
-                    palette="muted", ax=ax)
+                    palette="Paired", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
         if row < rows:
             ax.set_xlabel('')
+
+        if args.ylims and len(args.ylims) >= row and args.ylims[row-1]:
+            ax.set_ylim(bottom=-5, top=args.ylims[row-1])
+
         row += 1
 
     sns.despine()
