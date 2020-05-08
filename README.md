@@ -12,7 +12,7 @@ Please be aware that this software is [licensed under BSD-3-clause](LICENSE).
 There are a few non-standard python modules that are required for running the MCC:
 
 * ortools
-* pycpa
+* [pycpa] and [pycpa_taskchain]
 * networkx
 * xdot
 
@@ -28,6 +28,8 @@ Alternatively you can install the MCC as follows (note, that this will link to t
 pip install -e . --user
 ```
 
+[pycpa]: https://bitbucket.org/pycpa/pycpa/
+[pycpa_taskchain]: https://bitbucket.org/pycpa/pycpa_taskchain/
 
 # Repository structure
 

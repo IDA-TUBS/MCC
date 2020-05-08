@@ -194,7 +194,7 @@ class Mcc:
             try:
                 query, model = mcc.search_config(pf_model, sys, base,
                                           outpath=self._outpath+name+'-',
-                                          with_da=False, constrmodel=constr)
+                                          with_da=False, constrmodel=constr, dot_mcc=True, dot_ae=True)
 
                 results[name] = (pf_model, model)
 

@@ -27,3 +27,9 @@ We provide the following evaluation scripts:
 * [timeline_all.sh]: Generates a line chart from the adaptation results for all scenarios.
 * [timeline.sh]: Generates a line chart from the adaptation results for a single scenario.
 
+
+[generate_table.sh]: generate_table.sh
+[boxplot.sh]: boxplot.sh
+[boxplot_adapt.sh]: boxplot_adapt.sh
+[timeline_all.sh]: timeline_all.sh
+[timeline.sh]: timeline.sh
