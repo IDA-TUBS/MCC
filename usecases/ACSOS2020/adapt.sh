@@ -11,15 +11,15 @@
 
 #setuplm pycpa testing
 
-BASEPATH="../../models/rtas/"
+BASEPATH="../../models/acsos/"
 
 EXPERIMENTS=(
-"../../models/rtas/queries/pose_no_fpga_low_rel.xml"
-"../../models/rtas/queries/pose_fpga_low_rel.xml"
-"../../models/rtas/queries/pose_fpga_high_rel.xml"
-"../../models/rtas/queries/obj_no_fpga_low_rel.xml"
-"../../models/rtas/queries/obj_fpga_low_rel.xml"
-"../../models/rtas/queries/obj_fpga_high_rel.xml"
+"../../models/acsos/queries/pose_no_fpga_low_rel.xml"
+"../../models/acsos/queries/pose_fpga_low_rel.xml"
+"../../models/acsos/queries/pose_fpga_high_rel.xml"
+"../../models/acsos/queries/obj_no_fpga_low_rel.xml"
+"../../models/acsos/queries/obj_fpga_low_rel.xml"
+"../../models/acsos/queries/obj_fpga_high_rel.xml"
 )
 
 JOBS=2
@@ -39,7 +39,7 @@ run_adapt110() {
 	OUTPATH="./run/$(basename $exp)/adapt110/nonchrono/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_rtas.py --adapt --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_acsos.py --adapt --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
@@ -55,7 +55,7 @@ run_adapt200() {
 	OUTPATH="./run/$(basename $exp)/adapt200/nonchrono/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_rtas.py --adapt --wcet_factor 2.0 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_acsos.py --adapt --wcet_factor 2.0 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
@@ -71,7 +71,7 @@ run_adapt150() {
 	OUTPATH="./run/$(basename $exp)/adapt150/nonchrono/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_rtas.py --adapt --wcet_factor 1.5 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_acsos.py --adapt --wcet_factor 1.5 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)

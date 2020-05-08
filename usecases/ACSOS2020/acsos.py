@@ -2,7 +2,7 @@
 Description
 -----------
 
-Implements query and status report functionality for C1 use cases.
+Implements query and status report functionality for ACSOS use cases.
 
 :Authors:
     - Johannes Schlatow
@@ -24,8 +24,8 @@ class ControlParser:
             self._xml_node = xml_node
             self._basepath = basepath
 
-            self._repo     = 'rtas_repo.xml'
-            self._pf       = 'rtas_base.xml'
+            self._repo     = 'acsos_repo.xml'
+            self._pf       = 'acsos_base.xml'
 
         def name(self):
             return self._xml_node.get('name')
@@ -194,7 +194,7 @@ class Mcc:
             try:
                 query, model = mcc.search_config(pf_model, sys, base,
                                           outpath=self._outpath+name+'-',
-                                          with_da=False, constrmodel=constr, dot_mcc=True, dot_ae=True)
+                                          with_da=False, constrmodel=constr)
 
                 results[name] = (pf_model, model)
 

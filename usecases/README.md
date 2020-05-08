@@ -9,7 +9,7 @@ It comprises two robots with stereo-camera applications.
 There are a pose estimation and object recognition function.
 The environment model provides state of the platform and radiation levels.
 
-## ACSOS
+## ACSOS2020
 
 Implementation of the use case developed for the ACSOS2020 submission.
 It was based on the C1 use case.
