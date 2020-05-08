@@ -37,6 +37,7 @@ class CPAEngine(AnalysisEngine):
         self.complayer = complayer
         self.layers      = layers
         self.constrmodel = constrmodel
+        pycpa_options.set_opt("max_iterations", 100)
 
     def _get_resource(self, obj):
         pfc = self.layer.get_param_value(self, 'mapping', obj)
