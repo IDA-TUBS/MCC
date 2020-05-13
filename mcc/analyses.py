@@ -28,9 +28,20 @@ class WcetEngine(AnalysisEngine):
         """
         AnalysisEngine.__init__(self, layer, param='wcet')
 
+        # store WCETs persistently across several adaptations
+        self.wcets = dict()
+
+    def update_wcet(self, task, wcet):
+        self.wcets[task.name] = wcet
+
     def map(self, obj, candidates):
         assert not candidates
-        return set([obj.obj(self.layer).wcet])
+
+        task = obj.obj(self.layer)
+        if task.name in self.wcets:
+            return set([self.wcets[task.name]])
+        else:
+            return set([task.wcet])
 
     def assign(self, obj, candidates):
         return list(candidates)[0]

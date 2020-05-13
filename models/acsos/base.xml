@@ -160,11 +160,11 @@
 		</requires>
 		<timing>
 		    <on-signal from_ref="driver">
-		        <task name="recv" wcet="100" bcet="50"/>
+		        <task name="recv2" wcet="100" bcet="50"/>
 		        <signal junction="dispatch" />
 		    </on-signal>
 		    <on-signal from_ref="client">
-		        <task name="send" wcet="100" bcet="50"/>
+		        <task name="send2" wcet="100" bcet="50"/>
 		        <signal to_ref="driver" />
 		    </on-signal>
 		    <junction name="dispatch" type="DEMUX">

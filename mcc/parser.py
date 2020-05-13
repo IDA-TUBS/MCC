@@ -818,6 +818,18 @@ class Repository(XMLParser):
             else:
                 names.add(c.get("name"))
 
+    # check whether all task names are only defined once
+    def check_tasks_unambiguous(self):
+        # set of known task names
+        names = set()
+
+        # iterate tasks
+        for t in self._root.findall(".//task"):
+            if t.get("name") in names:
+                logging.error("Task %s is ambiguious" % t.get('name'))
+            else:
+                names.add(t.get("name"))
+
     # check whether components are unambiguously classified as function, filter, mux, proxy, protocol or None
     def check_classification_unambiguous(self):
         for c in self._root.findall("component"):

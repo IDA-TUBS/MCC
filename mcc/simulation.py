@@ -147,11 +147,32 @@ class AdaptationSimulation(SimulationEngine):
     """ Performs simulation of parameter adaptation by changing parameters and rolling back
         to their writing operation.
     """
-    def __init__(self, layer, model, factor=1.1, outpath=None):
+    def __init__(self, layer, model, wcet_engine, factor=1.1, outpath=None):
         super().__init__(layer, model, outpath)
 
         assert factor > 1
         self.factor = factor
+        self.wcet_engine = wcet_engine
+        self.adaptations = list()
+
+    def write_adaptations(self, filename):
+        with open(filename, 'w') as csvfile:
+            fieldnames = ['adaptation',
+                          'taskname',
+                          'wcet']
+            writer = csv.DictWriter(csvfile,
+                                    delimiter='\t',
+                                    fieldnames=fieldnames)
+
+            writer.writeheader()
+            i = 1
+            for taskname,wcet in self.adaptations:
+                row = { 'adaptation' : i,
+                        'taskname'   : taskname,
+                        'wcet'       : wcet }
+
+                writer.writerow(row)
+                i += 1
 
     def batch_check(self, iterable):
         self.record_solution()
@@ -162,16 +183,23 @@ class AdaptationSimulation(SimulationEngine):
         # randomly select a task from taskgraph
         task_set = list(tg.untracked_nodes())
         culprit = random.choice(task_set)
+        task = culprit.untracked_obj()
 
         # increase WCET by factor
         new_wcet = int(math.ceil(tg.untracked_get_param_value('wcet', culprit).copy() * self.factor))
 
-        logging.info("Increasing WCET of task %s to %d" % (culprit.obj(tg), new_wcet))
+        logging.info("Increasing WCET of task %s to %d" % (task, new_wcet))
+
+        # store new WCET persistently in WcetEngine
+        self.wcet_engine.update_wcet(task, new_wcet)
 
         # hack: add new value to candidates
         candidates = tg.untracked_get_param_candidates('wcet', culprit)
         candidates.add(new_wcet)
         tg.untracked_set_param_candidates('wcet', culprit, candidates)
+
+        # write log with tasknames and current WCET
+        self.adaptations.append((task.name, new_wcet))
 
         # find and return corresponding node in decision graph
         return graph.find_writers(tg, culprit, 'wcet').assign

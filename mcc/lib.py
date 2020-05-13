@@ -418,6 +418,8 @@ class MccBase:
         wcets.add_operation(    Assign(we, 'WCETs'))
         model.add_step(wcets)
 
+        self.wcet_engine = we
+
     def _timing_check(self, model, slayer, dlayer, constrmodel, ae):
 
         slayer = model.by_name[slayer]
@@ -526,7 +528,7 @@ class SimpleMcc(MccBase):
                                    constrmodel=constrmodel, ae=sim)
 
             if self._test_adaptation:
-                sim = AdaptationSimulation(model.by_name['task_graph'], model, factor=self._test_adaptation, outpath=outpath)
+                sim = AdaptationSimulation(model.by_name['task_graph'], model, wcet_engine=self.wcet_engine, factor=self._test_adaptation, outpath=outpath)
                 model.add_step(NodeStep(BatchCheck(sim)))
 
 #        model.print_steps()
@@ -551,6 +553,8 @@ class SimpleMcc(MccBase):
         except Exception as e:
             if sim:
                 sim.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
+                if self._test_adaptation:
+                    sim.write_adaptations(outpath[:outpath.rfind('/')] + '/adaptations.csv')
 
             print(e)
             export = PickleExporter(model)

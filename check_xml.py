@@ -35,6 +35,7 @@ def check_xml(xmlfile):
         # FIXME let check functions return result
         repo.check_functions_unambiguous()
         repo.check_components_unambiguous()
+        repo.check_tasks_unambiguous()
         repo.check_classification_unambiguous()
         repo.check_binaries()
         repo.check_atomic_components()
