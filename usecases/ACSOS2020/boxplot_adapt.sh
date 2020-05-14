@@ -19,9 +19,12 @@ NAMES=(
 )
 
 SERIES=(
-"adapt110"
-"adapt150"
-"adapt200"
+"adapt110-nonchrono"
+"adapt110-replay"
+"adapt150-nonchrono"
+"adapt150-replay"
+"adapt200-nonchrono"
+"adapt200-replay"
 )
 
 ./plot_stats_adapt.py --basepath run/ \

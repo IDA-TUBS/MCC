@@ -191,7 +191,7 @@ class AdaptationSimulation(SimulationEngine):
         logging.info("Increasing WCET of task %s to %d" % (task, new_wcet))
 
         # store new WCET persistently in WcetEngine
-        self.wcet_engine.update_wcet(task, new_wcet)
+        self.wcet_engine.update_wcet(task.name, new_wcet)
 
         # hack: add new value to candidates
         candidates = tg.untracked_get_param_candidates('wcet', culprit)

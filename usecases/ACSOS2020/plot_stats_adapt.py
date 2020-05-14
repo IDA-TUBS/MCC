@@ -64,14 +64,16 @@ def prepare_data(basepath, experiments, labels, series):
 
     # iterate experiments and parse files
     for exp,label in zip(experiments, labels):
-        for serie in series:
-            result = parse_file('%s/%s/%s/nonchrono/solutions.csv' % (basepath, exp, serie))
+        for serie,var in [s.split('-') for s in series]: 
+            result = parse_file('%s/%s/%s/%s/solutions.csv' % (basepath, exp, serie, var))
 
             max_adapt = result[-1]['Adaptation']
-            print("Experiment %s (%s) had %s adaptations" % (label, serie, max_adapt))
+            print("Experiment %s (%s-%s) had %s adaptations" % (label, serie, var, max_adapt))
 
             for r in result:
                 r['Increase'] = "%d%%" % (int(serie[-3:]) - 100)
+                if var == 'replay':
+                    r['Increase'] += " (from scratch)"
                 r['Variant'] = "%s" % (label)
 
             raw_data.extend(result)
@@ -90,8 +92,8 @@ def create_plot(data, variables, output=None):
     for var, ax in zip(variables, axes):
         sns.boxplot(x="Variant", y=var, hue="Increase",
                     data=data, notch=False,
-                    fliersize=3, width=0.8,
-                    palette="muted", ax=ax)
+                    fliersize=3, width=0.85,
+                    palette="Paired", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
         if row < rows:

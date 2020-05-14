@@ -84,7 +84,7 @@ def create_plot(data, variables, output=None):
         sns.boxplot(x="Variant", y=var, hue="search",
                     data=data, notch=False, width=0.5,
                     fliersize=3,
-                    palette="Paired", ax=ax)
+                    palette="muted", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
         if row < rows:

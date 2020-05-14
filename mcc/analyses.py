@@ -31,8 +31,8 @@ class WcetEngine(AnalysisEngine):
         # store WCETs persistently across several adaptations
         self.wcets = dict()
 
-    def update_wcet(self, task, wcet):
-        self.wcets[task.name] = wcet
+    def update_wcet(self, taskname, wcet):
+        self.wcets[taskname] = wcet
 
     def map(self, obj, candidates):
         assert not candidates

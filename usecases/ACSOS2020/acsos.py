@@ -64,6 +64,11 @@ class ConstraintsModel:
         self._reliability_constraints = list()
         self._unreliable_components = set()
 
+    def reset(self):
+        self._latency_constraints = list()
+        self._reliability_constraints = list()
+        self._unreliable_components = set()
+
     def parse(self, model):
         for c in self._parse_latencies():
             srcnode = self._find_name_in_model(model, c['source'])
@@ -189,6 +194,7 @@ class Mcc:
                         query_graph=query,
                         comp_inst=basemodel.by_name['comp_inst'],
                         filename=pffile)
+
 
             sys = cfgparser.SystemParser(device.query_filename())
             try:

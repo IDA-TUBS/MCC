@@ -321,6 +321,7 @@ class MccBase:
         ci = model.by_name[dlayer]
 
         ie = InstantiationEngine(ca, ci, factory, 'tmp-mapping')
+        self.ie = ie
 
         instantiate = NodeStep(Map(ie, 'instantiate'))
         instantiate.add_operation(Assign(ie, 'instantiate'))
@@ -441,9 +442,10 @@ class SimpleMcc(MccBase):
         assert chronologicaltracking == False or test_adaptation == False
 
         MccBase.__init__(self, repo)
-        self._test_backtracking = test_backtracking
-        self._test_adaptation   = test_adaptation
-        self._nonchronological  = not chronologicaltracking
+        self._test_backtracking  = test_backtracking
+        self._test_adaptation    = test_adaptation
+        self._replay_adaptations = test_adaptation if isinstance(test_adaptation, str) else False
+        self._nonchronological   = not chronologicaltracking
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
             dot_ae=False, dot_layer=False, envmodel=None, constrmodel=None):
@@ -527,7 +529,7 @@ class SimpleMcc(MccBase):
                 self._timing_check(model, slayer='comp_inst', dlayer='task_graph',
                                    constrmodel=constrmodel, ae=sim)
 
-            if self._test_adaptation:
+            if self._test_adaptation and not self._replay_adaptations:
                 sim = AdaptationSimulation(model.by_name['task_graph'], model, wcet_engine=self.wcet_engine, factor=self._test_adaptation, outpath=outpath)
                 model.add_step(NodeStep(BatchCheck(sim)))
 
@@ -547,14 +549,42 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            model.execute(outpath, nonchronological=self._nonchronological)
-            decision_graph = model.decision_graph
+            if base and self._replay_adaptations:
+                se = SimulationEngine(None, model)
+                with open(self._replay_adaptations, 'r') as csvfile:
+                    reader = csv.DictReader(csvfile, delimiter='\t')
+
+                    for row in reader:
+                        model.clear()
+                        self.ie.factory.reset()
+                        model.from_query(query_model, 'func_query', base)
+                        # parse constraints
+                        if constrmodel is not None:
+                            constrmodel.reset()
+                            constrmodel.parse(model)
+
+                        model.execute(outpath, nonchronological=self._nonchronological)
+                        se.record_solution()
+
+                        se._last_iteration  = 0
+                        se._last_rolledback = 0
+                        se._last_variables  = set()
+                        print("Replaying adaptation of %s to %d" % (row['taskname'],
+                                                                    int(row['wcet'])))
+                        self.wcet_engine.update_wcet(row['taskname'], int(row['wcet']))
+
+                se.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
+
+            else:
+                model.execute(outpath, nonchronological=self._nonchronological)
 
         except Exception as e:
             if sim:
                 sim.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
-                if self._test_adaptation:
+                if self._test_adaptation and not self._replay_adaptations:
                     sim.write_adaptations(outpath[:outpath.rfind('/')] + '/adaptations.csv')
+            elif self._replay_adaptations:
+                se.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
 
             print(e)
             export = PickleExporter(model)

@@ -42,6 +42,23 @@ class BacktrackRegistry(Registry):
                        'combinations'           : 0,
                        'failed_ops'             : dict()}
 
+    def clear(self):
+        self.reset()
+        self.backtracking_try = 0
+
+        # stores state (completed) of operations
+        self.operations = dict()
+
+        self.variables = list()
+        self.failed    = list()
+
+        self.stats = { 'iterations'             : 0,
+                       'rolled-back operations' : 0,
+                       'cut-off combinations'   : 0,
+                       'variables'              : 0,
+                       'combinations'           : 0,
+                       'failed_ops'             : dict()}
+
     def _find_variables(self):
         variables = set()
         for n in self.decision_graph.nodes():
