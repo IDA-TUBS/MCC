@@ -1,0 +1,30 @@
+<xml>
+<system name="Autoware.Auto">
+	<child name="VELO" ecu="ECU1">
+		<rosnode name="velodyne_node" />
+	</child>
+
+	<child name="RAY" ecu="ECU1">
+		<rosnode name="rayground_filter" />
+	</child>
+
+	<child name="RVIZ" ecu="ECU2">
+		<rosnode name="rviz2" />
+	</child>
+
+	<requirements>
+	    <chain name="chain_ground" max_latency_us="120000">
+	        <publish topic="/PointCloud2"/>
+	        <receive topic="/PointCloud2"/>
+	        <publish topic="/points_ground"/>
+	        <receive topic="/points_ground"/>
+	    </chain>
+	    <chain name="chain_nonground" max_latency_us="120000">
+	        <publish topic="/PointCloud2"/>
+	        <receive topic="/PointCloud2"/>
+	        <publish topic="/nonground_points"/>
+	        <receive topic="/nonground_points"/>
+	    </chain>
+	</requirements>
+</system>
+</xml>

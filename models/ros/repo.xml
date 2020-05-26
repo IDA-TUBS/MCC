@@ -1,0 +1,49 @@
+<xml>
+<repository>
+	<rosnode name="velodyne_node">
+		<publishes>
+			<topic name="/PointCloud2" />
+		</publishes>
+
+		<callbacks>
+			<timer_callback prio="81" wcet_us="100" wcrt_us="200" period_ms="1500">
+				<publish topic="/PointCloud2"/>
+			</timer_callback>
+		</callbacks>
+	</rosnode>
+	<rosnode name="rayground_filter">
+		<subscribes>
+			<topic name="/PointCloud2" />
+		</subscribes>
+		<publishes>
+			<topic name="/points_ground" />
+			<topic name="/nonground_points" />
+		</publishes>
+
+		<callbacks>
+			<subscriber_callback prio="82" wcet_us="100" wcrt_us="200" topic="/PointCloud2" exception_handler="rayground_handler">
+				<publish topic="/points_ground"/>
+				<publish topic="/nonground_points"/>
+			</subscriber_callback>
+		</callbacks>
+		<exception_handlers>
+		    <handler id="rayground_handler" wcet_us="100" wcrt_us="200" prio="90" type="type1"/>
+		</exception_handlers>
+	</rosnode>
+
+	<rosnode name="rviz2">
+		<subscribes>
+			<topic name="/points_ground" />
+			<topic name="/nonground_points" />
+		</subscribes>
+
+		<callbacks>
+			<subscriber_callback prio="83" wcet_us="100" wcrt_us="200" topic="/nonground_points" exception_handler="rviz_handler"/>
+			<subscriber_callback prio="83" wcet_us="100" wcrt_us="200" topic="/points_ground" exception_handler="rviz_handler"/>
+		</callbacks>
+		<exception_handlers>
+		    <handler id="rviz_handler" wcet_us="100" wcrt_us="200" prio="90" type="type1"/>
+		</exception_handlers>
+	</rosnode>
+</repository>
+</xml>

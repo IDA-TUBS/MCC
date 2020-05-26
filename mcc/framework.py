@@ -758,7 +758,7 @@ class Registry:
     def skip_operation(self, operation):
         return False
 
-    def _output_layer(self, layer, suffix):
+    def _output_layer(self, layer, suffix=''):
         """ Must be implemented by derived classes.
         """
         logging.warning("Using default implementation of Registry._output_layer(). No output will be produced.")
