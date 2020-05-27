@@ -1,17 +1,24 @@
 <xml>
 <repository>
 	<rosnode name="velodyne_node">
+	    <start>
+	        <command>sudo chrt -f 90 udpreplay ../../route_small_loop_rw-127.0.0.1.pcap</command>
+	        <command>ros2 run velodyne_node velodyne_cloud_node_exe __params:=${AUTOWARE_PATH}/src/drivers/velodyne_node/param/vlp16_test.param.yaml</command>
+	    </start>
 		<publishes>
 			<topic name="/PointCloud2" />
 		</publishes>
 
 		<callbacks>
-			<timer_callback prio="81" wcet_us="100" wcrt_us="200" period_ms="1500">
+			<timer_callback prio="81" wcet_us="100" wcrt_us="200" period_ms="120">
 				<publish topic="/PointCloud2"/>
 			</timer_callback>
 		</callbacks>
 	</rosnode>
 	<rosnode name="rayground_filter">
+	    <start>
+	        <command>ros2 run ray_ground_classifier_nodes ray_ground_classifier_cloud_node_exe __params:=${AUTOWARE_PATH}/src/perception/filters/ray_ground_classifier_nodes/param/vlp16_lexus.param.yaml</command>
+	    </start>
 		<subscribes>
 			<topic name="/PointCloud2" />
 		</subscribes>
@@ -32,6 +39,9 @@
 	</rosnode>
 
 	<rosnode name="rviz2">
+	    <start>
+	        <command>rviz2 -d ${AUTOWARE_PATH}/src/tools/autoware_auto_examples/rviz2/autoware_ray_ground.rviz</command>
+	    </start>
 		<subscribes>
 			<topic name="/points_ground" />
 			<topic name="/nonground_points" />

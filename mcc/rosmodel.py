@@ -14,6 +14,7 @@ except ImportError:
     from xml.etree import ElementTree as ET
 
 import logging
+import yaml
 
 from mcc.graph import GraphObj, Edge
 from mcc.parser import XMLParser
@@ -76,6 +77,9 @@ class Repository(XMLParser):
             if isinstance(rhs, ImmutableParam):
                 return rhs == self
 
+            if isinstance(rhs, str):
+                return self.name == rhs
+
             if not isinstance(rhs, Repository.Topic):
                 return False
             return self.name == rhs.name
@@ -88,6 +92,9 @@ class Repository(XMLParser):
         def __init__(self, xml_node, repo):
             self.repo = repo
             self.xml_node = xml_node
+
+        def commands(self):
+            return [cmd.text for cmd in self.xml_node.findall('./start/command')]
 
         def subscribes(self):
             topics = set()
@@ -496,16 +503,18 @@ class ExceptionEngine(AnalysisEngine):
         assert not isinstance(obj, Edge)
 
         # assign handler of next segment to segment
-        handler = None
+        handler = set()
         for e in self.layer.out_edges(obj):
             parents = self.layer.associated_objects(self.parent_layer.name, e.target)
             for p in parents:
                 if not self.has_predecessor_in_segment(p, parents):
-                    handler = self.parent_layer.get_param_value(self, 'handler', p)
-                    if handler is None:
+                    tmp = self.parent_layer.get_param_value(self, 'handler', p)
+                    if tmp is None:
                         return {}
+                    else:
+                        handler.add(tmp)
 
-        return {handler}
+        return {frozenset(handler)}
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
@@ -514,7 +523,7 @@ class ExceptionEngine(AnalysisEngine):
         assert not isinstance(obj, Edge)
 
         if len(list(self.layer.out_edges(obj))) > 0:
-            if self.layer.get_param_value(self, 'handler', obj) is None:
+            if not self.layer.get_param_value(self, 'handler', obj):
                 return False
 
         # FIXME also check fork/join constraints
@@ -587,18 +596,19 @@ class BudgetEngine(AnalysisEngine):
             assert first is not None
 
             # constraints for exception handling
-            handler = self.layer.get_param_value(self, 'handler', first)
+            handlers = self.layer.get_param_value(self, 'handler', first)
             current = first
             predecessors = list()
-            while handler is not None:
+            while len(handlers.copy()):
                 predecessors.append(current)
-                model.Add(sum([budgets[x] for x in predecessors]) <= chain.latency() - handler.wcrt)
+                for handler in handlers:
+                    model.Add(sum([budgets[x] for x in predecessors]) <= chain.latency() - handler.wcrt)
 
                 for e in self.layer.out_edges(current):
                     if e.target in objects:
                         current = e.target
                         break
-                handler = self.layer.get_param_value(self, 'handler', current)
+                handlers = self.layer.get_param_value(self, 'handler', current)
 
         # objective function
         # FIXME implement reasonable slack distribution
@@ -621,6 +631,254 @@ class BudgetEngine(AnalysisEngine):
 
     def assign(self, obj, candidates):
         return list(candidates)[0]
+
+class ConfigEngine(AnalysisEngine):
+    def __init__(self, model, outpath):
+        acl = { model.by_name['nodes']    : { 'reads' : {'mapping'}},
+                model.by_name['segments'] : { 'reads' : {'mapping', 'handler', 'budget'}}}
+        AnalysisEngine.__init__(self, model.by_name['segments'], param=None, acl=acl)
+
+        self.model = model
+        self.outpath = outpath
+
+    def _find_handling_subscription(self, handler):
+        clayer = self.model.by_name['callbacks']
+        nlayer = self.model.by_name['nodes']
+
+        topic = None
+        node  = None
+        for cb in clayer.nodes():
+            if cb.obj(clayer).hid == handler.name:
+                assert cb.obj(clayer).cbtype == "subscriber_callback"
+                topic = cb.obj(clayer).trigger
+
+                for p in clayer.associated_objects(nlayer.name, cb):
+                    assert node is None, 'node already set: %s' % node
+                    node = p.obj(nlayer)
+                break
+
+        return '%s%s' % (node.label(), topic), node
+
+    def _find_publisher(self, topic):
+        clayer = self.model.by_name['callbacks']
+        nlayer = self.model.by_name['nodes']
+
+        node  = None
+        for cb in clayer.nodes():
+            if cb.obj(clayer).is_publisher(topic):
+
+                for p in clayer.associated_objects(nlayer.name, cb):
+                    assert node is None, 'node already set: %s' % node
+                    node = p.obj(nlayer)
+
+                break
+
+        return node.label()
+
+    def _find_period_us(self, segment):
+        slayer = self.model.by_name['segments']
+        clayer = self.model.by_name['callbacks']
+
+        buf = slayer.associated_objects(clayer.name, segment)
+        cb = buf.pop()
+        while cb:
+            if len(list(clayer.in_edges(cb))) == 0:
+                assert cb.obj(clayer).cbtype == "timer_callback"
+                return cb.obj(clayer).trigger * 1000
+            else:
+                buf.update([e.source for e in clayer.in_edges(cb)])
+            cb = buf.pop()
+
+        return None
+
+    def _write_startnodes(self, ecu, rosnodes):
+        root = ET.Element("rosnodes")
+        for rosnode in rosnodes:
+            for cmd in rosnode.commands():
+                ET.SubElement(root, "rosnode", command=cmd)
+
+        tree = ET.ElementTree(root)
+        tree.write('%srosnodes-%s.xml' % (self.outpath, ecu))
+
+    def _write_monitor_yaml(self, ecu, segments, budgets, cid, sid):
+        slayer = self.model.by_name['segments']
+        nlayer = self.model.by_name['nodes']
+        clayer = self.model.by_name['callbacks']
+        ecunodes = dict()
+
+        for s in segments:
+            for h in slayer.get_param_value(self, 'handler', s):
+                sub, node = self._find_handling_subscription(h)
+                sub = sub.split('/')
+                topic   = sub[-1]
+                nodename = sub[0]
+
+                # configure subscriber segment
+                if nodename not in ecunodes:
+                    ecunodes[nodename] = dict()
+
+                ecunodes[nodename]['id'] = cid[node]
+
+                if 'subscriber_segments' not in ecunodes[nodename]:
+                    ecunodes[nodename]['subscriber_segments'] = list()
+
+                config = { 'id'     : sid[s],
+                           'topic'  : '/%s' % topic,
+                           'budget' : budgets[s],
+                           'type1'  : h.etype == 'type1',
+                           'type2'  : h.etype == 'type2' }
+
+                ecunodes[nodename]['subscriber_segments'].append(config)
+
+                # configure publisher segment
+                pubnode = self._find_publisher(config['topic'])
+                if pubnode not in ecunodes:
+                    ecunodes[pubnode] = dict()
+
+                if 'publisher_segments' not in ecunodes[pubnode]:
+                    ecunodes[pubnode]['publisher_segments'] = list()
+
+                config = { 'id'       : sid[s],
+                           'topic'    : '%s' % topic,
+                           'consumer' : cid[node] }
+                ecunodes[pubnode]['publisher_segments'].append(config)
+
+
+        # set priorities of all nodes
+        for o in nlayer.nodes():
+            if nlayer.get_param_value(self, 'mapping', o).copy() != ecu:
+                continue
+
+            max_prio = 0
+            for cb in nlayer.associated_objects(clayer.name, o):
+                max_prio = max(max_prio, cb.obj(clayer).prio)
+
+            rosnode = o.obj(nlayer)
+            name = rosnode.label()
+            if name not in ecunodes:
+                ecunodes[name] = dict()
+
+            ecunodes[name]['monitor_priority']  = 90
+            ecunodes[name]['executor_priority'] = max_prio
+
+        # write yaml
+        with open('%sDEFAULT_MONITOR_CONFIG-%s.yaml' % (self.outpath, ecu), 'w') as file:
+            yaml.dump(ecunodes, file)
+
+    def _write_qos_xml(self, ecu, segments):
+        slayer = self.model.by_name['segments']
+
+        dds = ET.Element("dds", xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles")
+        profiles = ET.SubElement(dds, 'profiles')
+        for s in segments:
+            handlers = slayer.get_param_value(self, 'handler', s)
+            budget   = slayer.get_param_value(self, 'budget', s).copy()
+            period   = self._find_period_us(s)
+            if period > budget:
+                logging.error("Period is bigger than assigned budget")
+                return False
+
+            for h in handlers:
+                profile, node = self._find_handling_subscription(h)
+                sub = ET.SubElement(profiles, 'subscriber', profile_name=profile, is_default_profile='false')
+                mon = ET.SubElement(sub, 'monitoring', implementation_type='inter')
+                if h.etype == 'type1':
+                    ET.SubElement(mon, 'type1_enable').text = 'true'
+                    ET.SubElement(mon, 'type2_enable').text = 'false'
+                else:
+                    ET.SubElement(mon, 'type1_enable').text = 'false'
+                    ET.SubElement(mon, 'type2_enable').text = 'true'
+
+
+                latency = budget - period
+                latency_us = latency % 1000000
+                latency_s  = int(latency / 1000000)
+                lat = ET.SubElement(mon, 'monitoring_latency')
+                ET.SubElement(lat, 'sec').text = str(latency_s)
+                ET.SubElement(lat, 'nsec').text = str(latency_us * 1000)
+
+                period_us = period % 1000000
+                period_s  = int(period / 1000000)
+                per = ET.SubElement(mon, 'monitoring_period')
+                ET.SubElement(per, 'sec').text = str(period_s)
+                ET.SubElement(per, 'nsec').text = str(period_us * 1000)
+
+        tree = ET.ElementTree(dds)
+        tree.write("%sDEFAULT_FASTRTPS_PROFILES-%s.xml" % (self.outpath, ecu))
+
+    def batch_check(self, objects):
+        nodes_layer    = self.model.by_name['nodes']
+        segments_layer = self.model.by_name['segments']
+
+        # extract nodes to start from nodes layer
+        rosnodes = dict()
+        for o in nodes_layer.nodes():
+            ecu = nodes_layer.get_param_value(self, 'mapping', o)
+            if ecu not in rosnodes:
+                rosnodes[ecu] = set()
+
+            rosnodes[ecu].add(o.obj(nodes_layer))
+
+        # output XML
+        for ecu, nodes in rosnodes.items():
+            self._write_startnodes(ecu.copy(), nodes)
+
+        # define consumer id for every rosnode
+        consumers = dict()
+        cid = 1
+        for ecu, nodes in rosnodes.items():
+            for n in nodes:
+                consumers[n] = cid
+                cid += 1
+
+        # extract segments to monitor from segments layer
+        #     - every segment with set handler and budget > 0 gets a segment id
+        #     - if next segment is on different ECU, do inter-ECU
+        inter_segments = dict()
+        intra_segments = dict()
+        budgets = dict()
+        for o in segments_layer.nodes():
+            if not len(segments_layer.get_param_value(self, 'handler', o).copy()):
+                continue
+            budget = segments_layer.get_param_value(self, 'budget', o).copy()
+            if budget == 0:
+                continue
+
+            segment = o.obj(segments_layer)
+            budgets[o] = budget
+
+            ecu = segments_layer.get_param_value(self, 'mapping', o)
+            for e in segments_layer.out_edges(o):
+                next_ecu = segments_layer.get_param_value(self, 'mapping', e.target)
+                if ecu == next_ecu:
+                    if ecu not in intra_segments:
+                        intra_segments[ecu] = set()
+                    intra_segments[ecu].add(o)
+                else:
+                    if next_ecu not in inter_segments:
+                        inter_segments[next_ecu] = set()
+                    inter_segments[next_ecu].add(o)
+
+        # define segment id for every intra segment
+        sid = 1
+        segments = dict()
+        for ecu, segs in intra_segments.items():
+            for s in segs:
+                segments[s] = sid
+                sid += 1
+
+        for ecu, segs in intra_segments.items():
+            self._write_monitor_yaml(ecu.copy(), segs, budgets, consumers, segments)
+
+        for ecu in inter_segments.keys() - intra_segments.keys():
+            self._write_monitor_yaml(ecu.copy(), set(), None, None, None)
+
+
+        # create XML for eProsima QoS parameters
+        for ecu, segs in inter_segments.items():
+            self._write_qos_xml(ecu.copy(), segs)
+
+        return True
 
 
 class CrossLayerModel(BacktrackRegistry):
@@ -715,12 +973,14 @@ class MccBase:
         # assign budgets
         be = BudgetEngine(layer)
         step = NodeStep(BatchMap(be, 'calculate budgets'))
-        step.add_operation(Assign(we, 'calculate budgets'))
+        step.add_operation(Assign(be, 'calculate budgets'))
         model.add_step(step)
 
-    def _export_config(self):
-        # TODO generate configuration files
-        raise NotImplementedError
+    def _export_config(self, model, outpath):
+        layer = model.by_name['segments']
+        ce = ConfigEngine(model, outpath)
+
+        model.add_step(NodeStep(BatchCheck(ce, 'export configs')))
 
     def search_config(self, query, outpath=None, dot_mcc=True):
         """ Searches a system configuration for the given query.
@@ -743,8 +1003,8 @@ class MccBase:
         # 5) assign latency budgets
         self._assign_budgets(model)
 
-#        # 6) export config
-#        self._export_config()
+        # 6) export config
+        self._export_config(model, outpath)
 
         if outpath is not None and dot_mcc:
             model.write_dot(outpath+'mcc.dot')
