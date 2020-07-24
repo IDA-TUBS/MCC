@@ -4,7 +4,7 @@
 		<rosnode name="velodyne_node" />
 	</child>
 
-	<child name="RAY" ecu="ECU1">
+	<child name="RAY" ecu="ECU2">
 		<rosnode name="rayground_filter" />
 	</child>
 
@@ -14,14 +14,14 @@
 
 	<requirements>
 	    <chain name="chain_ground" max_latency_us="160000">
-	        <publish topic="/PointCloud2"/>
-	        <receive topic="/PointCloud2"/>
+	        <publish topic="/test_velodyne_node_cloud_front"/>
+	        <receive topic="/test_velodyne_node_cloud_front"/>
 	        <publish topic="/points_ground"/>
 	        <receive topic="/points_ground"/>
 	    </chain>
 	    <chain name="chain_nonground" max_latency_us="160000">
-	        <publish topic="/PointCloud2"/>
-	        <receive topic="/PointCloud2"/>
+	        <publish topic="/test_velodyne_node_cloud_front"/>
+	        <receive topic="/test_velodyne_node_cloud_front"/>
 	        <publish topic="/nonground_points"/>
 	        <receive topic="/nonground_points"/>
 	    </chain>

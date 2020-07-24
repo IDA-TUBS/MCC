@@ -253,6 +253,13 @@ class SystemParser:
         def latency(self):
             return int(self.xml_node.get('max_latency_us'))
 
+        def has_event(self, etype, topic):
+            for ev in self.events():
+                if ev.etype == etype and ev.topic == topic:
+                    return True
+
+            return False
+
         def events(self):
             result = list()
             for ev in self.xml_node.findall('./*'):
@@ -378,30 +385,19 @@ class CallbackEngine(AnalysisEngine):
 class SegmentEngine(AnalysisEngine):
 
     class Segment:
-        def __init__(self, requirement=None):
+        def __init__(self, requirement=None, network=False):
             self.node = Layer.Node(self)
-            if requirement is not None:
-                self._requirements = {requirement}
-            else:
-                self._requirements = {}
+            self.requirement = requirement
+            self.network=network
 
         def label(self):
-            return '%s' % self._requirements
+            return '%s' % self.requirement
 
         def __repr__(self):
             return self.label()
 
-        def add_requirement(self, req):
-            self._requirements.add(req)
-
-        def match_requirement(self, req):
-            return req in self._requirements
-
-        def requirements(self):
-            return self._requirements
-
         def dummy(self):
-            return not self._requirements
+            return not self.requirement
 
     def __init__(self, layer, target_layer, query):
         acl = { layer        : { 'reads'  : set(['mapping', 'topic', 'handler']) },
@@ -434,20 +430,13 @@ class SegmentEngine(AnalysisEngine):
                            self.layer.get_param_value(self, 'mapping', t):
                             new_segment = True
 
-                        # TODO also check forks/joins
-
-                        if new_segment and data[t] is None:
+                        if new_segment:
                             segments[req].append(self.Segment(req))
 
                         last = t
-                        if data[last] is not None:
-                            data[last].add_requirement(req)
-                        else:
-                            data[last] = segments[req][-1]
-
-                        # FIXME do not split for every exception handler
-                        if cb.hid is not None:
-                            segments[req].append(self.Segment(req))
+                        if data[last] is None:
+                            data[last] = set()
+                        data[last].add(segments[req][-1])
 
                         break
                     else:
@@ -459,7 +448,7 @@ class SegmentEngine(AnalysisEngine):
                 logging.info("Callback %s is not in any chain." % obj.untracked_obj())
                 data[obj] = {dummy}
             else:
-                data[obj] = {data[obj]}
+                data[obj] = {frozenset(data[obj])}
 
         return data
 
@@ -470,31 +459,101 @@ class SegmentEngine(AnalysisEngine):
         if isinstance(obj, Edge):
             source = obj.source
             target = obj.target
-            src_segment = self.layer.get_param_value(self, 'segment', source)
-            trg_segment = self.layer.get_param_value(self, 'segment', target)
-            if src_segment == trg_segment or trg_segment.dummy() or src_segment.dummy():
-                return set()
-            else:
-                return Edge(src_segment.node, trg_segment.node)
+            src_segments = self.layer.get_param_value(self, 'segment', source)
+            trg_segments = self.layer.get_param_value(self, 'segment', target)
+            edges = set()
+            for src_segment in src_segments:
+                for trg_segment in trg_segments:
+                    if trg_segment.requirement == src_segment.requirement:
+                        if trg_segment != src_segment and not trg_segment.dummy() and not src_segment.dummy():
+                            edges.add(Edge(src_segment.node, trg_segment.node))
+
+            return edges
         else:
-            return GraphObj(self.layer.get_param_value(self, 'segment', obj).node,
-                            params={'mapping' : self.layer.get_param_value(self, 'mapping', obj)})
+            graph_objs = set()
+            segments = self.layer.get_param_value(self, 'segment', obj)
+            for segment in segments:
+                mapping = self.layer.get_param_value(self, 'mapping', obj) if not segment.network else None
+                graph_objs.add(GraphObj(segment.node, params={'mapping' : mapping}))
+
+            return graph_objs
 
     def target_types(self):
         return tuple({self.Segment})
 
+class NetworkEngine(AnalysisEngine):
+
+    def __init__(self, layer, target_layer):
+        acl = { layer        : { 'reads'  : set(['mapping'])},
+                target_layer : { 'writes' : set(['mapping'])}}
+        AnalysisEngine.__init__(self, layer, param='netsegment', acl=acl)
+
+        self.target_layer = target_layer
+
+    def map(self, obj, candidates):
+
+        assert isinstance(obj, Edge)
+
+        src_mapping = self.layer.get_param_value(self, 'mapping', obj.source)
+        trg_mapping = self.layer.get_param_value(self, 'mapping', obj.target)
+
+        if src_mapping != trg_mapping:
+            return {SegmentEngine.Segment(obj.source.obj(self.layer).requirement, True)}
+
+        return {None}
+
+    def assign(self, obj, candidates):
+        assert isinstance(obj, Edge)
+        return list(candidates)[0]
+
+    def transform(self, obj, target_layer):
+        assert isinstance(obj, Edge)
+
+        segment = self.layer.get_param_value(self, 'netsegment', obj)
+        if segment is not None:
+            graph_objs = {GraphObj(segment.node, params={ 'mapping' : 'Network'})}
+            graph_objs.add(Edge(obj.source, segment.node))
+            graph_objs.add(Edge(segment.node, obj.target))
+            return graph_objs
+        else:
+            return obj
+
+    def target_types(self):
+        return tuple({SegmentEngine.Segment})
+
 
 class ExceptionEngine(AnalysisEngine):
-    def __init__(self, layer, parent_layer):
-        acl = { parent_layer : { 'reads' : set(['handler'])}}
+    def __init__(self, layer, parent_layers):
+        acl = { parent_layers[-1] : { 'reads' : set(['handler'])}}
         AnalysisEngine.__init__(self, layer, param='handler', acl=acl)
 
-        self.parent_layer = parent_layer
+        self.parent_layers = parent_layers
 
-    def has_predecessor_in_segment(self, cb, parents):
+    def indirect_parents(self, node):
+        cur_layer = self.layer
+        parent_list = [{node}]
+        for layer in self.parent_layers:
+            parent_list.append(set())
+            for n in parent_list[-2]:
+                if isinstance(n, Edge): continue
+                parent_list[-1].update(cur_layer.associated_objects(layer.name, n))
+            cur_layer = layer
+
+        return parent_list[-1]
+
+    def has_predecessor_in_segment(self, cb, parents, parent_layer):
         result = False
-        for e in self.parent_layer.in_edges(cb):
+        for e in parent_layer.in_edges(cb):
             if e.source in parents:
+                return True
+
+        return False
+
+    def has_successor_in_segment(self, cb, parents, parent_layer):
+        result = False
+        for e in parent_layer.out_edges(cb):
+            if e.target in parents:
+                print(e.target)
                 return True
 
         return False
@@ -502,17 +561,30 @@ class ExceptionEngine(AnalysisEngine):
     def map(self, obj, candidates):
         assert not isinstance(obj, Edge)
 
-        # assign handler of next segment to segment
+        # if network segment: assign first handler of next segment
+        # else: assign last handler within segment
+        # FIXME currently, we do not distinguish whether a handler handles the late receive or late publish event
         handler = set()
-        for e in self.layer.out_edges(obj):
-            parents = self.layer.associated_objects(self.parent_layer.name, e.target)
+
+        if not obj.obj(self.layer).network:
+            parents = self.indirect_parents(obj)
             for p in parents:
-                if not self.has_predecessor_in_segment(p, parents):
-                    tmp = self.parent_layer.get_param_value(self, 'handler', p)
-                    if tmp is None:
-                        return {}
+                if not self.has_successor_in_segment(p, parents, self.parent_layers[-1]):
+                    if not self.parent_layers[-1].isset_param_value(self, 'handler', p):
+                        logging.error("Monitoring gap: Callback %s has no handler." % p)
                     else:
+                        tmp = self.parent_layers[-1].get_param_value(self, 'handler', p)
                         handler.add(tmp)
+        else:
+            for e in self.layer.out_edges(obj):
+                parents = self.indirect_parents(e.target)
+                for p in parents:
+                    if not self.has_predecessor_in_segment(p, parents, self.parent_layers[-1]):
+                        if not self.parent_layers[-1].isset_param_value(self, 'handler', p):
+                            logging.error("Monitoring gap: Callback %s has no handler." % p)
+                        else:
+                            tmp = self.parent_layers[-1].get_param_value(self, 'handler', p)
+                            handler.add(tmp)
 
         return {frozenset(handler)}
 
@@ -532,26 +604,38 @@ class ExceptionEngine(AnalysisEngine):
 
 
 class WcrtEngine(AnalysisEngine):
-    def __init__(self, layer, parent_layer):
+    def __init__(self, layer, parent_layers, net_delay_us=15000):
         AnalysisEngine.__init__(self, layer, param='wcrt')
 
-        self.parent_layer = parent_layer
+        self.parent_layers = parent_layers
+        self.net_delay_us = net_delay_us
+
+    def indirect_parents(self, node):
+        cur_layer = self.layer
+        parent_list = [{node}]
+        for layer in self.parent_layers:
+            parent_list.append(set())
+            for n in parent_list[-2]:
+                if isinstance(n, Edge): continue
+                parent_list[-1].update(cur_layer.associated_objects(layer.name, n))
+            cur_layer = layer
+
+        return parent_list[-1]
 
     def map(self, obj, candidates):
-        # sum up WCRTs of callbacks (but only WCET of first callback)
-        wcrt = 0
-        parents = self.layer.associated_objects(self.parent_layer.name, obj)
-        for p in parents:
-            has_predecessor_in_segment = False
-            for e in self.parent_layer.in_edges(p):
-                if e.source in parents:
-                    has_predecessor_in_segment = True
 
-            # FIXME distinguish whether chain starts with receive or publish event
-            if has_predecessor_in_segment:
-                wcrt += p.obj(self.parent_layer).wcrt
-            else:
-                wcrt += p.obj(self.parent_layer).wcet
+        wcrt = 0
+        if obj.obj(self.layer).network:
+            # we assume network segments have a constant WCRT
+            wcrt = self.net_delay_us
+
+        else:
+            # sum up WCRTs of callbacks
+
+            parents = self.indirect_parents(obj)
+            for p in parents:
+                # FIXME distinguish whether chain starts with receive or publish event
+                wcrt += p.obj(self.parent_layers[-1]).wcrt
 
         return {wcrt}
 
@@ -571,48 +655,67 @@ class BudgetEngine(AnalysisEngine):
         # collect chains and their segments
         for obj in data.keys():
             segment = obj.obj(self.layer)
-            for chain in segment.requirements():
-                if chain not in chains:
-                    chains[chain] = set()
+            chain = segment.requirement
+            if chain not in chains:
+                chains[chain] = set()
 
-                chains[chain].add(obj)
+            chains[chain].add(obj)
 
         model = cp_model.CpModel()
         MAX_BUDGET = 1000000000
 
         budgets = dict()
         min_budgets = dict()
+        slack = model.NewIntVar(0, MAX_BUDGET, 'Slack')
         for chain, objects in chains.items():
             # variables and constraint for minimum budget
             first = None
             for obj in objects:
                 budgets[obj] = model.NewIntVar(0, MAX_BUDGET, '%s' % obj)
                 min_budgets[obj] = self.layer.get_param_value(self, 'wcrt', obj).copy()
-                model.Add(budgets[obj] >= min_budgets[obj])
+                if obj.obj(self.layer).network:
+                    # do not add complete slack to network segments
+                    model.Add(budgets[obj] >= min_budgets[obj])
+                else:
+                    model.Add(budgets[obj] >= min_budgets[obj] + slack)
 
                 if len(list(self.layer.in_edges(obj))) == 0:
                     first = obj
 
             assert first is not None
 
+            # FIXME the last segment is not monitorable but the budget is calculated as if it would be monitored
+            #       (the ConfigEngine will subtract the WCRT of the last callback from the budget of the last segment)
+
             # constraints for exception handling
-            handlers = self.layer.get_param_value(self, 'handler', first)
             current = first
             predecessors = list()
-            while len(handlers.copy()):
+            local_predecessors = None
+            period = 120000 # FIXME determine period from callbacks
+            while current:
+                if current.obj(self.layer).network:
+                    local_predecessors = [current]
+                elif local_predecessors:
+                    local_predecessors.append(current)
+
                 predecessors.append(current)
+
+                handlers = self.layer.get_param_value(self, 'handler', current)
                 for handler in handlers:
                     model.Add(sum([budgets[x] for x in predecessors]) <= chain.latency() - handler.wcrt)
+                    if local_predecessors:
+                        model.Add(sum([budgets[x] for x in local_predecessors]) <= chain.latency() - handler.wcrt - period)
 
-                for e in self.layer.out_edges(current):
+                tmp = current
+                current = None
+                for e in self.layer.out_edges(tmp):
                     if e.target in objects:
                         current = e.target
                         break
-                handlers = self.layer.get_param_value(self, 'handler', current)
 
         # objective function
         # FIXME implement reasonable slack distribution
-        model.Maximize(sum([budgets[x] - min_budgets[x] for x in budgets.keys()]))
+        model.Maximize(slack)
 
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
@@ -633,53 +736,115 @@ class BudgetEngine(AnalysisEngine):
         return list(candidates)[0]
 
 class ConfigEngine(AnalysisEngine):
-    def __init__(self, model, outpath):
+    def __init__(self, model, ecus, outpath):
         acl = { model.by_name['nodes']    : { 'reads' : {'mapping'}},
-                model.by_name['segments'] : { 'reads' : {'mapping', 'handler', 'budget'}}}
-        AnalysisEngine.__init__(self, model.by_name['segments'], param=None, acl=acl)
+                model.by_name['netsegments'] : { 'reads' : {'mapping', 'handler', 'budget'}}}
+        AnalysisEngine.__init__(self, model.by_name['netsegments'], param=None, acl=acl)
 
         self.model = model
         self.outpath = outpath
+        self.ecus = ecus
 
-    def _find_handling_subscription(self, handler):
+    def _indirect_parents(self, node, layer, parent_layers):
+        cur_layer = layer
+        parent_list = [{node}]
+        for layer in parent_layers:
+            parent_list.append(set())
+            for n in parent_list[-2]:
+                if isinstance(n, Edge): continue
+                parent_list[-1].update(cur_layer.associated_objects(layer.name, n))
+            cur_layer = layer
+
+        return parent_list[-1]
+
+    def _determine_earliest_event(self, cb, chain):
+        # take subscription of callback if present
+        # else: take published topic of callback
         clayer = self.model.by_name['callbacks']
         nlayer = self.model.by_name['nodes']
 
-        topic = None
-        node  = None
-        for cb in clayer.nodes():
+        topic  = None
+        node   = None
+        action = None
+        head_wcrt = 0
+        if cb.obj(clayer).cbtype == "subscriber_callback":
+            action = 'subscribe'
+            topic = cb.obj(clayer).trigger
+            assert chain.has_event('receive', topic.name)
+        else:
+            action = 'publish'
+            for t in cb.obj(clayer).publishes:
+                if chain.has_event('publish', t.name):
+                    topic = t.name.split('/')[-1]
+            head_wcrt = cb.obj(clayer).wcrt
+
+        for p in clayer.associated_objects(nlayer.name, cb):
+            assert node is None, 'node already set: %s' % node
+            node = p.obj(nlayer)
+
+        return action, topic, node, head_wcrt
+
+    def _determine_latest_event(self, cb, chain):
+        # take published topic of callback if present
+        # else: take subscription of callback
+        clayer = self.model.by_name['callbacks']
+        nlayer = self.model.by_name['nodes']
+
+        topic  = None
+        node   = None
+        action = None
+        tail_wcrt = 0
+        if len(cb.obj(clayer).publishes) > 0:
+            action = 'publish'
+            for t in cb.obj(clayer).publishes:
+                if chain.has_event('publish', t.name):
+                    topic = t.name.split('/')[-1]
+        else:
+            assert cb.obj(clayer).cbtype == 'subscriber_callback'
+            action = 'subscribe'
+            topic = cb.obj(clayer).trigger
+            assert chain.has_event('receive', topic.name)
+            tail_wcrt = cb.obj(clayer).wcrt
+
+        for p in clayer.associated_objects(nlayer.name, cb):
+            assert node is None, 'node already set: %s' % node
+            node = p.obj(nlayer)
+
+        return action, topic, node, tail_wcrt
+
+    def _find_handling_callback(self, segment, handler):
+        clayer = self.model.by_name['callbacks']
+        slayer   = self.model.by_name['segments']
+        netlayer = self.model.by_name['netsegments']
+
+        for cb in self._indirect_parents(segment, netlayer, [slayer, clayer]):
             if cb.obj(clayer).hid == handler.name:
-                assert cb.obj(clayer).cbtype == "subscriber_callback"
-                topic = cb.obj(clayer).trigger
+                return cb
 
-                for p in clayer.associated_objects(nlayer.name, cb):
-                    assert node is None, 'node already set: %s' % node
-                    node = p.obj(nlayer)
-                break
+        return None
 
-        return '%s%s' % (node.label(), topic), node
+    def _find_first_callback(self, segment):
+        clayer   = self.model.by_name['callbacks']
+        slayer   = self.model.by_name['segments']
+        netlayer = self.model.by_name['netsegments']
 
-    def _find_publisher(self, topic):
-        clayer = self.model.by_name['callbacks']
-        nlayer = self.model.by_name['nodes']
+        parents = self._indirect_parents(segment, netlayer, [slayer,clayer])
+        for cb in parents:
+            if not len(list(clayer.in_edges(cb))):
+                return cb
+            for e in clayer.in_edges(cb):
+                if e.source not in parents:
+                    return cb
 
-        node  = None
-        for cb in clayer.nodes():
-            if cb.obj(clayer).is_publisher(topic):
-
-                for p in clayer.associated_objects(nlayer.name, cb):
-                    assert node is None, 'node already set: %s' % node
-                    node = p.obj(nlayer)
-
-                break
-
-        return node.label()
+        return None
 
     def _find_period_us(self, segment):
-        slayer = self.model.by_name['segments']
         clayer = self.model.by_name['callbacks']
+        slayer = self.model.by_name['segments']
+        netlayer = self.model.by_name['netsegments']
 
-        buf = slayer.associated_objects(clayer.name, segment)
+        pred = list(netlayer.in_edges(segment))[0].source
+        buf = self._indirect_parents(pred, netlayer, [slayer, clayer])
         cb = buf.pop()
         while cb:
             if len(list(clayer.in_edges(cb))) == 0:
@@ -698,50 +863,66 @@ class ConfigEngine(AnalysisEngine):
                 ET.SubElement(root, "rosnode", command=cmd)
 
         tree = ET.ElementTree(root)
-        tree.write('%srosnodes-%s.xml' % (self.outpath, ecu))
+        tree.write('%srosnodes-%s.xml' % (self.outpath, ecu), pretty_print=True)
 
     def _write_monitor_yaml(self, ecu, segments, budgets, cid, sid):
-        slayer = self.model.by_name['segments']
+        slayer = self.model.by_name['netsegments']
         nlayer = self.model.by_name['nodes']
         clayer = self.model.by_name['callbacks']
         ecunodes = dict()
 
         for s in segments:
             for h in slayer.get_param_value(self, 'handler', s):
-                sub, node = self._find_handling_subscription(h)
-                sub = sub.split('/')
-                topic   = sub[-1]
-                nodename = sub[0]
+                # find latest event for the callback of this handler
+                cb = self._find_handling_callback(s, h)
+                assert cb is not None
+                action, topic, node, tail_wcrt = self._determine_latest_event(cb, s.obj(slayer).requirement)
+                nodename = node.label()
 
-                # configure subscriber segment
+                # configure owned segment
                 if nodename not in ecunodes:
                     ecunodes[nodename] = dict()
 
-                ecunodes[nodename]['id'] = cid[node]
-
-                if 'subscriber_segments' not in ecunodes[nodename]:
-                    ecunodes[nodename]['subscriber_segments'] = list()
-
                 config = { 'id'     : sid[s],
-                           'topic'  : '/%s' % topic,
-                           'budget' : budgets[s],
+                           'topic'  : '%s' % topic,
+                           'action' : action,
+                           'budget' : budgets[s] - tail_wcrt,
                            'type1'  : h.etype == 'type1',
                            'type2'  : h.etype == 'type2' }
 
-                ecunodes[nodename]['subscriber_segments'].append(config)
+                # find the earliest monitorable event in this segment
+                cb = self._find_first_callback(s)
+                assert cb is not None, 'cannot find first callback in %s ' % s
+                action, topic, node, head_wcrt = self._determine_earliest_event(cb, s.obj(slayer).requirement)
+
+                # remove head_wcrt from budget if earliest event is a publish event
+                if head_wcrt > 0:
+                    config['budget'] -= head_wcrt
+
+                # skip if start event = end event
+                if action == config['action'] and topic == config['topic'] and nodename == node.label():
+                    continue
+
+                ecunodes[nodename]['id'] = cid[node]
+
+                if 'owned_segments' not in ecunodes[nodename]:
+                    ecunodes[nodename]['owned_segments'] = list()
+
+                ecunodes[nodename]['owned_segments'].append(config)
+                nodename = node.label()
 
                 # configure publisher segment
-                pubnode = self._find_publisher(config['topic'])
-                if pubnode not in ecunodes:
-                    ecunodes[pubnode] = dict()
+                if nodename not in ecunodes:
+                    ecunodes[nodename] = dict()
 
-                if 'publisher_segments' not in ecunodes[pubnode]:
-                    ecunodes[pubnode]['publisher_segments'] = list()
+                if 'triggered_segments' not in ecunodes[nodename]:
+                    ecunodes[nodename]['triggered_segments'] = list()
 
                 config = { 'id'       : sid[s],
                            'topic'    : '%s' % topic,
+                           'action'   : action,
                            'consumer' : cid[node] }
-                ecunodes[pubnode]['publisher_segments'].append(config)
+                ecunodes[nodename]['triggered_segments'].append(config)
 
 
         # set priorities of all nodes
@@ -766,22 +947,33 @@ class ConfigEngine(AnalysisEngine):
             yaml.dump(ecunodes, file)
 
     def _write_qos_xml(self, ecu, segments):
-        slayer = self.model.by_name['segments']
+        slayer = self.model.by_name['netsegments']
 
         dds = ET.Element("dds", xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles")
         profiles = ET.SubElement(dds, 'profiles')
+        added_profiles = set()
         for s in segments:
+            chain = s.obj(slayer).requirement
             handlers = slayer.get_param_value(self, 'handler', s)
             budget   = slayer.get_param_value(self, 'budget', s).copy()
             period   = self._find_period_us(s)
-            if period > budget:
-                logging.error("Period is bigger than assigned budget")
-                return False
 
             for h in handlers:
-                profile, node = self._find_handling_subscription(h)
+                next_seg = list(slayer.out_edges(s))[0].target
+                action, topic, node, head_wcrt = self._determine_earliest_event(
+                        self._find_handling_callback(next_seg, h), chain)
+                if action == 'subscribe':
+                    profile = '%s%s'  % (node.label(), topic)
+                else:
+                    profile = '%s/%s' % (node.label(), topic)
+
+                if profile in added_profiles:
+                    continue
+
+                added_profiles.add(profile)
+
                 sub = ET.SubElement(profiles, 'subscriber', profile_name=profile, is_default_profile='false')
-                mon = ET.SubElement(sub, 'monitoring', implementation_type='inter')
+                mon = ET.SubElement(sub, 'monitoring', implementation_type='sync')
                 if h.etype == 'type1':
                     ET.SubElement(mon, 'type1_enable').text = 'true'
                     ET.SubElement(mon, 'type2_enable').text = 'false'
@@ -790,7 +982,7 @@ class ConfigEngine(AnalysisEngine):
                     ET.SubElement(mon, 'type2_enable').text = 'true'
 
 
-                latency = budget - period
+                latency = budget
                 latency_us = latency % 1000000
                 latency_s  = int(latency / 1000000)
                 lat = ET.SubElement(mon, 'monitoring_latency')
@@ -804,24 +996,28 @@ class ConfigEngine(AnalysisEngine):
                 ET.SubElement(per, 'nsec').text = str(period_us * 1000)
 
         tree = ET.ElementTree(dds)
-        tree.write("%sDEFAULT_FASTRTPS_PROFILES-%s.xml" % (self.outpath, ecu))
+        tree.write("%sDEFAULT_FASTRTPS_PROFILES-%s.xml" % (self.outpath, ecu), pretty_print=True)
 
     def batch_check(self, objects):
         nodes_layer    = self.model.by_name['nodes']
-        segments_layer = self.model.by_name['segments']
+        segments_layer = self.model.by_name['netsegments']
 
         # extract nodes to start from nodes layer
         rosnodes = dict()
+        for ecu in self.ecus:
+            rosnodes[ecu] = set()
+
         for o in nodes_layer.nodes():
             ecu = nodes_layer.get_param_value(self, 'mapping', o)
             if ecu not in rosnodes:
                 rosnodes[ecu] = set()
+                print("%s not in %s" % (ecu, rosnodes))
 
             rosnodes[ecu].add(o.obj(nodes_layer))
 
         # output XML
         for ecu, nodes in rosnodes.items():
-            self._write_startnodes(ecu.copy(), nodes)
+            self._write_startnodes(ecu, nodes)
 
         # define consumer id for every rosnode
         consumers = dict()
@@ -847,17 +1043,19 @@ class ConfigEngine(AnalysisEngine):
             segment = o.obj(segments_layer)
             budgets[o] = budget
 
-            ecu = segments_layer.get_param_value(self, 'mapping', o)
-            for e in segments_layer.out_edges(o):
-                next_ecu = segments_layer.get_param_value(self, 'mapping', e.target)
-                if ecu == next_ecu:
-                    if ecu not in intra_segments:
-                        intra_segments[ecu] = set()
-                    intra_segments[ecu].add(o)
-                else:
+            if segment.network:
+                for e in segments_layer.out_edges(o):
+                    next_ecu = segments_layer.get_param_value(self, 'mapping', e.target)
+
                     if next_ecu not in inter_segments:
                         inter_segments[next_ecu] = set()
                     inter_segments[next_ecu].add(o)
+            else:
+                ecu = segments_layer.get_param_value(self, 'mapping', o)
+
+                if ecu not in intra_segments:
+                    intra_segments[ecu] = set()
+                intra_segments[ecu].add(o)
 
         # define segment id for every intra segment
         sid = 1
@@ -870,9 +1068,9 @@ class ConfigEngine(AnalysisEngine):
         for ecu, segs in intra_segments.items():
             self._write_monitor_yaml(ecu.copy(), segs, budgets, consumers, segments)
 
-        for ecu in inter_segments.keys() - intra_segments.keys():
-            self._write_monitor_yaml(ecu.copy(), set(), None, None, None)
-
+        for ecu in self.ecus - set([k.copy() for k in intra_segments.keys()]):
+            # set priorities for ECUs if not handled by the previous call
+            self._write_monitor_yaml(ecu, set(), None, None, None)
 
         # create XML for eProsima QoS parameters
         for ecu, segs in inter_segments.items():
@@ -886,9 +1084,10 @@ class CrossLayerModel(BacktrackRegistry):
     """
     def __init__(self, repo):
         super().__init__()
-        self.add_layer(Layer('nodes',     nodetypes={Repository.RosNode}))
-        self.add_layer(Layer('callbacks',  nodetypes={Repository.Callback}))
-        self.add_layer(Layer('segments',   nodetypes={SegmentEngine.Segment}))
+        self.add_layer(Layer('nodes',       nodetypes={Repository.RosNode}))
+        self.add_layer(Layer('callbacks',   nodetypes={Repository.Callback}))
+        self.add_layer(Layer('segments',    nodetypes={SegmentEngine.Segment}))
+        self.add_layer(Layer('netsegments', nodetypes={SegmentEngine.Segment}))
 
         self.repo = repo
 
@@ -927,9 +1126,10 @@ class CrossLayerModel(BacktrackRegistry):
         return node
 
 class MccBase:
-    def __init__(self, repo, chronologicaltracking=False):
+    def __init__(self, repo, ecus, chronologicaltracking=False):
         self._repo = repo
         self._nonchronological = not chronologicaltracking
+        self._ecus = ecus
 
     def _to_callbacks(self, model):
         source_layer = model.by_name['nodes']
@@ -942,30 +1142,43 @@ class MccBase:
 
     def _to_segments(self, model, query):
         # transform callbacks into segments
-        source_layer = model.by_name['callbacks']
-        target_layer = model.by_name['segments']
-        se = SegmentEngine(layer=source_layer,
-                           target_layer=target_layer,
+        cb_layer     = model.by_name['callbacks']
+        seg_layer    = model.by_name['segments']
+        net_layer    = model.by_name['netsegments']
+        se = SegmentEngine(layer=cb_layer,
+                           target_layer=seg_layer,
                            query=query)
 
         step = NodeStep(BatchMap(se, 'define segments'))
         step.add_operation(Assign(se, 'define segments'))
-        step.add_operation(Transform(se, target_layer, 'transform to segments'))
+        step.add_operation(Transform(se, seg_layer, 'transform to segments'))
         model.add_step(step)
-        model.add_step(EdgeStep(Transform(se, target_layer, 'connect segments')))
+        model.add_step(EdgeStep(Transform(se, seg_layer, 'connect segments')))
 
-        ee = ExceptionEngine(target_layer, parent_layer=source_layer)
+        source_layer = model.by_name['segments']
+        ne = NetworkEngine(layer=seg_layer,
+                           target_layer=net_layer)
+
+        step = CopyNodeStep(seg_layer, net_layer, {'mapping'})
+        model.add_step(step)
+        step = EdgeStep(Map(ne, 'network segments'))
+        step.add_operation(Assign(ne, 'network segments'))
+        step.add_operation(Transform(ne, net_layer, 'split arcs'))
+        model.add_step(step)
+
+        ee = ExceptionEngine(net_layer, parent_layers=[seg_layer, cb_layer])
         step = NodeStep(Map(ee, 'assign handler'))
         step.add_operation(Assign(ee, 'assign handler'))
         step.add_operation(Check(ee,  'check segments'))
         model.add_step(step)
 
     def _assign_budgets(self, model):
-        layer   = model.by_name['segments']
+        layer   = model.by_name['netsegments']
+        seglayer= model.by_name['segments']
         cblayer = model.by_name['callbacks']
 
         # first calculate minimum required budget of segments
-        we = WcrtEngine(layer, parent_layer=cblayer)
+        we = WcrtEngine(layer, parent_layers=[seglayer, cblayer])
         step = NodeStep(Map(we, 'calculate WCRTs'))
         step.add_operation(Assign(we, 'calculate WCRTs'))
         model.add_step(step)
@@ -978,7 +1191,7 @@ class MccBase:
 
     def _export_config(self, model, outpath):
         layer = model.by_name['segments']
-        ce = ConfigEngine(model, outpath)
+        ce = ConfigEngine(model, self._ecus, outpath)
 
         model.add_step(NodeStep(BatchCheck(ce, 'export configs')))
 

@@ -32,6 +32,7 @@ class Mcc:
         repo = rosmodel.Repository(self._repofile)
 
         mcc = rosmodel.MccBase(repo=repo,
+                               ecus={"ECU1", "ECU2"},
                                chronologicaltracking=chronological)
 
         try:

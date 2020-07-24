@@ -65,6 +65,7 @@ class DotFactory:
 
         self.copy_style('comp_arch', 'nodes')
         self.copy_style('func_arch', 'callbacks')
+        self.copy_style('segments',  'netsegments')
 
 
         # generate ids for all objects
@@ -147,7 +148,9 @@ class DotFactory:
             clusters[sub] = "cluster%d" % i
             i += 1
 
-            subname = sub.copy() if sub.wrapsinstance(str) else sub.name()
+            subname = None
+            if sub is not None:
+                subname = sub.copy() if sub.wrapsinstance(str) else sub.name()
 
             label = ""
             if subname is not None:
@@ -162,7 +165,9 @@ class DotFactory:
             for comp in layer.graph.nodes():
                 # only process children in this subsystem
                 compsub = layer.untracked_get_param_value('mapping', comp)
-                compsubname = compsub.copy() if compsub.wrapsinstance(str) else compsub.name()
+                compsubname = None
+                if compsub is not None:
+                    compsubname = compsub.copy() if compsub.wrapsinstance(str) else compsub.name()
                 if not layer.untracked_isset_param_value('mapping', comp) \
                     or subname != compsubname:
                     continue
