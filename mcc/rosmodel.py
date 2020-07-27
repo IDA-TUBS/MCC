@@ -771,6 +771,7 @@ class ConfigEngine(AnalysisEngine):
             action = 'subscribe'
             topic = cb.obj(clayer).trigger
             assert chain.has_event('receive', topic.name)
+            topic = topic.name.split('/')[-1]
         else:
             action = 'publish'
             for t in cb.obj(clayer).publishes:
