@@ -1,15 +1,15 @@
 <xml>
 <system name="Autoware.Auto">
 	<child name="VELO" ecu="ECU1">
-		<rosnode name="velodyne_node" />
+		<rosnode name="vlp16_driver_node" />
 	</child>
 
 	<child name="RAY" ecu="ECU2">
-		<rosnode name="rayground_filter" />
+		<rosnode name="ray_ground_classifier" />
 	</child>
 
 	<child name="RVIZ" ecu="ECU2">
-		<rosnode name="rviz2" />
+		<rosnode name="rviz" />
 	</child>
 
 	<requirements>
