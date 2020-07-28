@@ -1,6 +1,6 @@
 <xml>
 <repository>
-	<rosnode name="velodyne_node">
+	<rosnode name="vlp16_driver_node">
 	    <start>
 	        <command>sudo chrt -f 90 udpreplay ../../route_small_loop_rw-127.0.0.1.pcap</command>
 	        <command>ros2 run velodyne_node velodyne_cloud_node_exe __params:=${AUTOWARE_PATH}/src/drivers/velodyne_node/param/vlp16_test.param.yaml</command>
@@ -15,7 +15,7 @@
 			</timer_callback>
 		</callbacks>
 	</rosnode>
-	<rosnode name="rayground_filter">
+	<rosnode name="ray_ground_classifier">
 	    <start>
 	        <command>ros2 run ray_ground_classifier_nodes ray_ground_classifier_cloud_node_exe __params:=${AUTOWARE_PATH}/src/perception/filters/ray_ground_classifier_nodes/param/vlp16_lexus.param.yaml</command>
 	    </start>
@@ -38,7 +38,7 @@
 		</exception_handlers>
 	</rosnode>
 
-	<rosnode name="rviz2">
+	<rosnode name="rviz">
 	    <start>
 	        <command>rviz2 -d ${AUTOWARE_PATH}/src/tools/autoware_auto_examples/rviz2/autoware_ray_ground.rviz</command>
 	    </start>
