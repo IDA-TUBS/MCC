@@ -446,7 +446,7 @@ class SegmentEngine(AnalysisEngine):
         for obj in objects:
             if data[obj] is None:
                 logging.info("Callback %s is not in any chain." % obj.untracked_obj())
-                data[obj] = {dummy}
+                data[obj] = {frozenset({dummy})}
             else:
                 data[obj] = {frozenset(data[obj])}
 
@@ -629,7 +629,7 @@ class WcrtEngine(AnalysisEngine):
             # we assume network segments have a constant WCRT
             wcrt = self.net_delay_us
 
-        else:
+        elif not obj.obj(self.layer).dummy():
             # sum up WCRTs of callbacks
 
             parents = self.indirect_parents(obj)
@@ -655,6 +655,8 @@ class BudgetEngine(AnalysisEngine):
         # collect chains and their segments
         for obj in data.keys():
             segment = obj.obj(self.layer)
+            if segment.dummy():
+                continue
             chain = segment.requirement
             if chain not in chains:
                 chains[chain] = set()
