@@ -966,8 +966,6 @@ class ConfigEngine(AnalysisEngine):
                 action, topic, node, head_wcrt = self._determine_earliest_event(
                         self._find_handling_callback(next_seg, h), chain)
                 if action == 'subscribe':
-                    profile = '%s%s'  % (node.label(), topic)
-                else:
                     profile = '%s/%s' % (node.label(), topic)
 
                 if profile in added_profiles:
@@ -990,13 +988,13 @@ class ConfigEngine(AnalysisEngine):
                 latency_s  = int(latency / 1000000)
                 lat = ET.SubElement(mon, 'monitoring_latency')
                 ET.SubElement(lat, 'sec').text = str(latency_s)
-                ET.SubElement(lat, 'nsec').text = str(latency_us * 1000)
+                ET.SubElement(lat, 'nanosec').text = str(latency_us * 1000)
 
                 period_us = period % 1000000
                 period_s  = int(period / 1000000)
                 per = ET.SubElement(mon, 'monitoring_period')
                 ET.SubElement(per, 'sec').text = str(period_s)
-                ET.SubElement(per, 'nsec').text = str(period_us * 1000)
+                ET.SubElement(per, 'nanosec').text = str(period_us * 1000)
 
         tree = ET.ElementTree(dds)
         tree.write("%sDEFAULT_FASTRTPS_PROFILES-%s.xml" % (self.outpath, ecu), pretty_print=True)
