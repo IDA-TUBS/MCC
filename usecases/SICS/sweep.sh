@@ -15,15 +15,15 @@
 
 #setuplm pycpa testing
 
-BASEPATH="../../models/acsos/"
+BASEPATH="../../models/sics/"
 
 EXPERIMENTS=(
-"../../models/acsos/queries/pose_no_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_high_rel.xml"
-"../../models/acsos/queries/obj_no_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_high_rel.xml"
+"../../models/sics/queries/pose_no_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_high_rel.xml"
+"../../models/sics/queries/obj_no_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_high_rel.xml"
 )
 
 JOBS=2
@@ -43,7 +43,7 @@ run_chronological() {
 	OUTPATH="./run/$(basename $exp)/sweep/chrono/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_acsos.py --explore --chronological --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --explore --chronological --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
@@ -59,7 +59,7 @@ run_nonchronological() {
 	OUTPATH="./run/$(basename $exp)/sweep/nonchrono/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_acsos.py --explore --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --explore --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)

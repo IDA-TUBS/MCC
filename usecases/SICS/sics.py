@@ -2,7 +2,7 @@
 Description
 -----------
 
-Implements query and status report functionality for ACSOS use cases.
+Implements query and status report functionality for SICS use cases.
 
 :Authors:
     - Johannes Schlatow
@@ -24,8 +24,8 @@ class ControlParser:
             self._xml_node = xml_node
             self._basepath = basepath
 
-            self._repo     = 'acsos_repo.xml'
-            self._pf       = 'acsos_base.xml'
+            self._repo     = 'sics_repo.xml'
+            self._pf       = 'sics_base.xml'
 
         def name(self):
             return self._xml_node.get('name')

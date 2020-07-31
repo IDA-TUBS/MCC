@@ -11,15 +11,15 @@
 
 #setuplm pycpa testing
 
-BASEPATH="../../models/acsos/"
+BASEPATH="../../models/sics/"
 
 EXPERIMENTS=(
-"../../models/acsos/queries/pose_no_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_high_rel.xml"
-"../../models/acsos/queries/obj_no_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_high_rel.xml"
+"../../models/sics/queries/pose_no_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_high_rel.xml"
+"../../models/sics/queries/obj_no_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_high_rel.xml"
 )
 
 JOBS=2
@@ -27,9 +27,9 @@ JOBS=2
 if [ $# -ge 1 ]; then
 	if [ "$1" == "clean" ]; then
 		for exp in "${EXPERIMENTS[@]}"; do
-			rm -r "./run/$(basename $exp)/adapt110/nonchrono"
-			rm -r "./run/$(basename $exp)/adapt150/nonchrono"
-			rm -r "./run/$(basename $exp)/adapt200/nonchrono"
+			rm -r "./run/$(basename $exp)/adapt110/replay"
+			rm -r "./run/$(basename $exp)/adapt150/replay"
+			rm -r "./run/$(basename $exp)/adapt200/replay"
 		done
 		exit 0
 	fi
@@ -37,14 +37,16 @@ fi
 
 run_adapt110() {
 	exp=$1
-	OUTPATH="./run/$(basename $exp)/adapt110/nonchrono/"
+	INPATH="./run/$(basename $exp)/adapt110/nonchrono/adaptations.csv"
+	OUTPATH="./run/$(basename $exp)/adapt110/replay/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_acsos.py --adapt --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
+	exp=$(cat "${INPUT}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
-	if [ 2 -eq $succ ] ; then
+	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
 		echo '  FAILED'
@@ -53,14 +55,16 @@ run_adapt110() {
 
 run_adapt200() {
 	exp=$1
-	OUTPATH="./run/$(basename $exp)/adapt200/nonchrono/"
+	INPATH="./run/$(basename $exp)/adapt200/nonchrono/adaptations.csv"
+	OUTPATH="./run/$(basename $exp)/adapt200/replay/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_acsos.py --adapt --wcet_factor 2.0 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
+	exp=$(cat "${INPUT}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
-	if [ 2 -eq $succ ] ; then
+	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
 		echo '  FAILED'
@@ -69,14 +73,16 @@ run_adapt200() {
 
 run_adapt150() {
 	exp=$1
-	OUTPATH="./run/$(basename $exp)/adapt150/nonchrono/"
+	INPATH="./run/$(basename $exp)/adapt150/nonchrono/adaptations.csv"
+	OUTPATH="./run/$(basename $exp)/adapt150/replay/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_acsos.py --adapt --wcet_factor 1.5 --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
+	exp=$(cat "${INPUT}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
-	if [ 2 -eq $succ ] ; then
+	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
 		echo '  FAILED'

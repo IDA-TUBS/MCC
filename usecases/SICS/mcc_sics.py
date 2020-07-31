@@ -2,13 +2,13 @@
 
 import logging
 from argparse import ArgumentParser
-from acsos import Mcc
+from sics import Mcc
 
 def get_args():
     descr = 'all arguments are optional'
     parser = ArgumentParser(description=descr)
-    parser.add_argument('filename', default='acsos_control.xml', nargs='?')
-    parser.add_argument('--basepath', default='../../models/acsos/')
+    parser.add_argument('filename', default='sics_control.xml', nargs='?')
+    parser.add_argument('--basepath', default='../../models/sics/')
     parser.add_argument('-o', '--outpath', default='./run/')
     parser.add_argument('-e', '--explore', action='store_true', default=False)
     parser.add_argument('-a', '--adapt', action='store_true', default=False)

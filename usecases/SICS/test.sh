@@ -8,15 +8,15 @@
 #  We execute the mcc with assertions disabled.
 ##############################################################################
 
-BASEPATH="../../models/acsos/"
+BASEPATH="../../models/sics/"
 
 EXPERIMENTS=(
-"../../models/acsos/queries/pose_no_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_low_rel.xml"
-"../../models/acsos/queries/pose_fpga_high_rel.xml"
-"../../models/acsos/queries/obj_no_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_low_rel.xml"
-"../../models/acsos/queries/obj_fpga_high_rel.xml"
+"../../models/sics/queries/pose_no_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_low_rel.xml"
+"../../models/sics/queries/pose_fpga_high_rel.xml"
+"../../models/sics/queries/obj_no_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_low_rel.xml"
+"../../models/sics/queries/obj_fpga_high_rel.xml"
 )
 
 JOBS=2
@@ -45,7 +45,7 @@ run_cmd() {
 	while true ; do
 		cnt=$((cnt+1))
 
-		cmd="python -O ./mcc_acsos.py $cmd_args 2>&1"
+		cmd="python -O ./mcc_sics.py $cmd_args 2>&1"
 		out=$(unbuffer sh -c "$cmd" | tee "${OUTPATH}output-$cnt.log")
 
 		tries=$(printf '%s\n' "$out" | grep 'Backtracking Try ' | tail -n 1 | awk '{print $4}')
