@@ -693,20 +693,12 @@ class BudgetEngine(AnalysisEngine):
             current = first
             predecessors = list()
             local_predecessors = None
-            period = 120000 # FIXME determine period from callbacks
             while current:
-                if current.obj(self.layer).network:
-                    local_predecessors = [current]
-                elif local_predecessors:
-                    local_predecessors.append(current)
-
                 predecessors.append(current)
 
                 handlers = self.layer.get_param_value(self, 'handler', current)
                 for handler in handlers:
                     model.Add(sum([budgets[x] for x in predecessors]) <= chain.latency() - handler.wcrt)
-                    if local_predecessors:
-                        model.Add(sum([budgets[x] for x in local_predecessors]) <= chain.latency() - handler.wcrt - period)
 
                 tmp = current
                 current = None
