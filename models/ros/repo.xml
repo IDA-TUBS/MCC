@@ -10,7 +10,7 @@
 		</publishes>
 
 		<callbacks>
-			<timer_callback name="velodyne" prio="81" wcet_us="2" wcrt_us="660" period_ms="120">
+			<timer_callback name="velodyne" prio="81" wcet_us="2" wcrt_us="660" period_ms="114">
 				<publish topic="/test_velodyne_node_cloud_front"/>
 			</timer_callback>
 		</callbacks>

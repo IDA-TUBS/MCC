@@ -604,7 +604,7 @@ class ExceptionEngine(AnalysisEngine):
 
 
 class WcrtEngine(AnalysisEngine):
-    def __init__(self, layer, parent_layers, net_delay_us=15000):
+    def __init__(self, layer, parent_layers, net_delay_us=3500):
         AnalysisEngine.__init__(self, layer, param='wcrt')
 
         self.parent_layers = parent_layers
