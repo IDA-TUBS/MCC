@@ -868,6 +868,12 @@ class ConfigEngine(AnalysisEngine):
         tree = ET.ElementTree(root)
         tree.write('%srosnodes-%s.xml' % (self.outpath, ecu), pretty_print=True)
 
+    def _baretopic(self, topic):
+        if topic[0] == '/':
+            return topic[1:]
+        else:
+            return topic
+
     def _write_monitor_yaml(self, ecu, segments, budgets, cid, sid):
         slayer = self.model.by_name['netsegments']
         nlayer = self.model.by_name['nodes']
@@ -903,7 +909,7 @@ class ConfigEngine(AnalysisEngine):
                     config['budget'] -= head_wcrt
 
                 # skip if start event = end event
-                if action == config['action'] and topic == config['topic'] and nodename == node.label():
+                if action == config['action'] and self._baretopic(topic) == self._baretopic(config['topic']) and nodename == node.label():
                     continue
 
                 ecunodes[nodename]['id'] = cid[node]
