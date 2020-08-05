@@ -1075,6 +1075,10 @@ class ConfigEngine(AnalysisEngine):
         for ecu, segs in inter_segments.items():
             self._write_qos_xml(ecu.copy(), segs)
 
+        for ecu in self.ecus - set([k.copy() for k in inter_segments.keys()]):
+            # set priorities for ECUs if not handled by the previous call
+            self._write_qos_xml(ecu, set())
+
         return True
 
 
