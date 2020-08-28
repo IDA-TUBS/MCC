@@ -1,0 +1,59 @@
+<xml>
+<repository>
+	<rosnode name="vlp16_driver_node">
+	    <start>
+	        <command>sudo chrt -f 90 udpreplay ../../route_small_loop_rw-127.0.0.1.pcap</command>
+	        <command>ros2 run velodyne_node velodyne_cloud_node_exe __params:=${AUTOWARE_PATH}/src/drivers/velodyne_node/param/vlp16_test.param.yaml</command>
+	    </start>
+		<publishes>
+			<topic name="/test_velodyne_node_cloud_front" />
+		</publishes>
+
+		<callbacks>
+			<timer_callback name="velodyne" prio="81" wcet_us="2" wcrt_us="660" period_ms="114">
+				<publish topic="/test_velodyne_node_cloud_front"/>
+			</timer_callback>
+		</callbacks>
+	</rosnode>
+	<rosnode name="ray_ground_classifier">
+	    <start>
+	        <command>ros2 run ray_ground_classifier_nodes ray_ground_classifier_cloud_node_exe __params:=${AUTOWARE_PATH}/src/perception/filters/ray_ground_classifier_nodes/param/vlp16_lexus.param.yaml</command>
+	    </start>
+		<subscribes>
+			<topic name="/test_velodyne_node_cloud_front" />
+		</subscribes>
+		<publishes>
+			<topic name="/points_ground" />
+			<topic name="/nonground_points" />
+		</publishes>
+
+		<callbacks>
+			<subscriber_callback name="rayground" prio="82" wcet_us="2000" wcrt_us="12000" topic="/test_velodyne_node_cloud_front" exception_handler="rayground_handler">
+				<publish topic="/points_ground"/>
+				<publish topic="/nonground_points"/>
+			</subscriber_callback>
+		</callbacks>
+		<exception_handlers>
+		    <handler id="rayground_handler" wcet_us="100" wcrt_us="200" prio="90" type="type1"/>
+		</exception_handlers>
+	</rosnode>
+
+	<rosnode name="rviz">
+	    <start>
+	        <command>rviz2 -d ${AUTOWARE_PATH}/src/tools/autoware_auto_examples/rviz2/autoware_ray_ground.rviz</command>
+	    </start>
+		<subscribes>
+			<topic name="/points_ground" />
+			<topic name="/nonground_points" />
+		</subscribes>
+
+		<callbacks>
+			<subscriber_callback name="rviz-nonground" prio="83" wcet_us="100" wcrt_us="1500" topic="/nonground_points" exception_handler="rviz_handler"/>
+			<subscriber_callback name="rviz-ground" prio="83" wcet_us="100" wcrt_us="1000" topic="/points_ground" exception_handler="rviz_handler"/>
+		</callbacks>
+		<exception_handlers>
+		    <handler id="rviz_handler" wcet_us="100" wcrt_us="200" prio="90" type="type1"/>
+		</exception_handlers>
+	</rosnode>
+</repository>
+</xml>

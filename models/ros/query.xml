@@ -1,0 +1,24 @@
+<xml>
+<system name="Autoware.Auto">
+	<child name="VELO" ecu="ECU1">
+		<rosnode name="vlp16_driver_node" />
+	</child>
+
+	<child name="RAY" ecu="ECU2">
+		<rosnode name="ray_ground_classifier" />
+	</child>
+
+	<child name="RVIZ" ecu="ECU2">
+		<rosnode name="rviz" />
+	</child>
+
+	<requirements>
+	    <chain name="chain_nonground" max_latency_us="50000">
+	        <publish topic="/test_velodyne_node_cloud_front"/>
+	        <receive topic="/test_velodyne_node_cloud_front"/>
+	        <publish topic="/nonground_points"/>
+	        <receive topic="/nonground_points"/>
+	    </chain>
+	</requirements>
+</system>
+</xml>

@@ -41,6 +41,12 @@ class DotFactory:
                   'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
 
         self.add_style(
+                'segments',
+                { 'node' : ['shape=ellipse', 'colorscheme=set39', 'fillcolor=9', 'style=filled'],
+                  'edge' : 'arrowhead=normal,style=dashed',
+                  'map'  : 'constraint=false, arrowhead=none, style=dashed, color=dimgray' })
+
+        self.add_style(
                 'platform',
                 { 'node' : ["shape=tab", "colorscheme=set39", "fillcolor=2", "style=filled"],
                                'edge' : {'undirected' : ['arrowhead=none', 'arrowtail=none'],
@@ -56,6 +62,10 @@ class DotFactory:
         self.copy_style('comp_arch', 'comp_inst')
         self.copy_style('comp_arch', 'comp_arch-pre1')
         self.copy_style('comp_arch', 'comp_arch-pre2')
+
+        self.copy_style('comp_arch', 'nodes')
+        self.copy_style('func_arch', 'callbacks')
+        self.copy_style('segments',  'netsegments')
 
 
         # generate ids for all objects
@@ -93,6 +103,9 @@ class DotFactory:
 
         if layer.untracked_isset_param_value('service', edge):
             name = layer.untracked_get_param_value('service', edge)
+            label = "label=\"%s\"," % name
+        elif layer.untracked_isset_param_value('topic', edge):
+            name = layer.untracked_get_param_value('topic', edge)
             label = "label=\"%s\"," % name
         else:
             label = ""
@@ -135,9 +148,13 @@ class DotFactory:
             clusters[sub] = "cluster%d" % i
             i += 1
 
+            subname = None
+            if sub is not None:
+                subname = sub.copy() if sub.wrapsinstance(str) else sub.name()
+
             label = ""
-            if sub.name() is not None:
-                label = "label=\"%s\";" % sub.name()
+            if subname is not None:
+                label = "label=\"%s\";" % subname
 
             style = self.dot_styles['platform']['node']
             output.write("  subgraph %s {\n    %s\n" % (clusters[sub], label))
@@ -147,8 +164,12 @@ class DotFactory:
             # add components of this subsystem
             for comp in layer.graph.nodes():
                 # only process children in this subsystem
+                compsub = layer.untracked_get_param_value('mapping', comp)
+                compsubname = None
+                if compsub is not None:
+                    compsubname = compsub.copy() if compsub.wrapsinstance(str) else compsub.name()
                 if not layer.untracked_isset_param_value('mapping', comp) \
-                   or sub.name() != layer.untracked_get_param_value('mapping', comp).name():
+                    or subname != compsubname:
                     continue
 
                 # remember first node as cluster node
