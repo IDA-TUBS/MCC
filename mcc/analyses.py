@@ -151,7 +151,8 @@ class PriorityEngine(AnalysisEngine):
 
         periods = dict()
         isr_period = 1
-        for task in self.taskgraph.nodes():
+        # iterate nodes deterministically, as isr_periods are assigned by order of appearance
+        for task in sorted(self.taskgraph.nodes(), key=lambda x: x.obj(self.taskgraph).label()):
             act = self.taskgraph.get_param_value(self, 'activation', task)
             if act and (act.wrapsinstance(PJEventModel) or act.wrapsinstance(InEventModel)):
                 if act.wrapsinstance(PJEventModel):
