@@ -367,7 +367,7 @@ class Repository(XMLParser):
                                                     id=node.get('id'))
 
             if objects[0].expect_in == 'client':
-                objects[-1].expect_out = 'client'
+                objects[-1].set_placeholder_out('client')
 
             if 'period' in kwargs:
                 objects[0].activation_period = int(kwargs['period'])

@@ -164,12 +164,13 @@ class DotFactory:
             # add components of this subsystem
             for comp in layer.graph.nodes():
                 # only process children in this subsystem
+                if not layer.untracked_isset_param_value('mapping', comp):
+                    continue
                 compsub = layer.untracked_get_param_value('mapping', comp)
                 compsubname = None
                 if compsub is not None:
                     compsubname = compsub.copy() if compsub.wrapsinstance(str) else compsub.name()
-                if not layer.untracked_isset_param_value('mapping', comp) \
-                    or subname != compsubname:
+                if subname != compsubname:
                     continue
 
                 # remember first node as cluster node

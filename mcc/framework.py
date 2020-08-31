@@ -1758,6 +1758,15 @@ class ImmutableParam():
     def __repr__(self):
         return self._wrapped_data().__repr__()
 
+    def __getstate__(self):
+        return self._wrapped_data()
+
+    def __setstate__(self, state):
+        if isinstance(state, dict) and 'data' in state:
+            super().__setattr__('data', state['data'])
+        else:
+            super().__setattr__('data', state)
+
 
 class Operation:
     """ Base class for operations on a model.

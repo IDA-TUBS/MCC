@@ -70,7 +70,8 @@ class Task:
         assert expect == 'junction' or \
                expect == 'receiver' or \
                expect == 'interrupt' or \
-               expect == 'server'
+               expect == 'server' or \
+               expect == 'client'
 
         self.expect_out      = expect
         self.expect_out_args = kwargs
