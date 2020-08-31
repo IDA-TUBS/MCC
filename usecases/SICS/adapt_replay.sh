@@ -44,7 +44,7 @@ run_adapt110() {
 	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
-	exp=$(cat "${INPUT}" | wc -l)
+	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
@@ -62,7 +62,7 @@ run_adapt200() {
 	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
-	exp=$(cat "${INPUT}" | wc -l)
+	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
@@ -80,7 +80,7 @@ run_adapt150() {
 	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
-	exp=$(cat "${INPUT}" | wc -l)
+	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
