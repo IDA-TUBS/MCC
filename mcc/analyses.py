@@ -1009,7 +1009,7 @@ class MappingEngine(AnalysisEngine):
 
             # dependencies that cannot be satisfied in the same domains will also have cost 1
             resolutions = self.layer.get_param_candidates(self, 'dependencies', obj)
-            best_local_cost = max(map(len, resolutions), default=0)
+            best_local_cost = max(map(lambda x: len(x.copy()), resolutions), default=0)
             for resolution in resolutions:
                 local_cost = 0
                 for dep in resolution:

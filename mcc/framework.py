@@ -1183,7 +1183,7 @@ class Layer:
             else:
                 immutablecandidates.add(ImmutableParam(cand))
 
-        params[param]['candidates'] = candidates
+        params[param]['candidates'] = immutablecandidates
 
     def get_param_value(self, ae, param, obj):
         """ Get value for the given parameter and object.
@@ -2023,6 +2023,7 @@ class Assign(Operation):
 
             result = self.analysis_engines[0].assign(obj, candidates)
             assert result in candidates
+            assert result is None or isinstance(result, ImmutableParam), "%s is no ImmutableParam" % result
 
             self.source_layer.set_param_value(self.analysis_engines[0], self.param, obj, result)
 
@@ -2092,6 +2093,7 @@ class BatchAssign(Assign):
 
         for obj, value in result.items():
             assert value in data[obj]
+            assert value is None or isinstance(value, ImmutableParam)
             self.source_layer.set_param_value(ae, self.param, obj, value)
 
         self.source_layer.stop_tracking(frozenset(iterable))
