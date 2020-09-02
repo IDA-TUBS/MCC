@@ -37,7 +37,7 @@ class CPAEngine(AnalysisEngine):
         self.complayer = complayer
         self.layers      = layers
         self.constrmodel = constrmodel
-        pycpa_options.set_opt("max_iterations", 100)
+        pycpa_options.set_opt("max_iterations", 1000)
 
     def _get_resource(self, obj):
         pfc = self.layer.get_param_value(self, 'mapping', obj)
@@ -275,7 +275,7 @@ class CPAEngine(AnalysisEngine):
         # FIXME (future work) deal with mux and demux junctions
 
         resources = dict()   # map ResourceModel to TaskchainResource
-        schedclass = tc_schedulers.SPPScheduler
+        schedclass = tc_schedulers.SPPSchedulerSegmentsInheritance
         for model in allmodels:
             model.check()
 
