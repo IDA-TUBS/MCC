@@ -72,7 +72,6 @@ class CPAEngine(AnalysisEngine):
 
                 if create:
                     models[pfc] = dict()
-                    models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%s' % aff)
 
             if aff not in models[pfc]:
                 models[pfc][aff] = tc_model.ResourceModel(pfc.domain_name()+'-%s' % aff)
@@ -318,9 +317,6 @@ class CPAEngine(AnalysisEngine):
                         # assign period from min_rate_us attribute
                         tasks[t].in_event_model.P = lat['min_rate']
 
-
-        if __debug__:
-            tc_model.ResourceModel.write_dot(allmodels, '/tmp/taskgraph.dot')
 
         # perform analysis
         logging.info("Performing CPA")
