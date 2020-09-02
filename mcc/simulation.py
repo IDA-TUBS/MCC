@@ -133,6 +133,11 @@ class BacktrackingSimulation(SimulationEngine):
         self.record_solution()
         graph = self.model.decision_graph
 
+        # make sure to track a read access to all leaves in the decision_graph
+        for n in graph.leaves():
+            for p in graph.written_params(n):
+                graph.track_read(p.layer, p.obj, p.param)
+
         for node in graph.nodes():
             if graph.revisable(node):
                 return False

@@ -46,6 +46,9 @@ class LinearGraph(DecisionGraph):
         super().next_iteration(culprit)
         self.latest = culprit
 
+    def leaves(self):
+        return {self.latest}
+
 
 class TopologicalGraph(DecisionGraph):
     """ Stores dependencies between decisions as graph which is

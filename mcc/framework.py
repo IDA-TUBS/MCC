@@ -280,6 +280,14 @@ class DecisionGraph(Graph):
 
             failed.mark_current_bad()
 
+    def leaves(self):
+        result = set()
+        for n in self.nodes():
+            if len(set(self.out_edges(n))) == 0:
+                result.add(n)
+
+        return result
+
     def decisions(self, n):
         assert isinstance(n, self.Node)
 
