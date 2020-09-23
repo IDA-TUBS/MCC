@@ -96,6 +96,8 @@ def create_plot(data, variables, output=None):
                     palette="Paired", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
+        else:
+            ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1))
         if row < rows:
             ax.set_xlabel('')
 
