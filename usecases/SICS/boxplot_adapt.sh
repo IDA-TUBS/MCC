@@ -31,4 +31,5 @@ SERIES=(
 	--experiments "${EXPERIMENTS[@]}" \
 	--labels "${NAMES[@]}" \
 	--series "${SERIES[@]}" \
+	--kind box \
 	--vars Iterations Operations "Time [s]"

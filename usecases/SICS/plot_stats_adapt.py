@@ -24,6 +24,8 @@ def get_args():
                         help='directory names of all included experiments (each experiment gets its own subplot)')
     parser.add_argument('--labels', nargs='+',
                         help='labels for the experiments')
+    parser.add_argument('--kind', type=str, default='swarm',
+                        help='type of the plot "box" or "swarm"')
     parser.add_argument('--series', nargs='+',
                         help='directory names of subseries (corresponds to bars in a box group)')
     parser.add_argument('--ylims', nargs='+', type=int, default=None,
@@ -90,10 +92,14 @@ def create_plot(data, variables, output=None):
     f, axes = plt.subplots(rows, 1, sharex=False, figsize=[8, 6])
     row=1
     for var, ax in zip(variables, axes):
-        sns.boxplot(x="Variant", y=var, hue="Increase",
-                    data=data, notch=False,
-                    fliersize=3, width=0.85,
-                    palette="Paired", ax=ax)
+        if args.kind == 'box':
+            sns.boxplot(x="Variant", y=var, hue="Increase",
+                        data=data, notch=False,
+                        fliersize=3, width=0.85,
+                        palette='Paired', ax=ax)
+        else:
+            sns.swarmplot(x="Variant", y=var, hue="Increase", size=3,
+                        data=data, dodge=True, palette="Paired", ax=ax)
         if row > 1:
             ax.legend().set_visible(False)
         else:
