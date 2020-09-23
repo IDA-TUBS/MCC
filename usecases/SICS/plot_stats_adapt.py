@@ -12,6 +12,7 @@ import seaborn as sns
 import pandas as pd
 import csv
 import matplotlib.pyplot as plt
+import glob
 
 def get_args():
     descr = 'TODO'
@@ -26,6 +27,8 @@ def get_args():
                         help='labels for the experiments')
     parser.add_argument('--kind', type=str, default='swarm',
                         help='type of the plot "box" or "swarm"')
+    parser.add_argument('--combine', action='store_true',
+                        help='combine results from all solution-*.csv files')
     parser.add_argument('--series', nargs='+',
                         help='directory names of subseries (corresponds to bars in a box group)')
     parser.add_argument('--ylims', nargs='+', type=int, default=None,
@@ -51,7 +54,6 @@ def parse_file(filename):
             newrow['Iterations'] = int(row['iterations'])
             newrow['Combinations']= int(row['combinations'])
             newrow['Operations'] = int(row['rolledback']) + int(row['operations']) - last_ops
-            newrow['Adaptation'] = int(row['solution'])
             newrow['Complexity'] = int(row['complexity'])
             last_time            = float(row['time'])
             last_ops             = int(row['operations'])
@@ -66,15 +68,17 @@ def prepare_data(basepath, experiments, labels, series):
 
     # iterate experiments and parse files
     for exp,label in zip(experiments, labels):
-        for serie,var in [s.split('-') for s in series]: 
-            result = parse_file('%s/%s/%s/%s/solutions.csv' % (basepath, exp, serie, var))
-
-            max_adapt = result[-1]['Adaptation']
-            print("Experiment %s (%s-%s) had %s adaptations" % (label, serie, var, max_adapt))
+        for serie,var in [s.split('-', 1) for s in series]:
+            if args.combine:
+                result = []
+                for filename in glob.glob('%s/%s/%s/%s/solutions-*.csv' % (basepath, exp, serie, var)):
+                    result.extend(parse_file(filename))
+            else:
+                result = parse_file('%s/%s/%s/%s/solutions.csv' % (basepath, exp, serie, var))
 
             for r in result:
                 r['Increase'] = "%d%%" % (int(serie[-3:]) - 100)
-                if var == 'replay':
+                if var.endswith('fromscratch'):
                     r['Increase'] += " (from scratch)"
                 r['Variant'] = "%s" % (label)
 
@@ -95,7 +99,7 @@ def create_plot(data, variables, output=None):
         if args.kind == 'box':
             sns.boxplot(x="Variant", y=var, hue="Increase",
                         data=data, notch=False,
-                        fliersize=3, width=0.85,
+                        fliersize=1.5, width=0.85, linewidth=0.8,
                         palette='Paired', ax=ax)
         else:
             sns.swarmplot(x="Variant", y=var, hue="Increase", size=3,
@@ -108,7 +112,7 @@ def create_plot(data, variables, output=None):
             ax.set_xlabel('')
 
         if args.ylims and len(args.ylims) >= row and args.ylims[row-1]:
-            ax.set_ylim(top=args.ylims[row-1])
+            ax.set_ylim(bottom=-0.05*args.ylims[row-1], top=args.ylims[row-1])
 
         row += 1
 
