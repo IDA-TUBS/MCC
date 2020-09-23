@@ -44,7 +44,7 @@ class WcetEngine(AnalysisEngine):
             return set([task.wcet])
 
     def assign(self, obj, candidates):
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
 
 class ActivationEngine(AnalysisEngine):
@@ -117,7 +117,7 @@ class ActivationEngine(AnalysisEngine):
         return result
 
     def assign(self, obj, candidates):
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
 
 class PriorityEngine(AnalysisEngine):
@@ -858,7 +858,7 @@ class CoprocEngine(AnalysisEngine):
         return {cur_pfc}
 
     def assign(self, obj, candidates):
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
 
 class FunctionEngine(AnalysisEngine):
@@ -960,13 +960,15 @@ class FunctionEngine(AnalysisEngine):
             costs = self._calculate_costs(pfc, cand)
             if best is None:
                 min_costs = costs
-                best      = cand
+                best      = [cand]
             elif costs < min_costs:
                 min_costs = costs
-                best      = cand
+                best      = [cand]
+            elif costs == min_costs:
+                best.append(cand)
 
         assert best is not None
-        return best
+        return random.choice(best)
 
     def transform(self, obj, target_layer):
         assert not isinstance(obj, Edge)
@@ -1053,7 +1055,7 @@ class MappingEngine(AnalysisEngine):
         return candidates
 
     def assign(self, obj, candidates):
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def batch_assign(self, data, objects, bad_combinations):
         sets   = list()
@@ -1064,28 +1066,27 @@ class MappingEngine(AnalysisEngine):
         for obj in objects:
             sets.append(data[obj])
 
-        best_costs       = 0
-        best_combination = None
+        best_costs        = 0
+        best_combinations = None
         for combination in itertools.product(*sets):
             if combination not in bad_combinations:
                 result = dict(zip(objects, combination))
                 if not self.cost_sensitive:
                     return result
 
-                if best_combination is None:
-                    best_combination = result
+                if best_combinations is None:
+                    best_combinations = [result]
                     best_costs = self._calculate_costs(result)
                 else:
                     costs = self._calculate_costs(result)
                     if costs < best_costs:
                         best_costs = costs
-                        best_combination = result
+                        best_combinations = [result]
+                    elif costs == best_costs:
+                        best_combinations.append(result)
 
-                if best_costs == 0:
-                    return result
-
-        if best_combination is not None:
-            return best_combination
+        if best_combinations is not None:
+            return random.choice(best_combinations)
 
         logging.error("Mapping candidates exhausted: %s\n%s" % (objects, bad_combinations))
         return False
@@ -1386,7 +1387,7 @@ class ProtocolStackEngine(AnalysisEngine):
     def assign(self, obj, candidates):
         """ Assigns the first candidate.
         """
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
 class MuxerEngine(AnalysisEngine):
     """ Selects 'muxer' parameter for nodes who have to many clients to a service.
@@ -1498,7 +1499,7 @@ class MuxerEngine(AnalysisEngine):
             return {None}
 
     def assign(self, obj, candidates):
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def transform(self, obj, target_layer):
 
@@ -1543,7 +1544,7 @@ class QueryEngine(AnalysisEngine):
         if len(candidates) > 1:
             logging.info("Multiple mapping candidates for '%s'." % (obj))
 
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def source_types(self):
         return self.layer.node_types()
@@ -1580,7 +1581,7 @@ class ComponentEngine(AnalysisEngine):
         """
         assert(not isinstance(obj, Edge))
 
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def check(self, obj):
         """ Sanity check.
@@ -1625,7 +1626,10 @@ class PatternEngine(AnalysisEngine):
         if len(candidates) == 1:
             return list(candidates)[0]
 
-        return sorted(candidates, reverse=True, key=lambda c: c.prio())[0]
+        first = sorted(candidates, reverse=True, key=lambda c: c.prio())[0]
+        if first.prio() == 0:
+            return random.choice(list(candidates))
+
 
     def check(self, obj):
         """ Checks whether a pattern was assigned.
@@ -1819,7 +1823,7 @@ class ReachabilityEngine(AnalysisEngine):
         """
         assert(isinstance(obj, Edge))
 
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def transform(self, obj, target_layer):
         """ Transforms obj (Edge) based on the selected carrier.
@@ -1951,7 +1955,7 @@ class InstantiationEngine(AnalysisEngine):
                 if c.shared():
                     return c
 
-        return list(candidates)[0]
+        return random.choice(list(candidates))
 
     def transform(self, obj, target_layer):
 
