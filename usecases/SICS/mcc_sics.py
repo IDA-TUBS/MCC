@@ -13,6 +13,7 @@ def get_args():
     parser.add_argument('-e', '--explore', action='store_true', default=False)
     parser.add_argument('-a', '--adapt', action='store_true', default=False)
     parser.add_argument('--replay_adapt', type=str, default=None)
+    parser.add_argument('--from_scratch', action='store_true')
     parser.add_argument('--wcet_factor', default=1.1, type=float)
     parser.add_argument('--chronological', action='store_true', default=False)
     return parser.parse_args()
@@ -29,4 +30,4 @@ if __name__ == '__main__':
         adapt = args.replay_adapt
     else:
         adapt = False if not args.adapt else args.wcet_factor
-    mcc.execute(explore=args.explore, chronological=args.chronological, adapt=adapt)
+    mcc.execute(explore=args.explore, chronological=args.chronological, adapt=adapt, from_scratch=args.from_scratch)

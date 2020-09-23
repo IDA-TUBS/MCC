@@ -24,28 +24,42 @@ EXPERIMENTS=(
 
 JOBS=2
 
+REPEAT=50
+
+OUTFOLDER="replay-adapt"
+ARGS=""
 if [ $# -ge 1 ]; then
 	if [ "$1" == "clean" ]; then
 		for exp in "${EXPERIMENTS[@]}"; do
-			rm -r "./run/$(basename $exp)/adapt110/replay"
-			rm -r "./run/$(basename $exp)/adapt150/replay"
-			rm -r "./run/$(basename $exp)/adapt200/replay"
+			rm -r "./run/$(basename $exp)/adapt110/replay-adapt"
+			rm -r "./run/$(basename $exp)/adapt150/replay-adapt"
+			rm -r "./run/$(basename $exp)/adapt200/replay-adapt"
+			rm -r "./run/$(basename $exp)/adapt110/replay-fromscratch"
+			rm -r "./run/$(basename $exp)/adapt150/replay-fromscratch"
+			rm -r "./run/$(basename $exp)/adapt200/replay-fromscratch"
 		done
 		exit 0
+	fi
+	if [ "$1" == "from_scratch" ]; then
+		OUTFOLDER="replay-fromscratch"
+		ARGS="--from_scratch"
 	fi
 fi
 
 run_adapt110() {
 	exp=$1
+	num=$2
 	INPATH="./run/$(basename $exp)/adapt110/nonchrono/adaptations.csv"
-	OUTPATH="./run/$(basename $exp)/adapt110/replay/"
+	OUTPATH="./run/$(basename $exp)/adapt110/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
+	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
@@ -55,15 +69,18 @@ run_adapt110() {
 
 run_adapt200() {
 	exp=$1
+	num=$2
 	INPATH="./run/$(basename $exp)/adapt200/nonchrono/adaptations.csv"
-	OUTPATH="./run/$(basename $exp)/adapt200/replay/"
+	OUTPATH="./run/$(basename $exp)/adapt200/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
+	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
@@ -73,15 +90,18 @@ run_adapt200() {
 
 run_adapt150() {
 	exp=$1
+	num=$2
 	INPATH="./run/$(basename $exp)/adapt150/nonchrono/adaptations.csv"
-	OUTPATH="./run/$(basename $exp)/adapt150/replay/"
+	OUTPATH="./run/$(basename $exp)/adapt150/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
 	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
+	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
 		echo '  SUCCEEDED'
 	else
@@ -93,19 +113,31 @@ export -f run_adapt110
 export -f run_adapt150
 export -f run_adapt200
 export BASEPATH
+export OUTFOLDER
+export ARGS
 
-if which parallel &> /dev/null; then
-	parallel --gnu --ungroup -j $JOBS run_adapt200 ::: "${EXPERIMENTS[@]}"
+NUM=0
+while true ; do
+	NUM=$((NUM+1))
+	if which parallel &> /dev/null; then
+		parallel --gnu --ungroup -j $JOBS run_adapt200 {} $NUM ::: "${EXPERIMENTS[@]}"
 
-	parallel --gnu --ungroup -j $JOBS run_adapt150 ::: "${EXPERIMENTS[@]}"
+		parallel --gnu --ungroup -j $JOBS run_adapt150 {} $NUM ::: "${EXPERIMENTS[@]}"
 
-	parallel --gnu --ungroup -j $JOBS run_adapt110 ::: "${EXPERIMENTS[@]}"
-else
-	for exp in "${EXPERIMENTS[@]}"; do
-		run_adapt200 $exp
-		run_adapt150 $exp
-		run_adapt110 $exp
-	done
-fi
+		parallel --gnu --ungroup -j $JOBS run_adapt110 {} $NUM ::: "${EXPERIMENTS[@]}"
+	else
+		for exp in "${EXPERIMENTS[@]}"; do
+			run_adapt200 $exp $NUM
+			run_adapt150 $exp $NUM
+			run_adapt110 $exp $NUM
+		done
+	fi
+
+	if [ $NUM -eq $REPEAT ] ; then
+		printf ''
+		echo 'end!'
+		break
+	fi
+done
 
 

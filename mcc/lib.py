@@ -437,7 +437,10 @@ class SimpleMcc(MccBase):
     """ Composes MCC for Genode systems. Only considers functional requirements.
     """
 
-    def __init__(self, repo, test_backtracking=False, chronologicaltracking=False, test_adaptation=False):
+    def __init__(self, repo, test_backtracking=False,
+                             chronologicaltracking=False,
+                             test_adaptation=False,
+                             from_scratch=False):
         assert test_backtracking == False or test_adaptation == False
         assert chronologicaltracking == False or test_adaptation == False
 
@@ -445,7 +448,10 @@ class SimpleMcc(MccBase):
         self._test_backtracking  = test_backtracking
         self._test_adaptation    = test_adaptation
         self._replay_adaptations = test_adaptation if isinstance(test_adaptation, str) else False
+        self._from_scratch       = from_scratch if test_adaptation else False
         self._nonchronological   = not chronologicaltracking
+
+        assert self._replay_adaptations or not self._from_scratch
 
     def search_config(self, pf_model, system, base=None, outpath=None, with_da=False, da_path=None, dot_mcc=False,
             dot_ae=False, dot_layer=False, envmodel=None, constrmodel=None):
@@ -529,8 +535,11 @@ class SimpleMcc(MccBase):
                 self._timing_check(model, slayer='comp_inst', dlayer='task_graph',
                                    constrmodel=constrmodel, ae=sim)
 
-            if self._test_adaptation and not self._replay_adaptations:
-                sim = AdaptationSimulation(model.by_name['task_graph'], model, wcet_engine=self.wcet_engine, factor=self._test_adaptation, outpath=outpath)
+            if self._test_adaptation and not self._from_scratch:
+                sim = AdaptationSimulation(model.by_name['task_graph'], model, wcet_engine=self.wcet_engine,
+                        replayfile=self._test_adaptation if self._replay_adaptations else None,
+                        factor=self._test_adaptation if not self._replay_adaptations else 1.1,
+                        outpath=outpath)
                 model.add_step(NodeStep(BatchCheck(sim)))
 
 #        model.print_steps()
@@ -549,7 +558,7 @@ class SimpleMcc(MccBase):
             model.add_step_unsafe(da_step)
 
         try:
-            if base and self._replay_adaptations:
+            if base and self._from_scratch:
                 se = SimulationEngine(None, model)
                 with open(self._replay_adaptations, 'r') as csvfile:
                     reader = csv.DictReader(csvfile, delimiter='\t')
@@ -583,7 +592,7 @@ class SimpleMcc(MccBase):
                 sim.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
                 if self._test_adaptation and not self._replay_adaptations:
                     sim.write_adaptations(outpath[:outpath.rfind('/')] + '/adaptations.csv')
-            elif self._replay_adaptations:
+            elif self._from_scratch:
                 se.write_stats(outpath[:outpath.rfind('/')] + '/solutions.csv')
 
             print(e)

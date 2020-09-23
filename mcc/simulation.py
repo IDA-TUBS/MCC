@@ -152,15 +152,27 @@ class AdaptationSimulation(SimulationEngine):
     """ Performs simulation of parameter adaptation by changing parameters and rolling back
         to their writing operation.
     """
-    def __init__(self, layer, model, wcet_engine, factor=1.1, outpath=None):
+    def __init__(self, layer, model, wcet_engine, replayfile=None, factor=1.1, outpath=None):
         super().__init__(layer, model, outpath)
 
         assert factor > 1
         self.factor = factor
+        self.replay = isinstance(replayfile, str)
         self.wcet_engine = wcet_engine
         self.adaptations = list()
 
+        if self.replay:
+            # load adaptations from file
+            with open(replayfile, 'r') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter='\t')
+                for row in reader:
+                    self.adaptations.append((row['taskname'], int(row['wcet'])))
+
+            self.adaptations.reverse()
+
     def write_adaptations(self, filename):
+        assert not self.replay
+
         with open(filename, 'w') as csvfile:
             fieldnames = ['adaptation',
                           'taskname',
@@ -179,19 +191,42 @@ class AdaptationSimulation(SimulationEngine):
                 writer.writerow(row)
                 i += 1
 
+    def _select_adapation(self, tg):
+        if self.replay:
+            while self.adaptations:
+                taskname, new_wcet = self.adaptations.pop()
+
+                for o in tg.untracked_nodes():
+                    if o.untracked_obj().name == taskname:
+                        return o, new_wcet
+
+                # record solution if task is not in task graph
+                self.record_solution()
+            return False, 0
+        else:
+            # randomly select a task from taskgraph
+            task_set = list(tg.untracked_nodes())
+            culprit = random.choice(task_set)
+            task = culprit.untracked_obj()
+
+            # increase WCET by factor
+            new_wcet = int(math.ceil(tg.untracked_get_param_value('wcet', culprit).copy() * self.factor))
+
+            # write log with tasknames and current WCET
+            self.adaptations.append((task.name, new_wcet))
+
+            return culprit, new_wcet
+
     def batch_check(self, iterable):
         self.record_solution()
 
         graph = self.model.decision_graph
         tg = self.model.by_name['task_graph']
 
-        # randomly select a task from taskgraph
-        task_set = list(tg.untracked_nodes())
-        culprit = random.choice(task_set)
+        culprit, new_wcet = self._select_adapation(tg)
+        if not culprit:
+            return False
         task = culprit.untracked_obj()
-
-        # increase WCET by factor
-        new_wcet = int(math.ceil(tg.untracked_get_param_value('wcet', culprit).copy() * self.factor))
 
         logging.info("Increasing WCET of task %s to %d" % (task, new_wcet))
 
@@ -202,9 +237,6 @@ class AdaptationSimulation(SimulationEngine):
         candidates = tg.untracked_get_param_candidates('wcet', culprit)
         candidates.add(new_wcet)
         tg.untracked_set_param_candidates('wcet', culprit, candidates)
-
-        # write log with tasknames and current WCET
-        self.adaptations.append((task.name, new_wcet))
 
         # find and return corresponding node in decision graph
         return graph.find_writers(tg, culprit, 'wcet').assign

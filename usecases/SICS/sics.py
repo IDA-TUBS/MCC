@@ -160,7 +160,7 @@ class Mcc:
             name = dev.name()
             self._devices[name] = dev
 
-    def execute(self, explore=False, chronological=False, adapt=False):
+    def execute(self, explore=False, chronological=False, adapt=False, from_scratch=False):
         results = dict()
         failed  = False
 
@@ -180,7 +180,8 @@ class Mcc:
             cfg = cfgparser.AggregateRepository(repos)
             mcc = lib.SimpleMcc(repo=cfg, test_backtracking=explore,
                                           chronologicaltracking=chronological,
-                                          test_adaptation=adapt)
+                                          test_adaptation=adapt,
+                                          from_scratch=from_scratch)
 
             base = lib.BaseModelQuery()
 
