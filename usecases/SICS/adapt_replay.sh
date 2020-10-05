@@ -53,11 +53,11 @@ run_adapt110() {
 	OUTPATH="./run/$(basename $exp)/adapt110/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="python -O ./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
-	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	succ=$(cat "${OUTPATH}solutions.csv" | wc -l)
 	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
 	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
@@ -74,11 +74,11 @@ run_adapt200() {
 	OUTPATH="./run/$(basename $exp)/adapt200/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="python -O ./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
-	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	succ=$(cat "${OUTPATH}solutions.csv" | wc -l)
 	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
 	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
@@ -95,11 +95,11 @@ run_adapt150() {
 	OUTPATH="./run/$(basename $exp)/adapt150/$OUTFOLDER/"
 	mkdir -p "${OUTPATH}"
 
-	cmd="./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
+	cmd="python -O ./mcc_sics.py --replay_adapt \"${INPATH}\" $ARGS --basepath \"${BASEPATH}\" --outpath \"${OUTPATH}\" \"$exp\" 2>&1"
 	echo "Running $cmd"
 	unbuffer sh -c "$cmd" > "${OUTPATH}output.log"
 	exp=$(cat "${INPATH}" | wc -l)
-	succ=$(cat "${OUTPATH}output.log" | grep 'Stats' | wc -l)
+	succ=$(cat "${OUTPATH}solutions.csv" | wc -l)
 	rm ${OUTPATH}*.dot ${OUTPATH}*.pickle
 	mv ${OUTPATH}solutions.csv ${OUTPATH}solutions-${num}.csv
 	if [ $exp -eq $succ ] ; then
