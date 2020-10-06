@@ -44,7 +44,8 @@ class WcetEngine(AnalysisEngine):
             return set([task.wcet])
 
     def assign(self, obj, candidates):
-        return random.choice(list(candidates))
+        assert len(candidates) == 1
+        return list(candidates)[0]
 
 
 class ActivationEngine(AnalysisEngine):

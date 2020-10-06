@@ -233,13 +233,15 @@ class AdaptationSimulation(SimulationEngine):
         # store new WCET persistently in WcetEngine
         self.wcet_engine.update_wcet(task.name, new_wcet)
 
-        # hack: add new value to candidates
-        candidates = tg.untracked_get_param_candidates('wcet', culprit)
-        candidates.add(new_wcet)
-        tg.untracked_set_param_candidates('wcet', culprit, candidates)
+        # find and return corresponding assign nodes in decision graph
+        result = set()
+        for o in tg.untracked_nodes():
+            if o.untracked_obj().name == task.name:
+                # just replacing the candidates, assign will be re-executed
+                tg.untracked_set_param_candidates('wcet', o, set([new_wcet]))
+                result.add(graph.find_writers(tg, o, 'wcet').assign)
 
-        # find and return corresponding node in decision graph
-        return graph.find_writers(tg, culprit, 'wcet').assign
+        return result
 
     def node_types(self):
         return []

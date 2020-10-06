@@ -327,11 +327,12 @@ class DecisionGraph(Graph):
             node = self.add_node(layer, obj, operation)
 
             # track read access to object
-            if isinstance(obj, frozenset):
-                for o in obj:
-                    self.track_read(layer, o, 'obj')
-            else:
-                self.track_read(layer, obj, 'obj')
+            if not error_nodes:
+                if isinstance(obj, frozenset):
+                    for o in obj:
+                        self.track_read(layer, o, 'obj')
+                else:
+                    self.track_read(layer, obj, 'obj')
 
             self.add_dependencies(node, self.read-self.written, self.written, force_sequential=error, extra=error_nodes)
 
@@ -2358,11 +2359,11 @@ class BatchCheck(Check):
         for ae in self.analysis_engines:
             result = ae.batch_check(iterable)
 
-            if isinstance(result, DecisionGraph.Node):
-                # if the ae can pinpoint a single culprit in the
-                # decision graph, we assume it was the only dependency for this check
-                node = self.source_layer.stop_tracking(result.obj, error=True, error_nodes=set([result]))
-                raise ConstraintNotSatisfied(node)
+            if isinstance(result, set) and isinstance(list(result)[0], DecisionGraph.Node):
+                # if the ae can pinpoint the culprits in the
+                # decision graph, we assume they were the only dependency for this check
+                node = self.source_layer.stop_tracking(frozenset(iterable), error=True, error_nodes=result)
+                raise ConstraintNotSatisfied(node, result)
             elif not result:
                 # we must stop tracking (to insert a new node) and
                 # fail on this node
@@ -2375,9 +2376,10 @@ class BatchCheck(Check):
         return True
 
 class ConstraintNotSatisfied(Exception):
-    def __init__(self, node):
+    def __init__(self, node, updated=None):
         super().__init__()
         self.node = node
+        self.updated = updated
 
         assert isinstance(node, DecisionGraph.Node)
 

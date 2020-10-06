@@ -173,7 +173,8 @@ class BacktrackRegistry(Registry):
                 logging.info("\nRolling back to: %s" % (culprit))
 
                 # mark current value(s) as bad
-                self.decision_graph.mark_bad(culprit)
+                if not cns.updated:
+                    self.decision_graph.mark_bad(culprit)
 
                 leaves = self.decision_graph.successors(culprit, recursive=True)
                 self._update_stats(len(leaves), cns.node.operation)
@@ -249,7 +250,10 @@ class BacktrackRegistry(Registry):
             print('time: %f' % time)
 
     def find_culprit(self, cns):
-        return self._find_brancheable(cns.node)
+        if not cns.updated:
+            return self._find_brancheable(cns.node)
+        else:
+            return self._find_highest(cns.node, cns.updated)
 
     def _find_brancheable(self, node):
         path = self.decision_graph.root_path(node)
@@ -260,6 +264,20 @@ class BacktrackRegistry(Registry):
             n = path.pop()
             if self.decision_graph.revisable(n):
                 return n
+
+        return None
+
+    def _find_highest(self, node, updated):
+        path = self.decision_graph.root_path(node)
+        path.pop() # pop 'node' from path
+
+        # go backwards until we have found all updated operations
+        while path:
+            n = path.pop()
+            if n in updated:
+                updated.remove(n)
+                if not updated:
+                    return n
 
         return None
 
