@@ -11,6 +11,7 @@ import seaborn as sns
 import pandas as pd
 import csv
 import matplotlib.pyplot as plt
+from scipy.stats import ttest_ind
 
 def get_args():
     descr = 'TODO'
@@ -27,6 +28,8 @@ def get_args():
                         help='save plot to given file')
     parser.add_argument('--ylims', nargs='+', type=int,
                         help='limits the y-axes of the subplots')
+    parser.add_argument('--ttest', action='store_true',
+                        help='performs t-test and annotates boxes with p-values')
     return parser.parse_args()
 
 
@@ -94,6 +97,24 @@ def create_plot(data, variables, output=None):
 
         if args.ylims and len(args.ylims) >= row and args.ylims[row-1]:
             ax.set_ylim(bottom=-5, top=args.ylims[row-1])
+
+        if args.ttest:
+            # perform t-test for each pair
+            pvals = []
+            for l in args.labels:
+                t, p = ttest_ind(
+                    *data[data.Variant == l].groupby('search')[var].apply(lambda x: list(x)),
+                    equal_var=False)
+                pvals.append(p)
+
+            # annotate
+            tmp, y = ax.get_ylim()
+            for x, p in zip(ax.get_xticks(), pvals):
+                ax.annotate('p={:.3f}'.format(p),
+                            xy=(x, y),
+                            xytext=(0, 0),  # 3 points vertical offset
+                            textcoords="offset points",
+                            ha='center', va='center')
 
         row += 1
 

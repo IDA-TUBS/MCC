@@ -13,6 +13,7 @@ import pandas as pd
 import csv
 import matplotlib.pyplot as plt
 import glob
+from scipy.stats import ttest_ind
 
 def get_args():
     descr = 'TODO'
@@ -33,6 +34,8 @@ def get_args():
                         help='directory names of subseries (corresponds to bars in a box group)')
     parser.add_argument('--ylims', nargs='+', type=int, default=None,
                         help='limits the y-axes of the subplots')
+    parser.add_argument('--ttest', action='store_true',
+                        help='performs t-test and annotates boxes with p-values')
     parser.add_argument('--output', default=None, required=False,
                         help='save plot to given file')
     return parser.parse_args()
@@ -113,6 +116,31 @@ def create_plot(data, variables, output=None):
 
         if args.ylims and len(args.ylims) >= row and args.ylims[row-1]:
             ax.set_ylim(bottom=-0.05*args.ylims[row-1], top=args.ylims[row-1])
+
+        if args.ttest:
+            # perform t-test for each pair
+            pvals = []
+            cats = data.Increase.unique()
+            for l in args.labels:
+                d = data[data.Variant == l]
+                for c1, c2 in zip(cats[::2], cats[1::2]):
+                    t, p = ttest_ind(list(d[d.Increase == c1][var].dropna()),
+                                     list(d[d.Increase == c2][var].dropna()),
+                                     equal_var=False)
+                    pvals.append(p)
+
+            # annotate
+            tmp, y = ax.get_ylim()
+            # calculate width of groups
+            ticks = ax.get_xticks()
+            width = 0.85*(ticks[1] - ticks[0])/3
+            for x, pval in zip(ticks, zip(pvals[::3], pvals[1::3], pvals[2::3])):
+                for i, p in zip([-1, 0, 1], pval):
+                    ax.annotate('p={:.3f}'.format(p),
+                                xy=(x+i*width, y),
+                                xytext=(0, 0),
+                                textcoords="offset points",
+                                ha='center', va='center')
 
         row += 1
 
