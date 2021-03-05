@@ -1,0 +1,29 @@
+<xml>
+
+<!-- system //-->
+<system name="pose_estimation">
+	<child name="CAM" >
+		<function name="CAMERA" />
+		<dependency>
+			<function name="GPIO" />
+			<function name="TRIGGER" />
+		</dependency>
+	</child>
+
+	<child name="PREPROC" >
+		<function name="MONO_PREPROC" />
+		<dependency>
+			<function name="CAMERA" />
+		</dependency>
+	</child>
+	
+	<child name="OBJ" >
+		<function name="TRIGGER" component='object_recog' />
+		<dependency>
+			<function name="MONO_PREPROC" />
+			<function name="TIMER" />
+		</dependency>
+	</child>
+
+</system>
+</xml>

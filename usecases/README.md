@@ -9,8 +9,8 @@ It comprises two robots with stereo-camera applications.
 There are a pose estimation and object recognition function.
 The environment model provides state of the platform and radiation levels.
 
-## SICS
+## TUBS21
 
-Implementation of the use case developed for the SICS submission.
+Implementation of the use case presented and evaluated in TUBS21.
 It was based on the C1 use case.
 

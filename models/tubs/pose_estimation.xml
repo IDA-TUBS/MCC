@@ -1,0 +1,37 @@
+<xml>
+
+<!-- system //-->
+<system name="pose_estimation">
+	<child name="CAM" >
+		<function name="CAMERA" />
+		<dependency>
+			<function name="GPIO" />
+			<function name="TRIGGER" />
+		</dependency>
+	</child>
+
+	<child name="STEREO_PREPROC" >
+		<function name="STEREO_PREPROC" />
+		<dependency>
+			<function name="CAMERA" />
+		</dependency>
+	</child>
+
+	<child>
+		<function name="POINTCLOUD"/>
+		<dependency>
+			<function name="STEREO_PREPROC" />
+			<function name="MONO_PREPROC" />
+		</dependency>
+	</child>
+	
+	<child name="POSE" >
+		<function name="TRIGGER" component='pose_estimation' />
+		<dependency>
+			<function name="POINTCLOUD" />
+			<function name="TIMER" />
+		</dependency>
+	</child>
+
+</system>
+</xml>

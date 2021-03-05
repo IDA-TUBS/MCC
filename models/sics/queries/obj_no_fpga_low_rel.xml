@@ -1,6 +1,0 @@
-<xml>
-<mcc_control name="obj1" platform='base_nofpga.xml' repo='repo.xml' query='object_recognition.xml'>
-    <latency source='OBJ' sink='OBJ' min_rate_us='100000' />
-    <reliability source='CAM' sink='OBJ' value='low' />
-</mcc_control>
-</xml>

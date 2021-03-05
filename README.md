@@ -28,8 +28,8 @@ Alternatively you can install the MCC as follows (note, that this will link to t
 pip install -e . --user
 ```
 
-[pycpa]: https://bitbucket.org/pycpa/pycpa/
-[pycpa_taskchain]: https://bitbucket.org/pycpa/pycpa_taskchain/
+[pycpa]: https://github.com/IDA-TUBS/pycpa
+[pycpa_taskchain]: https://github.com/IDA-TUBS/pycpa_taskchain
 
 # Repository structure
 
@@ -75,3 +75,4 @@ xsd
 # Publications
 
 * \[IECON17\]: Johannes Schlatow, Marcus Nolte, Mischa Möstl, Inga Jatzkowski, Rolf Ernst und Markus Maurer, **Towards model-based integration of component-based automotive software systems** in *Annual Conference of the IEEE Industrial Electronics Society (IECON17)*, (Beijing, China), Oktober 2017.
+* \[TUBS21\]: Johannes Schlatow, **Enabling in-field integration in critical embedded systems**, Phd Thesis, TU Braunschweig, 2021 (to appear).

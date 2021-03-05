@@ -1,6 +1,0 @@
-<xml>
-<mcc_control name="pose1" platform='base_nofpga.xml' repo='repo.xml' query='pose_estimation.xml'>
-    <latency source='POSE' sink='POSE' min_rate_us='200000' />
-    <reliability source='CAM' sink='POSE' value='low' />
-</mcc_control>
-</xml>
